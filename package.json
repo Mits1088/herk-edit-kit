@@ -19,7 +19,11 @@
     "test:media": "node scripts/smoke-media.mjs",
     "validate:short-form": "node .claude/skills/short-form-edit/scripts/validate-plan.mjs",
     "validate:footage": "node .claude/skills/short-form-edit/scripts/validate-footage.mjs",
-    "preflight:all": "node scripts/preflight-all.mjs"
+    "preflight:all": "node scripts/preflight-all.mjs",
+    "new-reel": "node .claude/skills/create-reel/scripts/new-reel.mjs",
+    "render-reel": "node .claude/skills/create-reel/scripts/render-reel.mjs",
+    "qa:reel": "node .claude/skills/create-reel/scripts/qa-reel.mjs",
+    "seek-check": "node .claude/skills/create-reel/scripts/seek-check.mjs"
   },
   "engines": {
     "node": ">=22"

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "default": "organic",
+  "notes": [
+    "Safe areas are fractions of the frame kept CLEAR of text, logos and key action: top, bottom, left, right.",
+    "They are review guides only. qa-reel.mjs draws them on a separate contact sheet; they are never part of a composition or the final MP4.",
+    "Organic Reels: Meta publishes no fixed margins. The organic guide follows the kit's short-form phone-safe region (x 90-930, y 200-1600 at 1080x1920) and is approximate.",
+    "Ads: Meta's Reels ad guidance as widely cited in 2026 (14% top, 35% bottom, 6% sides; 40% bottom with a disclaimer). Verify against Meta's current Ads Guide before publishing."
+  ],
+  "profiles": {
+    "organic": {
+      "label": "Organic Reel, 30 fps",
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": { "default": 20, "min": 15, "max": 30 },
+      "safeArea": { "top": 0.10417, "bottom": 0.16667, "left": 0.08333, "right": 0.13889 },
+      "codec": "h264",
+      "pixFmt": "yuv420p",
+      "audio": "aac when the reel has sound",
+      "draftQuality": "draft",
+      "finalQuality": "high"
+    },
+    "organic-60": {
+      "label": "Organic Reel, 60 fps (fast motion, screen recordings, sport)",
+      "extends": "organic",
+      "fps": 60
+    },
+    "ad": {
+      "label": "Reels advertisement",
+      "extends": "organic",
+      "duration": { "default": 15, "min": 5, "max": 60 },
+      "safeArea": { "top": 0.14, "bottom": 0.35, "left": 0.06, "right": 0.06 }
+    },
+    "ad-disclaimer": {
+      "label": "Reels advertisement with an on-screen disclaimer",
+      "extends": "ad",
+      "safeArea": { "top": 0.14, "bottom": 0.40, "left": 0.06, "right": 0.06 }
+    }
+  }
+}

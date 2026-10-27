@@ -9,6 +9,12 @@ brand assets remain unchanged; their inclusion does not grant third-party rights
   The hyperframes, hyperframes-cli, hyperframes-registry, and gsap skill packages
   were bundled with the original workspace from the HyperFrames skill ecosystem.
   The upstream Apache license is included in licenses/HYPERFRAMES-LICENSE.
+- motionmaxxing: https://github.com/Tejashmakwana/motionmaxxing (Apache-2.0, Tejas
+  Makwana), copied into .claude/skills/motionmaxxing (and its .agents mirror) by Reel
+  Studio. Its LICENSE and NOTICE travel with it; the NOTICE lists the bundled
+  components that keep their own licenses (GSAP 3.12.5, three.js, opentype.js, Inter).
+  Local changes are listed in .claude/skills/motionmaxxing/LOCAL-CHANGES.md.
+  .claude/skills/create-reel/runtime/reel-eases.js copies its measured-ease math.
 - GSAP is installed from npm; its own license applies. See the license files in
   node_modules/gsap and https://gsap.com/community/standard-license/.
 - Some library styles reference Google Fonts. Font licenses remain with their

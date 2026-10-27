@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{{TITLE}}</title>
+<!-- Reel Studio vertical starter. One composition, one GSAP (assets/gsap.min.js), one paused timeline. -->
+<script src="assets/gsap.min.js"></script>
+<script src="assets/reel-eases.js"></script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:{{WIDTH}}px;height:{{HEIGHT}}px;overflow:hidden;background:#0b0d10;color:#f2efe9;font-family:Arial,sans-serif}
+#{{ID}}{position:relative;width:{{WIDTH}}px;height:{{HEIGHT}}px;overflow:hidden;background:#0b0d10}
+/* Ground: a lit surface, not a flat swatch. Oversized so its slow drift never shows an edge. */
+.ground{position:absolute;left:-120px;top:-160px;width:1320px;height:2240px;background:radial-gradient(ellipse 70% 45% at 50% 38%,#2a2f36 0%,#15181c 55%,#0b0d10 100%)}
+.light{position:absolute;left:-200px;top:520px;width:1480px;height:900px;background:radial-gradient(ellipse at center,rgba(255,196,140,.22),transparent 65%)}
+/* Copy sits inside the organic safe area: x 90-930, y 200-1600. */
+.copy{position:absolute;left:90px;width:840px;top:700px;text-align:center}
+.headline{font-size:112px;line-height:1.02;letter-spacing:-3px;font-weight:700;margin:0}
+.line{display:block}
+.sub{font-size:40px;line-height:1.3;color:#c9c3b8;margin:44px auto 0;max-width:720px}
+</style></head><body>
+<div id="{{ID}}" data-composition-id="{{ID}}" data-start="0" data-duration="{{DURATION}}" data-width="{{WIDTH}}" data-height="{{HEIGHT}}" data-fps="{{FPS}}">
+<div id="ground" class="ground clip" data-start="0" data-duration="{{DURATION}}" data-track-index="0"></div>
+<div id="light" class="light clip" data-start="0" data-duration="{{DURATION}}" data-track-index="1"></div>
+<div id="copy" class="copy clip" data-start="0" data-duration="{{DURATION}}" data-track-index="2">
+<h1 class="headline"><span class="line" id="l1">Your story</span><span class="line" id="l2">starts here.</span></h1>
+<p class="sub" id="sub">Replace this starter with the approved storyboard.</p>
+</div>
+</div>
+<script>
+(function () {
+  const D = {{DURATION}}, E = window.ReelEases;
+  const tl = gsap.timeline({ paused: true });
+  // Explicit from and to values on every tween keep any frame reproducible when seeked in any order.
+  tl.fromTo('#ground', { x: 0, y: 0, scale: 1 }, { x: -40, y: -60, scale: 1.04, duration: D, ease: E.cruise }, 0);
+  tl.fromTo('#light', { opacity: 0.4 }, { opacity: 1, duration: 1.2, ease: E.softInOut }, 0);
+  tl.fromTo('#l1', { y: 90, opacity: 0 }, { y: 0, opacity: 1, duration: E.dur('snapSettle'), ease: E.snapSettle }, 0.4);
+  tl.fromTo('#l2', { y: 90, opacity: 0 }, { y: 0, opacity: 1, duration: E.dur('softLand'), ease: E.softLand }, 0.75);
+  tl.fromTo('#sub', { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: E.dur('glide'), ease: E.glide }, 1.4);
+  tl.fromTo('#copy', { scale: 1 }, { scale: 1.03, duration: D - 1.4, ease: E.cruise }, 1.4);
+  tl.to({}, { duration: D }, 0); // anchor: the timeline is exactly the composition duration
+  window.__timelines = window.__timelines || {};
+  window.__timelines['{{ID}}'] = tl;
+})();
+</script></body></html>
