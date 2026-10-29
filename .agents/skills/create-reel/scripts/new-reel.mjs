@@ -61,6 +61,8 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
   writeFileSync(join(dir, 'reel.json'), JSON.stringify({
     slug, compositionId: id, profile: profile.name, mode, duration,
     width: profile.width, height: profile.height, fps: profile.fps,
+    // Stage 2: a person approves a verified candidate before it becomes renders/final.mp4. Footage always requires it.
+    requireHumanApproval: true,
     renders: [],
   }, null, 2) + '\n');
   return { id };

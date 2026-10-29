@@ -36,11 +36,16 @@ Owner: `short-form-edit`, end to end: transcript, cuts, captions, B-roll, sound,
 `new-reel --mode footage`, then put footage in the project's `assets/` folder (copies, never moves).
 Transcription provider: ask, per `docs/TOOLS-AND-API-KEYS.md`; the bundled script is ElevenLabs-only and paid.
 motionmaxxing applies to typography, caption treatment, pacing and the few graphic beats. The footage is the
-hero: no animation that competes with a face that is talking.
+hero: no animation that competes with a face that is talking. Consult `hyperframes` and `gsap` whenever a
+composition or animated graphic is created or changed.
+Speech integrity comes first: keep the speaker's real voice, personality and meaning. Cut between phrases, never
+inside a word; review every removal that touches a negation, qualifier or number in context; flag uncertain cuts
+for the person rather than deciding alone. Save the verified source transcript (source timeline, word timings)
+as `assets/source-transcript.json` so QA can compare the edit against it. Human approval is always required.
 
 ## Mode C: cinematic brand promotion
 
-Direction owner: motionmaxxing (brand idea, world, hero moment, sound plan, gates). Approvals: `make-a-video`
+Herk owns the production workflow; HyperFrames renders. Direction owner: motionmaxxing (brand idea, world, hero moment, sound plan, gates). Approvals: `make-a-video`
 Gate 4 (brief) and Gates 7-8 (preview, draft, final). Use `brand/DESIGN.md` and official brand assets only;
 motionmaxxing's `scripts/brand.mjs` and `fetch_logo.mjs` capture a website only when the user gives the URL
 and agrees. A showreel cut to music: `motion-showreel` for the beat grid, without its HUD unless asked.

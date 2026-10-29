@@ -49,8 +49,10 @@ Each Reel lives in `video-projects/<name>/`:
 | `DESIGN.md` | brand and look for this Reel |
 | `reel.json` | format, mode, and a log of every render |
 | `renders/<name>-draft-v001.mp4` | drafts, numbered |
-| `renders/<name>-final-v001.mp4` | finals, numbered; a new version never replaces an old one |
-| `renders/<render>.qa/QA.md` | the quality report for that render |
+| `renders/<name>-candidate-v001.mp4` | final-quality candidates, numbered; a new version never replaces an old one |
+| `renders/final.mp4` | the candidate you approved; earlier approved finals move to `renders/approved/` |
+| `renders/<render>.qa/QA.md`, `qa.json` | the quality report and record for that one render (hash, results, approval) |
+| `QA.md` | summary of the latest QA run and what is waiting for your approval |
 
 Video projects and renders stay on your computer; they are not added to Git.
 
@@ -71,17 +73,29 @@ In video-projects/espresso-launch, make the logo reveal slower and change the la
 
 Claude edits the existing project and renders the next numbered draft. Earlier renders stay.
 
-## Render the final
+## Render the final and approve it
 
-When you approve a draft, Claude runs the final render. You can also run the steps yourself:
+Finishing takes two stages:
+
+1. **Automatic technical check.** When you approve a draft, Claude runs the final render. This produces a
+   numbered candidate and runs every quality check on it. The candidate counts as technically verified only
+   when every essential check passes.
+2. **Your approval.** You watch and listen to that candidate, and Claude gives you a short checklist. Only when
+   you explicitly approve that exact file does it become `renders/final.mp4`. Claude never approves on your
+   behalf just because the checks passed.
+
+You can also run the steps yourself:
 
 ```
-npm run render-reel -- video-projects/<name> --draft
-npm run render-reel -- video-projects/<name> --final
-npm run qa:reel -- video-projects/<name>
+npm run render-reel -- video-projects/<name> --draft        # quick preview + quick checks
+npm run render-reel -- video-projects/<name> --final        # candidate + full QA (Stage 1)
+npm run approve-reel -- video-projects/<name> --candidate renders/<name>-candidate-v001.mp4 --sha <first 12 of its hash> --approved-by "<your name>"
 ```
 
-On a machine with little free memory, add `--workers 1` to the render command.
+`QA.md` in the project folder prints the exact approve command for the current candidate. Approval refuses a
+file that QA did not verify, one that changed after QA, or a hash that does not match. If anything goes wrong
+while it copies, your previous `final.mp4` stays as it was. On a machine with little free memory, add
+`--workers 1` to the render command.
 
 ## Read the QA report
 
@@ -90,15 +104,17 @@ On a machine with little free memory, add `--workers 1` to the render command.
 | Result | Meaning |
 | --- | --- |
 | PASS | the automated check ran and passed |
-| FAIL | the check ran and found a problem |
+| FAIL | the check found a problem, or the checking tool itself broke |
 | WARNING | worth a look; may be intended |
-| NOT TESTED | needs a person to look (taste, readability, timing) |
+| NOT TESTED | did not run, or needs a person (taste, readability, timing, how speech sounds) |
 | NOT APPLICABLE | does not apply (for example audio checks on a silent Reel) |
 
-The technical checks (size 1080x1920, frame rate, codec, duration, audio, text off-screen or outside the safe
-area, one deterministic animation clock) should all PASS before you publish. The motionmaxxing gates (G0-G5) are
-craft heuristics: a FAIL there is a strong hint, and sometimes an intended choice. Automated checks never prove a
-video looks good: always watch it.
+Checks marked required (size 1080x1920, frame rate, codec, duration, decoding, audio, text off-screen, one
+deterministic animation clock, and for footage the transcript, cut and caption checks) must pass. A required
+check that did not run blocks approval. The motionmaxxing gates (G0-G5) are craft heuristics and show as
+WARNING: a strong hint, and sometimes an intended choice. For footage, QA flags cuts that removed words like
+"not", "only" or a number, and saves a short clip of each for you to watch. Automated checks never prove a
+video looks or sounds good: always watch and listen.
 
 Two review images come with each report: `look/sheet.jpg` (frames across the Reel) and `safe-area-sheet.jpg`
 (the same idea with the areas covered by Instagram's interface shaded red and a timecode on each frame). The
@@ -121,7 +137,11 @@ shading exists only on that image, never in the video.
 - Skill: `.claude/skills/create-reel/` (`SKILL.md`, `references/modes.md`, `references/qa.md`).
   Codex gets a mirror in `.agents/skills/` via `npm run sync:skills`.
 - Scripts: `new-reel.mjs` (wraps `npm run new-video`, converts to vertical), `render-reel.mjs` (versioned
-  renders), `qa-reel.mjs` (all checks plus the report), `seek-check.mjs` (one clock, deterministic seeking).
+  drafts and candidates; draft quick checks; full QA on candidates), `qa-reel.mjs` (all checks plus the report),
+  `qa-core.mjs` (blocking rule, records, speech integrity, safe promotion), `approve-reel.mjs` (Stage 2),
+  `seek-check.mjs` (one clock, deterministic seeking).
+- Tests: `npm test` (fast, with HyperFrames and full QA replaced by test scripts) and `npm run test:reel-smoke`
+  (a real 2 s render, full QA and approval; about a minute).
 - Profiles: `.claude/skills/create-reel/profiles.json` (`organic`, `organic-60`, `ad`, `ad-disclaimer`).
 - Animation: one GSAP (the kit's pinned copy) and one paused timeline per composition. motionmaxxing's measured
   eases are available as `ReelEases` (`runtime/reel-eases.js`); its own runtime and renderer are not used inside

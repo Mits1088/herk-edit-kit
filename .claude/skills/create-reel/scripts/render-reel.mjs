@@ -3,12 +3,20 @@
 //
 // Usage:  node .claude/skills/create-reel/scripts/render-reel.mjs <project-folder> --draft|--final [--workers N]
 //
-// Output: <project>/renders/<slug>-draft-v001.mp4, -v002, ... (drafts and finals are numbered separately).
-// Quality comes from the project's profile (reel.json -> profiles.json). Renders with --strict so lint errors stop it.
-// Each render is appended to reel.json "renders". HyperFrames telemetry is disabled for the child process.
+// --draft  renders/<slug>-draft-vNNN.mp4 at draft quality, then quick checks only (ffprobe dimensions, fps,
+//          duration, audio stream; full decode). Results in renders/<file>.qa/quick.json. No full QA.
+// --final  renders/<slug>-candidate-vNNN.mp4 at final quality, then runs full QA (qa-reel.mjs) on that exact file.
+//          A candidate becomes renders/final.mp4 only through approve-reel.mjs after a person approves it.
+// Exit codes: 0 rendered and checks passed, 1 render or checks failed, 2 usage. A failed render or failed QA never
+// touches renders/final.mp4 or any earlier render. Quality comes from the project's profile. Renders with --strict
+// so lint errors stop it. Each render is appended to reel.json "renders". HyperFrames telemetry is disabled.
+//
+// Test hooks (tests only): REEL_STUDIO_RENDERER=<node script> replaces the HyperFrames CLI with the same arguments;
+// REEL_STUDIO_QA_SCRIPT=<node script> replaces qa-reel.mjs. Both are announced loudly and recorded in reel.json.
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, resolve, basename } from 'node:path';
-import { getProfile, hyperframes } from './lib.mjs';
+import { getProfile, hyperframes, readComposition, run, skillDir } from './lib.mjs';
+import { probeChecks, decodeCheck, evaluate, makeCollector, sha256File, qaDirFor, writeJson } from './qa-core.mjs';
 
 const args = process.argv.slice(2);
 const kind = args.includes('--final') ? 'final' : args.includes('--draft') ? 'draft' : null;
@@ -23,22 +31,59 @@ const reel = JSON.parse(readFileSync(reelPath, 'utf8'));
 const profile = getProfile(reel.profile);
 const wi = args.indexOf('--workers');
 const workers = wi >= 0 ? args[wi + 1] : 'auto';
+const label = kind === 'final' ? 'candidate' : 'draft';
+const hooks = { renderer: process.env.REEL_STUDIO_RENDERER || null, qa: process.env.REEL_STUDIO_QA_SCRIPT || null };
+for (const [k, v] of Object.entries(hooks)) if (v) console.warn(`TEST HOOK ACTIVE: ${k} = ${v}`);
 
 const rendersDir = join(dir, 'renders');
 mkdirSync(rendersDir, { recursive: true });
-const pattern = new RegExp(`^${reel.slug}-${kind}-v(\\d{3})\\.mp4$`);
+const pattern = new RegExp(`^${reel.slug}-${label}-v(\\d{3})\\.mp4$`);
 const taken = readdirSync(rendersDir).map(f => (f.match(pattern) || [])[1]).filter(Boolean).map(Number);
 const version = String((taken.length ? Math.max(...taken) : 0) + 1).padStart(3, '0');
-const file = `${reel.slug}-${kind}-v${version}.mp4`;
-if (existsSync(join(rendersDir, file))) { console.error(`Refusing to overwrite ${file}`); process.exit(1); }
+const file = `${reel.slug}-${label}-v${version}.mp4`;
+const out = join(rendersDir, file);
+if (existsSync(out)) { console.error(`Refusing to overwrite ${file}`); process.exit(1); }
 
 const quality = kind === 'final' ? profile.finalQuality : profile.draftQuality;
 console.log(`Rendering ${file} (${quality}, ${profile.width}x${profile.height} @ ${profile.fps} fps, workers ${workers})`);
-const r = hyperframes(['render', '--quality', quality, '--fps', String(profile.fps), '--workers', String(workers), '--strict', '--quiet', '--output', `renders/${file}`], { cwd: dir, stdio: 'inherit' });
-if (r.status !== 0 || !existsSync(join(rendersDir, file))) { console.error(`Render failed (exit ${r.status}).`); process.exit(1); }
+const renderArgs = ['render', '--quality', quality, '--fps', String(profile.fps), '--workers', String(workers), '--strict', '--quiet', '--output', `renders/${file}`];
+const r = hooks.renderer ? run(process.execPath, [hooks.renderer, ...renderArgs], { cwd: dir, stdio: 'inherit' }) : hyperframes(renderArgs, { cwd: dir, stdio: 'inherit' });
+if (r.status !== 0 || !existsSync(out)) { console.error(`Render failed (exit ${r.status}). renders/final.mp4 and earlier renders are unchanged.`); process.exit(1); }
 
+const sha256 = await sha256File(out);
 reel.renders = reel.renders || [];
-reel.renders.push({ file: `renders/${file}`, kind, version: Number(version), quality, fps: profile.fps, renderedAt: new Date().toISOString() });
+reel.renders.push({ file: `renders/${file}`, kind: label, version: Number(version), quality, fps: profile.fps, sha256, renderedAt: new Date().toISOString(), ...(hooks.renderer || hooks.qa ? { testHooks: hooks } : {}) });
 writeFileSync(reelPath, JSON.stringify(reel, null, 2) + '\n');
-console.log(`Rendered ${basename(dir)}/renders/${file}`);
-console.log(`Next: node .claude/skills/create-reel/scripts/qa-reel.mjs ${args[0]} --render renders/${file}`);
+console.log(`Rendered ${basename(dir)}/renders/${file} (SHA-256 ${sha256.slice(0, 12)})`);
+
+if (kind === 'draft') {
+  // Lightweight checks: is it a decodable MP4 of the right shape and length? Full QA is for candidates.
+  const html = readFileSync(join(dir, 'index.html'), 'utf8');
+  const comp = readComposition(html);
+  const { results, add } = makeCollector();
+  const p = run('ffprobe', ['-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', out]);
+  let probe = null; try { probe = JSON.parse(p.stdout); } catch {}
+  const expectsAudio = reel.mode === 'footage' || /<audio\b/i.test(html);
+  for (const row of probeChecks(probe, { width: comp.width, height: comp.height, fps: profile.fps, duration: comp.duration, audio: expectsAudio })) add(...row);
+  add(...decodeCheck(run('ffmpeg', ['-v', 'error', '-xerror', '-i', out, '-f', 'null', '-'])));
+  const ev = evaluate(results);
+  const qaDir = qaDirFor(dir, out);
+  mkdirSync(qaDir, { recursive: true });
+  writeJson(join(qaDir, 'quick.json'), { render: `renders/${file}`, level: 'draft quick checks', sha256, checkedAt: new Date().toISOString(), ...ev, results });
+  for (const x of results) console.log(`${x.status.padEnd(14)} [${x.area}] ${x.check}: ${x.detail}`);
+  console.log(`Draft quick checks ${ev.verdict === 'VERIFIED' ? 'PASS' : 'FAIL'} (not full QA; drafts are never eligible for approval).`);
+  console.log(`Full QA on this draft if you want it: npm run qa:reel -- ${args[0]} --render renders/${file}`);
+  process.exit(ev.technicallyVerified ? 0 : 1);
+}
+
+// Final: full QA on this exact candidate.
+const qaScript = hooks.qa || join(skillDir, 'scripts/qa-reel.mjs');
+console.log(`Running full QA on renders/${file}`);
+const q = run(process.execPath, [qaScript, dir, '--render', `renders/${file}`], { stdio: 'inherit' });
+if (q.status === 0) {
+  console.log(`Stage 1 passed: renders/${file} is technically verified. See ${basename(dir)}/QA.md.`);
+  console.log('Stage 2: watch and listen to it, then approve it explicitly (approve-reel.mjs). Nothing is promoted automatically.');
+  process.exit(0);
+}
+console.error(`Stage 1 blocked (QA exit ${q.status}). renders/${file} and its QA folder are kept for debugging; renders/final.mp4 is unchanged.`);
+process.exit(1);
