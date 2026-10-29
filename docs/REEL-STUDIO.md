@@ -27,8 +27,29 @@ Type `/create-reel` followed by your brief, or just ask Claude for a Reel in pla
 /create-reel A 20 second Reel explaining why our app saves freelancers 5 hours a week. Audience: freelance designers. End with "Try it free". Organic post.
 ```
 
-Claude picks one of three modes, tells you which, and shows you a brief and storyboard. Nothing is built until
-you approve. If you type `/create-reel` with no brief, it asks you for one.
+Claude picks one of three modes, tells you which, sets up the project, and plans the reel. Then it stops and shows
+you a **creative preflight**: what the viewer will see in each scene, why each visual is there (and why it beats stock
+footage or another text card), what recurs between scenes, which visuals are real evidence and which are simulated,
+and any paid generation it wants. Nothing is generated, built in full or rendered until you approve that plan. If you
+type `/create-reel` with no brief, it asks you for one.
+
+## Approve the creative plan (Gate B)
+
+Read the preflight and reply in your own words: approve it, or say what to change. Claude then records your approval:
+
+```
+npm run preflight-reel -- video-projects/<name>                       # the report and its fingerprint (read-only)
+npm run preflight-reel -- video-projects/<name> --approve --fingerprint <first 12> --approved-by "<your name>"
+```
+
+- Approving the plan does not approve spending. If paid generation is planned, say which provider and how much;
+  Claude records it with `--paid-provider <name> --spend-limit "<limit>"` and asks before going beyond it.
+- After approval Claude builds, renders, checks and makes ordinary fixes (timing, captions, animation, layout)
+  without asking again. Changing the script's meaning, a scene's visual, the B-roll plan or the direction needs a new
+  approval; the render command says exactly what changed.
+- Approval is recorded only after you say so. The record is a workflow safeguard that ties your approval to one plan;
+  it is not proof of identity.
+- Reels created before this gate existed are not affected.
 
 | Mode | For | Example brief |
 | --- | --- | --- |
@@ -50,7 +71,8 @@ Each Reel lives in `video-projects/<name>/`:
 | --- | --- |
 | `index.html`, `compositions/` | the editable video |
 | `DESIGN.md` | brand and look for this Reel |
-| `reel.json` | format, mode, and a log of every render |
+| `reel.json` | format, mode, creative direction, the creative-preflight approval, and a log of every render |
+| `assets/plan.json` | the scene plan: timing, layout, and each scene's purpose, visual, evidence type and asset plan |
 | `renders/<name>-draft-v001.mp4` | drafts, numbered |
 | `renders/<name>-candidate-v001.mp4` | final-quality candidates, numbered; a new version never replaces an old one |
 | `renders/final.mp4` | the candidate you approved; earlier approved finals move to `renders/approved/` |
@@ -133,6 +155,7 @@ shading exists only on that image, never in the video.
 | Text sits under Instagram's buttons | QA shows it under Layout; ask Claude to move it inside the safe area. |
 | Fonts look different on another computer | Install a style with local fonts: `npm run reel-fonts -- video-projects/<slug> --style <name>` (`--list` shows them). It renames the old style's families by role and lists what it left alone. QA's Fonts rows name any face that failed and any text in a family with no local face. |
 | A check says NOT TESTED: Chrome not found | Set `CHROME_PATH` to your Chrome or Chromium executable. |
+| "Render refused: the creative preflight (Gate B)" | The plan is missing, not approved, or changed since you approved it; the message lists what. Run `npm run preflight-reel -- video-projects/<name>`, review, and approve again if the change is intended. |
 | `npm run check` reports skill errors after editing skills | Run `npm run sync:skills`, then `npm run check` again. |
 
 ## How it fits together (for maintainers)
@@ -142,7 +165,8 @@ shading exists only on that image, never in the video.
 - Scripts: `new-reel.mjs` (wraps `npm run new-video`, converts to vertical, installs the style's fonts),
   `fonts.mjs` (style font manifests, install and re-sync), `samples.mjs` (event-targeted QA frames), `render-reel.mjs` (versioned
   drafts and candidates; draft quick checks; full QA on candidates), `qa-reel.mjs` (all checks plus the report),
-  `qa-core.mjs` (blocking rule, records, speech integrity, safe promotion), `approve-reel.mjs` (Stage 2),
+  `qa-core.mjs` (blocking rule, records, speech integrity, safe promotion, the creative-preflight fingerprint),
+  `preflight-reel.mjs` (Gate B report and approval), `approve-reel.mjs` (Stage 2),
   `seek-check.mjs` (one clock, deterministic seeking).
 - Tests: `npm test` (fast, with HyperFrames and full QA replaced by test scripts) and `npm run test:reel-smoke`
   (a real 2 s render, full QA and approval; about a minute).

@@ -25,6 +25,7 @@
     "render-reel": "node .claude/skills/create-reel/scripts/render-reel.mjs",
     "qa:reel": "node .claude/skills/create-reel/scripts/qa-reel.mjs",
     "approve-reel": "node .claude/skills/create-reel/scripts/approve-reel.mjs",
+    "preflight-reel": "node .claude/skills/create-reel/scripts/preflight-reel.mjs",
     "test:reel-smoke": "node scripts/smoke-reel.mjs",
     "seek-check": "node .claude/skills/create-reel/scripts/seek-check.mjs"
   },

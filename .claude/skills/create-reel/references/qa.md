@@ -39,6 +39,9 @@
 | Clock | identity, one GSAP, paused timeline, duration, deterministic seeking * | `seek-check.mjs` | technical |
 | motionmaxxing | G5 no page chrome | `scripts/lint.mjs` with `--width --height --duration` | creative |
 | Layout | text outside the canvas * or the safe area * (12 even samples); text at event boundaries (review) | DOM pass in headless Chrome | technical |
+| Preflight | Gate B: creative preflight approved and the creative plan and script unchanged since (* for a candidate of a new reel; a WARNING before that; NOT APPLICABLE for a project created before Gate B). `render-reel` refuses drafts and finals without it | `qa-core.mjs` `preflightStatus` | technical |
+| Herk | `validate-plan` visual plan (schema v2) at the production stage *: metadata, motifs, planned callbacks, planned asset files present and matching their hash (Mode B through `validate-plan`, Modes A and C directly) | `validateVisualPlan` | technical |
+| Visual | planned callbacks: a named `element` exists in the source HTML (WARNING at most; conceptual callbacks need no element; the rendered handoff is never verified) | source scan | info |
 | Direction | `reel.json` `"direction"` filled: hook, coreClaim, heroBeat, motif, style (* for a candidate; a WARNING before that, and `render-reel --final` refuses to start without it) | `qa-core.mjs` | technical |
 | Fonts | no network font references * or requests * (blocked in QA); declared files present *; each declared face loaded from its own local file *; every text weight and style covered by a real face *; every text family has a local face * (a family left from an earlier style, or a system font, fails) | source scan, DOM pass | technical |
 | Render | size, native vertical, fps, h264, yuv420p, duration, audio stream when expected, full decode * | `ffprobe`, `ffmpeg -xerror` | technical |
@@ -124,3 +127,9 @@ intentional; the 12 even samples keep the blocking clipping check. A sheet does 
 - `npm test` replaces HyperFrames and full QA with test scripts (`REEL_STUDIO_RENDERER`, `REEL_STUDIO_QA_SCRIPT`).
   The real path is `npm run test:reel-smoke` (a 2 s faceless render; it does not exercise Mode B footage).
 - motionmaxxing's `runtime/hero3d` and `native-ui` layers depend on its own clock and are not available yet.
+- Planned callbacks (`carryOut`/`carryIn`) are checked as declarations only: references, direction in time and agreement
+  in both directions. No script verifies that a motif actually carries across a cut in the render; there is no shared
+  visual layer yet. Judge them on the Stage 2 viewing.
+- `visualIntent` checks reject only purely generic wording; they cannot tell whether a visual is meaningful. The
+  person's preflight review does that.
+- The creative-preflight record, like a render approval, binds a decision to a fingerprint; it is not a signature.

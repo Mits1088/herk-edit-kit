@@ -44,21 +44,33 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
 1. Read the brief, `brand/DESIGN.md` (if it exists) and any supplied assets. Never modify or move source footage.
 2. Identify audience, objective and profile: `organic` (default), `organic-60`, `ad`, `ad-disclaimer`
    (`.agents/skills/create-reel/profiles.json`).
-3. Develop the direction with motionmaxxing's judgment (`references/judgment.md` in that skill): the idea, the
-   world, the hook in the first second, the ending. Storyboard with scene timing. Openings: one rough animated
-   opening plus two concise written alternatives (static preview frames of the alternatives when the visual
-   direction is uncertain); Mode C may develop three animated openings. Details: [modes.md](references/modes.md).
-   Record the chosen direction in `reel.json` `"direction"` (no new Markdown file): `hook`, `coreClaim`,
-   `heroBeat`, `motif`, `style`. A final render refuses to start until all five are filled.
-4. Get the approvals the owner skill requires (brief, storyboard, preview, draft). Honor approvals already given.
-   Paid API calls, uploads and transcription services need explicit permission first.
-5. Create the project: `npm run new-reel -- <slug> --profile <p> --duration <s> --mode <faceless|footage|brand> --title "<title>" [--style <s>]`.
+3. Create the project first (local and free):
+   `npm run new-reel -- <slug> --profile <p> --duration <s> --mode <faceless|footage|brand> --title "<title>" [--style <s>]`.
    It runs Herk's generator and converts the project to native 1080x1920. Never use `hyperframes init` or
    render a landscape design and crop it. `--style` (default `brand`, whose OFL fonts ship with the kit;
    `npm run reel-fonts -- --list`) copies that style's font files into `assets/fonts/`; a missing font file stops
    scaffolding, and `--style none` (system fonts) must be chosen explicitly. To change style later:
    `npm run reel-fonts -- <project> --style <s>`; it renames the previous style's families to the new style's by
    role (display, body, mono) and lists anything it left alone. Never load fonts from the network.
+4. Plan the reel in that project. Develop the direction with motionmaxxing's judgment (`references/judgment.md` in
+   that skill): the idea, one visual world, the hook in the first second, the ending. Openings: one rough animated
+   opening plus two concise written alternatives (static preview frames of the alternatives when the visual
+   direction is uncertain); Mode C may develop three animated openings. Details: [modes.md](references/modes.md).
+   Record the chosen direction in `reel.json` `"direction"`: `hook`, `coreClaim`, `heroBeat`, `motif`, `style`.
+   Write `DESIGN.md` and `assets/plan.json` with `"schemaVersion": 2`: each scene's purpose, B-roll mode, evidence
+   type, a specific visual intent and an asset plan, plus any motifs and planned callbacks
+   ([preflight.md](references/preflight.md)).
+5. **Gate B, the creative preflight. Always stop here for a new reel**, even when the brief authorizes building it
+   end to end. Run `npm run preflight-reel -- video-projects/<slug>`, fix what it lists, present the report from
+   [preflight.md](references/preflight.md) (what the viewer sees, why each visual is meaningful, what recurs, what is
+   simulated, planned paid calls) and wait. Only after the person approves it in a later message, record it with
+   `--approve --fingerprint <12 hex> --approved-by "<name>"`; never on your own judgement. That command is a workflow
+   safeguard, not proof of identity. Until then: no paid generation, no full composition build, no `render-reel`
+   (it refuses). Creative approval is not spending approval: get the provider and a spending limit separately unless
+   the person's instructions already set them. After approval, build, render, QA and revise without asking again;
+   only a change to the creative plan or script (render-reel names it) needs a new approval. The owner skill's later
+   gates (preview, draft) still apply; honor approvals already given for them. Uploads and transcription services
+   need explicit permission first.
 6. Author or edit `index.html` and `compositions/`. Rules: [qa.md](references/qa.md#composition-contract).
 7. Validate source: `npm run qa:reel -- video-projects/<slug> --source-only`. Fix FAILs. Its best verdict is
    `SOURCE_VALIDATED`: the source passed, no video was checked. Preview in Studio

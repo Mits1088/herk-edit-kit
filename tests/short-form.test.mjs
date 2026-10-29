@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { validatePlan } from '../.agents/skills/short-form-edit/scripts/validate-plan.mjs';
 import { validateFootage } from '../.agents/skills/short-form-edit/scripts/validate-footage.mjs';
+import { footagePlan, readyAsset } from './fixtures/visual-plans.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const fixture = join(root, 'examples/short-form');
@@ -59,4 +60,19 @@ test('CLI accepts no-footage edits and rejects missing or changed footage', () =
   assert.equal(run('validate-footage.mjs').status, 0);
   writeFileSync(join(work, 'assets/garden.mp4'), 'changed');
   assert.equal(run('validate-footage.mjs').status, 1);
+});
+test('CLI validates a schema v2 plan at the production stage: an authentic still must exist and match its hash', () => {
+  const work = mkdtempSync(join(tmpdir(), 'short-form-v2-'));
+  cpSync(fixture, work, { recursive: true });
+  const run = () => spawnSync(process.execPath, [join(root, '.agents/skills/short-form-edit/scripts/validate-plan.mjs'), work], { encoding: 'utf8' });
+  const plan = footagePlan();
+  writeFileSync(join(work, 'assets/plan.json'), JSON.stringify(plan));
+  const missing = run();
+  assert.equal(missing.status, 1);
+  assert.match(missing.stdout, /Visual: Scene s01 asset.status is planned; production needs ready/);
+  readyAsset(work, plan, 's01', 'assets/broll/seed.png');
+  writeFileSync(join(work, 'assets/plan.json'), JSON.stringify(plan));
+  const ok = run();
+  assert.equal(ok.status, 0, ok.stdout);
+  assert.deepEqual(JSON.parse(ok.stdout).metrics.visual.authenticScenes, ['s01']);
 });

@@ -21,11 +21,14 @@ Known conflicts, resolved:
 | Runtime | motionmaxxing: `Motion.film()` | HyperFrames: paused GSAP timeline | HyperFrames contract only; motionmaxxing's principles applied through GSAP |
 | Openings | `short-form-edit`: three rough openings | render cost | Modes A and B: one rough animated opening plus two written alternatives; Mode C may animate three |
 | Direction notes | separate brief files | one source of truth | `reel.json` `"direction"`: `hook`, `coreClaim`, `heroBeat`, `motif`, `style`; required before a final render |
+| Creative approval | `short-form-edit`: an instruction to finish authorizes local building | Gate B | A new reel always stops at the creative preflight ([preflight.md](preflight.md)) before paid generation, the full build or any `render-reel`; after approval it continues autonomously. Projects created before Gate B are not gated |
+| Visual plan | prose in DESIGN.md | structured plan | `assets/plan.json` `"schemaVersion": 2` in every mode (`short-form-edit/references/plan-schema.md`); Modes A and C need no captions or transcript |
 
 ## Mode A: faceless motion graphics
 
 Owner: `make-a-video` (Gates 1-8). Replace its scaffold step with `new-reel --mode faceless`; skip its aspect
-question (vertical is fixed; ask only organic or ad and length).
+question (vertical is fixed; ask only organic or ad and length). Write `assets/plan.json` (schema v2: scenes with
+visual metadata, `script` for planned narration) for Gate B; `make-a-video`'s own gates still apply after it.
 Direction: motionmaxxing (`SKILL.md`, then `references/idea.md`, `world.md`, `type.md`, `motion.md`,
 `transitions.md` as the beat needs). Narrative: `video-storytelling` for a persistent world and callbacks.
 Build: `hyperframes`, `gsap`; catalog blocks via `hyperframes-registry` only if they fit the world.
@@ -59,4 +62,6 @@ and agrees. A showreel cut to music: `motion-showreel` for the beat grid, withou
 3D (`runtime/hero3d`) is not wired into the HyperFrames clock in Phase 1: do not use it until an adapter is
 built and seek-checked.
 Openings: a high-production brand film may develop three distinct animated openings before choosing; otherwise
-follow the lean rule of Mode B (one animated, two written).
+follow the lean rule of Mode B (one animated, two written). Before Gate B they are shown in Studio preview or as
+static snapshots, not rendered with `render-reel`. Write `assets/plan.json` (schema v2) as in Mode A; generated plates
+are `generated-image` with `evidenceType: illustrative`, official marks are `screenshot` with `authentic`.

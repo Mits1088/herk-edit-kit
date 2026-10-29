@@ -14,6 +14,7 @@ const { convertToVertical } = await import('../.claude/skills/create-reel/script
 const core = await import('../.claude/skills/create-reel/scripts/qa-core.mjs');
 const { approveCandidate } = await import('../.claude/skills/create-reel/scripts/approve-reel.mjs');
 const { validatePlan } = await import('../.claude/skills/short-form-edit/scripts/validate-plan.mjs');
+const { facelessPlan, footagePlan, brandPlan, writePlan } = await import('./fixtures/visual-plans.mjs');
 
 // Render and audio tests synthesize media with ffmpeg; say so plainly instead of failing on a null exit status.
 const HAS_FFMPEG = spawnSync('ffmpeg', ['-version'], { windowsHide: true }).status === 0;
@@ -21,7 +22,20 @@ const requireFfmpeg = () => assert.ok(HAS_FFMPEG, 'ffmpeg and ffprobe must be on
 
 const SLUG = 'pipe-test';
 const DIRECTION = { hook: 'Most to-do lists fail on day 3', coreClaim: 'Plans fail at the handoff', heroBeat: 'the list folds into one card', motif: 'a folding card', style: 'kallaway' };
-function project({ mode = 'faceless', requireHumanApproval, direction = DIRECTION } = {}) {
+const PLANS = { faceless: () => facelessPlan(2), footage: footagePlan, brand: () => brandPlan(2) };
+// Gate B through the real CLI: read the fingerprint the report prints, then approve that exact plan.
+function preflight(dir, ...extra) {
+  return spawnSync(process.execPath, [join(scripts, 'preflight-reel.mjs'), dir, ...extra], { encoding: 'utf8', windowsHide: true });
+}
+function approvePlan(dir, extra = []) {
+  const fp = JSON.parse(preflight(dir, '--json').stdout).fingerprint;
+  const r = preflight(dir, '--approve', '--fingerprint', fp.slice(0, 12), '--approved-by', 'test person', ...extra);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  return fp;
+}
+// preflight: 'approved' (default; a v2 plan approved through the CLI), 'pending' (plan written, not approved),
+// 'none' (a new reel with no plan) or 'legacy' (a reel.json from before Gate B).
+function project({ mode = 'faceless', requireHumanApproval, direction = DIRECTION, preflight = 'approved' } = {}) {
   const dir = join(mkdtempSync(join(tmpdir(), 'reel-approval-')), SLUG);
   cpSync(join(root, 'examples/starter'), dir, { recursive: true });
   mkdirSync(join(dir, 'assets')); mkdirSync(join(dir, 'renders'));
@@ -30,7 +44,10 @@ function project({ mode = 'faceless', requireHumanApproval, direction = DIRECTIO
   const reel = JSON.parse(readFileSync(join(dir, 'reel.json'), 'utf8'));
   if (direction) reel.direction = direction;
   if (requireHumanApproval !== undefined) reel.requireHumanApproval = requireHumanApproval;
+  if (preflight === 'legacy') { delete reel.preflightRequired; delete reel.preflight; }
   writeFileSync(join(dir, 'reel.json'), JSON.stringify(reel, null, 2));
+  if (preflight === 'approved' || preflight === 'pending') writePlan(dir, PLANS[mode]());
+  if (preflight === 'approved') approvePlan(dir);
   return dir;
 }
 
@@ -202,8 +219,9 @@ function sourceFor(retained, extra) {
 test('Mode B: source mapping and captions validate; drifted captions are reported as caption failures', () => {
   const plan = sf('plan.json'), retained = sf('transcript.json'), edl = sf('edit-decisions.json');
   const rows = core.planChecks(validatePlan(plan, retained, edl), plan);
-  assert.deepEqual(rows.map(r => r[2]), ['PASS', plan.captions?.length ? 'PASS' : 'NOT APPLICABLE']);
-  assert.ok(rows.every(r => r[4].required));
+  assert.deepEqual(rows.map(r => r[2]), ['PASS', plan.captions?.length ? 'PASS' : 'NOT APPLICABLE', 'NOT APPLICABLE']);
+  assert.ok(rows.slice(0, 2).every(r => r[4].required));
+  assert.match(rows[2][3], /legacy plan/, 'a legacy plan has no visual-plan row to pass or fail');
   const drifted = structuredClone(plan);
   drifted.captions[0].words[0].start += 0.2;
   const bad = core.planChecks(validatePlan(drifted, retained, edl), drifted);
@@ -303,4 +321,119 @@ test('human approval is on by default for every mode and can be relaxed only out
   const footage = project({ mode: 'footage', requireHumanApproval: false });
   const f = await candidateWithRecord(footage, 1);
   await assert.rejects(approveCandidate(footage, { candidate: f.rel, sha: f.record.sha256.slice(0, 12) }), /--approved-by is required/);
+});
+
+// ---------- Gate B: the creative preflight
+const draftFile = (dir, v = 1) => join(dir, 'renders', `${SLUG}-draft-v${String(v).padStart(3, '0')}.mp4`);
+const editPlan = (dir, change) => { const p = join(dir, 'assets/plan.json'), plan = JSON.parse(readFileSync(p, 'utf8')); change(plan); writeFileSync(p, JSON.stringify(plan, null, 2)); };
+const editReel = (dir, change) => { const p = join(dir, 'reel.json'), reel = JSON.parse(readFileSync(p, 'utf8')); change(reel); writeFileSync(p, JSON.stringify(reel, null, 2)); };
+
+test('Gate B: a legacy reel (no preflightRequired, no v2 plan) renders exactly as before', () => {
+  requireFfmpeg();
+  const dir = project({ preflight: 'legacy' });
+  const r = render(dir, 'draft');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stderr, /preflight/i);
+  assert.ok(existsSync(draftFile(dir)));
+});
+
+test('Gate B: a new reel is refused, draft and final, until its creative plan is valid and approved, with the reason named', () => {
+  const dir = project({ preflight: 'none' });
+  assert.equal(core.readJson(join(dir, 'reel.json')).preflightRequired, true, 'new-reel scaffolds the requirement');
+  const refused = (kind, why) => {
+    const r = render(dir, kind);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /Render refused: the creative preflight \(Gate B\)/);
+    assert.match(r.stderr, why);
+    assert.match(r.stderr, /npm run preflight-reel -- /);
+    assert.deepEqual(readdirSync(join(dir, 'renders')).filter(f => f.endsWith('.mp4')), [], 'nothing was rendered');
+  };
+  refused('draft', /no assets\/plan\.json/);
+  writePlan(dir, sf('plan.json'));
+  refused('draft', /schema 1; a new reel needs "schemaVersion": 2/);
+  writePlan(dir, facelessPlan(2));
+  refused('draft', /no approved creative preflight/);
+  refused('final', /no approved creative preflight/);
+  editPlan(dir, p => { p.scenes[0].brollMode = 'hologram'; });
+  refused('draft', /brollMode "hologram" is not one of/);
+});
+
+test('Gate B: an approved reel renders, keeps its approval through technical revisions, and needs re-approval for creative changes', () => {
+  requireFfmpeg();
+  const dir = project();
+  assert.equal(render(dir, 'draft').status, 0);
+  // Technical revision: timing, layout, kind, events, anchors and asset production fields.
+  editPlan(dir, p => {
+    p.scenes[0].end = p.scenes[1].start = 0.8; p.scenes[1].layout = 'split'; p.scenes[1].kind = 'calendar-v2';
+    p.events.push({ time: 1.5, type: 'tick', visual: 's02' }); p.scenes[0].anchor = 'Most';
+    Object.assign(p.scenes[1].asset, { status: 'ready', file: 'assets/cal.png', sha256: 'a'.repeat(64) });
+  });
+  const r2 = render(dir, 'draft');
+  assert.equal(r2.status, 0, r2.stdout + r2.stderr);
+  assert.ok(existsSync(draftFile(dir, 2)));
+  // Creative change: the B-roll strategy of scene 2.
+  editPlan(dir, p => { Object.assign(p.scenes[1], { brollMode: 'generated-video', evidenceType: 'simulated' }); });
+  const r3 = render(dir, 'draft');
+  assert.equal(r3.status, 1);
+  assert.match(r3.stderr, /creative plan changed since it was approved/);
+  assert.match(r3.stderr, /scene 2 \(s02\) brollMode "ui-mock" -> "generated-video"/);
+  approvePlan(dir);
+  assert.equal(render(dir, 'draft').status, 0, 're-approved plan renders');
+  // Creative change: the direction.
+  editReel(dir, reel => { reel.direction.motif = 'a paper boat'; });
+  const r5 = render(dir, 'final');
+  assert.equal(r5.status, 1);
+  assert.match(r5.stderr, /direction\.motif/);
+});
+
+test('Gate B: the script keeps its approval through filler and stutter cuts, never through a meaning change', () => {
+  requireFfmpeg();
+  const dir = project({ preflight: 'pending' });
+  editPlan(dir, p => { p.script = 'So most to-do lists, um, fail fail on day three.'; });
+  approvePlan(dir);
+  editPlan(dir, p => { p.script = 'Most to-do lists fail on day three.'; });
+  const ok = render(dir, 'draft');
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  editPlan(dir, p => { p.script = 'Most to-do lists never fail on day three.'; });
+  const bad = render(dir, 'draft');
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /the script changed since approval: added "never" at word 4 \(negation\)/);
+});
+
+test('Gate B: every mode (faceless, footage, brand) is refused before approval and renders after it', () => {
+  requireFfmpeg();
+  for (const mode of ['faceless', 'footage', 'brand']) {
+    const dir = project({ mode, preflight: 'pending' });
+    const before = render(dir, 'draft');
+    assert.equal(before.status, 1, `${mode}: refused`);
+    assert.match(before.stderr, /no approved creative preflight/);
+    approvePlan(dir);
+    const after = render(dir, 'draft');
+    assert.doesNotMatch(after.stderr, /Render refused/, `${mode}: ${after.stderr}`);
+    assert.ok(existsSync(draftFile(dir)), `${mode}: rendered`); // footage drafts then fail quick checks (no audio in the fake render)
+    if (mode === 'brand') assert.match(after.stderr, /Preflight note: .*paid assets planned \(s01\) but no paid provider and spending limit are approved/);
+  }
+});
+
+test('preflight-reel: read-only report changes nothing; --approve refuses a wrong fingerprint, no name, an invalid plan or half a paid scope', () => {
+  const dir = project({ mode: 'brand', preflight: 'pending' });
+  const before = readFileSync(join(dir, 'reel.json'));
+  const report = preflight(dir);
+  assert.equal(report.status, 0, report.stdout + report.stderr);
+  assert.match(report.stdout, /Simulated \(not real evidence\): none/);
+  assert.match(report.stdout, /Planned callbacks \(declared, not verified as rendered transitions\): s01 -> s02 mark #grinder-mark/);
+  assert.match(report.stdout, /Approval: not approved/);
+  assert.ok(readFileSync(join(dir, 'reel.json')).equals(before), 'the report wrote nothing');
+  const fp = JSON.parse(preflight(dir, '--json').stdout).fingerprint;
+  const refuse = (args, why) => { const r = preflight(dir, '--approve', ...args); assert.equal(r.status, 1, r.stdout); assert.match(r.stderr, why); };
+  refuse(['--fingerprint', '0'.repeat(12), '--approved-by', 'x'], /does not match the current plan/);
+  refuse(['--fingerprint', fp.slice(0, 12)], /--approved-by is required/);
+  refuse(['--fingerprint', fp.slice(0, 12), '--approved-by', 'x', '--paid-provider', 'kie'], /needs both --paid-provider and --spend-limit/);
+  assert.ok(readFileSync(join(dir, 'reel.json')).equals(before), 'refusals wrote nothing');
+  approvePlan(dir, ['--paid-provider', 'kie', '--spend-limit', 'USD 5', '--max-calls', '3']);
+  const p = core.readJson(join(dir, 'reel.json')).preflight;
+  assert.deepEqual([p.status, p.approvedBy, p.fingerprint, p.paidScope], ['approved', 'test person', fp, { provider: 'kie', spendLimit: 'USD 5', maxCalls: 3 }]);
+  assert.match(p.safeguard, /not proof of identity/);
+  editPlan(dir, plan => { plan.scenes[0].visualIntent = 'interesting animation'; });
+  refuse(['--fingerprint', fp.slice(0, 12), '--approved-by', 'x'], /only a generic description/);
 });

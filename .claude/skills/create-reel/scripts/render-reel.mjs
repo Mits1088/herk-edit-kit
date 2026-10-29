@@ -8,6 +8,9 @@
 // --final  renders/<slug>-candidate-vNNN.mp4 at final quality, then runs full QA (qa-reel.mjs) on that exact file.
 //          Refused before rendering while any reel.json "direction" field (hook, coreClaim, heroBeat, motif, style) is empty.
 //          A candidate becomes renders/final.mp4 only through approve-reel.mjs after a person approves it.
+// Gate B: a new reel (reel.json "preflightRequired", or a schemaVersion 2 plan) renders neither a draft nor a candidate
+// until a person has approved its creative preflight (preflight-reel.mjs) and the creative plan and script still match
+// that approval. Timing, caption, layout and animation changes keep the approval. Legacy reels are not gated.
 // Exit codes: 0 rendered and checks passed, 1 render or checks failed, 2 usage. A failed render or failed QA never
 // touches renders/final.mp4 or any earlier render. Quality comes from the project's profile. Renders with --strict
 // so lint errors stop it. Each render is appended to reel.json "renders". HyperFrames telemetry is disabled.
@@ -17,7 +20,8 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, resolve, basename } from 'node:path';
 import { getProfile, hyperframes, readComposition, run, skillDir } from './lib.mjs';
-import { probeChecks, decodeCheck, evaluate, makeCollector, sha256File, qaDirFor, writeJson, missingDirection } from './qa-core.mjs';
+import { probeChecks, decodeCheck, evaluate, makeCollector, sha256File, qaDirFor, writeJson, missingDirection, preflightStatus, readPreflightInputs } from './qa-core.mjs';
+import { validateVisualPlan } from '../../short-form-edit/scripts/validate-plan.mjs';
 
 const args = process.argv.slice(2);
 const kind = args.includes('--final') ? 'final' : args.includes('--draft') ? 'draft' : null;
@@ -38,6 +42,20 @@ const undecided = kind === 'final' ? missingDirection(reel) : [];
 if (undecided.length) {
   console.error(`Final render refused: reel.json "direction" is missing ${undecided.join(', ')}. Record the hook, core claim, hero beat, motif and style first (drafts do not need them).`);
   process.exit(1);
+}
+// Gate B before any render, draft or final: say exactly what needs reviewing, never a generic error.
+{
+  const inputs = readPreflightInputs(dir);
+  const pre = preflightStatus({ reel, plan: inputs.plan, transcript: inputs.transcript, validate: validateVisualPlan });
+  const problems = pre.required ? [...inputs.errors, ...pre.problems] : [];
+  if (problems.length) {
+    console.error(`Render refused: the creative preflight (Gate B) is not approved for this ${kind === 'final' ? 'final' : 'draft'}.`);
+    for (const p of problems) console.error(`  - ${p}`);
+    console.error(`Review it: npm run preflight-reel -- ${args[0]}`);
+    console.error('Then show the person the report and stop. Record approval only after they explicitly approve the plan, in a later message.');
+    process.exit(1);
+  }
+  for (const w of pre.warnings || []) console.warn(`Preflight note: ${w}`);
 }
 const hooks = { renderer: process.env.REEL_STUDIO_RENDERER || null, qa: process.env.REEL_STUDIO_QA_SCRIPT || null };
 for (const [k, v] of Object.entries(hooks)) if (v) console.warn(`TEST HOOK ACTIVE: ${k} = ${v}`);

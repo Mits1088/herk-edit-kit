@@ -90,6 +90,7 @@ test('a generated starter converts to one consistent native vertical composition
   assert.match(design, /x 90-930, y 200-1600/);
   const reel = JSON.parse(readFileSync(join(dir, 'reel.json'), 'utf8'));
   assert.deepEqual([reel.profile, reel.mode, reel.fps, reel.renders.length], ['organic-60', 'brand', 60, 0]);
+  assert.deepEqual([reel.preflightRequired, reel.preflight], [true, null], 'new reels start behind the creative preflight (Gate B)');
 });
 
 test('composition ids stay valid CSS selectors', () => {

@@ -63,3 +63,69 @@ appears once per reel; the same selection can be used in both requested ratios.
 identities, and overlapping intervals. Visual review must still establish that
 the action and result remain visible and that differently encoded duplicates
 have not evaded the source identity ledger.
+
+## Schema v2: visual metadata (opt-in)
+
+New Reel Studio reels add `"schemaVersion": 2` to the same `assets/plan.json`. A plan without it is v1 and is
+validated exactly as before; nothing below applies to it. v2 adds fields; it never changes `scenes`, `events`,
+`captions`, `kind`, `layout` or timing semantics.
+
+Every scene:
+
+| Field | Values |
+| --- | --- |
+| `visualPurpose` | `performance` (the speaker or a hold carries it), `evidence`, `explanation`, `metaphor`, `orientation`, `emphasis`, `callback`, `cta` |
+| `brollMode` | `none` (speaker only); `source-footage`, `screen-recording`, `generated-video` (video files, also in the footage ledger); `screenshot` (an authentic still: a photographic layer, not moving B-roll); `designed` (HTML/GSAP graphic); `ui-mock` (rebuilt interface); `generated-image` (a plate only) |
+| `evidenceType` | `authentic`, `reconstructed` (rebuilt from a real source), `illustrative` (a metaphor or diagram, not a claim), `simulated` (depicts something that did not happen as shown), `none` |
+
+When `brollMode` is not `none`:
+
+- `visualIntent`: what happens on screen and what the viewer understands from it. "Interesting animation" or
+  "show automation" alone is rejected; a short but specific intent is accepted (under six words is only a warning).
+- `asset`: `ref` (a stable name for the planned visual), `source` (URL, supplied file, or `generated`), `method`
+  (`have`, `capture`, `generate`, `design`), `provider` (optional), `paid` (true/false), `whyThis` (why it beats stock
+  footage or another text card). Production fields, filled when the asset exists: `status` (`planned`, `ready`),
+  `file` (a path inside the project), `sha256`.
+
+Optional: top-level `motifs: [{id, description, activeRange?: [start, end]}]` and `script` (planned narration for
+Modes A and C before any voice exists); per scene `motifs: [id]`, `carryOut: [{to, motif, element?, state?}]` and
+`carryIn: [{from, motif, element?}]`.
+
+`carryOut`/`carryIn` are **planned callbacks**: the motif recurs in a later scene in a changed state. Each scene's own
+composition builds it; no shared visual layer exists yet, and nothing verifies the rendered handoff. `element` is
+optional: a conceptual callback needs no shared DOM element. No scene is required to carry anything; hard cuts,
+holds and natural footage transitions remain valid. Coordinates are not part of Phase 1; when added they will be
+root-composition CSS pixels (the profile's 1080x1920), top-left origin, before any camera transform.
+
+Validation (`validateVisualPlan` in `validate-plan.mjs`; every error starts with `Visual:`):
+
+- **Preflight stage** (before assets exist; used by create-reel's `preflight-reel`): contiguous scenes covering
+  `duration`, valid values, required fields, unique motif ids, known motif and scene references, motif ranges inside
+  the reel that overlap their scenes and span their handoffs, callbacks that move forward in time and agree in both
+  directions, and truth rules: generated or mocked visuals are never `authentic`, an `authentic` visual has a
+  non-generated source, a shown visual is never `evidenceType: none`, and a `broll` layout needs moving footage.
+  It never checks files.
+- **Production stage** (QA; `validatePlan` runs it for v2 plans): everything above, plus each `screenshot`,
+  `source-footage`, `screen-recording` and `generated-*` scene is `ready` with a project file that matches its
+  `sha256`. This is how authentic stills in `split` or `paper` layouts are tracked; moving footage still also needs
+  its footage-ledger row.
+
+Example (Mode B, two scenes; captions as in v1):
+
+```json
+{"schemaVersion":2,"duration":4,"fps":30,
+ "motifs":[{"id":"seed","description":"the seed the speaker tells you to start with"}],
+ "scenes":[
+  {"id":"s00","start":0,"end":2,"layout":"face","kind":"hook","anchor":"Grow","anchorTime":0.1,
+   "visualPurpose":"performance","brollMode":"none","evidenceType":"none","holdReason":"The face carries the hook."},
+  {"id":"s01","start":2,"end":4,"layout":"split","kind":"payoff","anchor":"Start","anchorTime":2.1,
+   "visualPurpose":"evidence","brollMode":"screenshot","evidenceType":"authentic","motifs":["seed"],
+   "visualIntent":"The real seed packet photo sits above the speaker on \"Start small\", so the viewer sees the exact first step.",
+   "asset":{"ref":"seed packet photo","source":"supplied by the creator","method":"have","paid":false,
+    "whyThis":"It shows the step the speaker names, instead of a generic gardening stock clip.",
+    "status":"ready","file":"assets/broll/seed.png","sha256":"<64 lowercase hex>"}}],
+ "events":[{"time":0,"type":"title","visual":"s00","anchor":"Grow"}],
+ "captions":[]}
+```
+
+Faceless and brand examples, with planned callbacks, are in `tests/fixtures/visual-plans.mjs`.

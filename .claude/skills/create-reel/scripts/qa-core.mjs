@@ -240,15 +240,163 @@ export function speechIntegrity(source, retained, edl, { tol = 0.01 } = {}) {
   return { rows, flagged };
 }
 
-// Herk's validate-plan result split into source mapping and caption alignment (captions only when the plan has them).
+// Herk's validate-plan result split into source mapping, caption alignment (captions only when the plan has them) and,
+// for schema v2 plans, the visual plan (errors prefixed "Visual:").
 export function planChecks(v, plan) {
   const req = { required: true };
-  const cap = v.errors.filter(e => /^Caption/.test(e)), rest = v.errors.filter(e => !/^Caption/.test(e));
+  const visual = v.errors.filter(e => /^Visual:/.test(e));
+  const cap = v.errors.filter(e => /^Caption/.test(e)), rest = v.errors.filter(e => !/^Caption/.test(e) && !/^Visual:/.test(e));
   return [
     ['Herk', 'validate-plan: source mapping, scenes, anchors', rest.length ? 'FAIL' : 'PASS', rest.slice(0, 5).join('; ') || `${v.metrics.retainedWords} words, ${v.metrics.scenes} scenes`, req],
     ['Captions', 'caption words and timing match the retimed transcript', !plan.captions?.length ? 'NOT APPLICABLE' : cap.length ? 'FAIL' : 'PASS',
       !plan.captions?.length ? 'plan has no captions' : cap.slice(0, 5).join('; ') || `${plan.captions.length} caption groups`, req],
+    visualPlanRow(v, plan),
   ];
+}
+
+// The schema v2 visual plan at production stage: metadata, motifs, planned callbacks, planned assets present and hashed.
+export function visualPlanRow(v, plan) {
+  if (!(plan?.schemaVersion >= 2)) return ['Herk', 'validate-plan: visual plan (schema v2)', 'NOT APPLICABLE', 'legacy plan (no schemaVersion 2)'];
+  const errs = v.errors.filter(e => /^Visual:/.test(e));
+  const m = v.metrics?.visual || v.metrics || {};
+  return ['Herk', 'validate-plan: visual plan (schema v2)', errs.length ? 'FAIL' : (v.warnings?.length ? 'WARNING' : 'PASS'),
+    errs.slice(0, 5).join('; ') || [...(v.warnings || []).slice(0, 3), `${plan.scenes.length} scenes; authentic ${m.authenticScenes?.length ?? 0}, simulated ${m.simulatedScenes?.length ?? 0}, planned callbacks ${m.callbacks?.length ?? 0}`].join('; '),
+    { required: true }];
+}
+
+// ---------- Gate B: the creative preflight. A new reel renders only after a person approves its creative plan.
+// The fingerprint covers creative decisions only (direction, motifs, each scene's purpose, intent, B-roll mode, evidence,
+// asset identity and planned callbacks), never times, layout, captions, events, file paths, hashes, renders or approvals,
+// so technical revisions keep the approval. The script is compared word by word: fillers, stutters, case and
+// punctuation are allowed; any other change needs a new approval.
+const normText = s => String(s ?? '').toLowerCase().replace(/[‘’]/g, "'").replace(/[^a-z0-9'\s]/g, ' ').replace(/\s+/g, ' ').trim();
+const sorted = a => [...a].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+
+export function creativeSnapshot(reel, plan) {
+  const carry = list => sorted((Array.isArray(list) ? list : []).map(c => `${c.motif ?? ''}|${c.element ?? ''}`));
+  return {
+    v: 1,
+    mode: reel?.mode ?? null,
+    profile: reel?.profile ?? null,
+    direction: Object.fromEntries(DIRECTION_FIELDS.map(k => [k, normText(reel?.direction?.[k])])),
+    motifs: (Array.isArray(plan?.motifs) ? plan.motifs : []).map(m => ({ id: String(m.id), description: normText(m.description) }))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    scenes: (Array.isArray(plan?.scenes) ? plan.scenes : []).map(s => ({
+      visualPurpose: s.visualPurpose ?? null,
+      brollMode: s.brollMode ?? null,
+      evidenceType: s.evidenceType ?? null,
+      visualIntent: normText(s.visualIntent),
+      asset: s.asset ? {
+        ref: normText(s.asset.ref), source: String(s.asset.source ?? '').trim(), method: s.asset.method ?? null,
+        provider: normText(s.asset.provider), paid: s.asset.paid === true, whyThis: normText(s.asset.whyThis),
+      } : null,
+      motifs: sorted((Array.isArray(s.motifs) ? s.motifs : []).map(String)),
+      carryOut: carry(s.carryOut),
+      carryIn: carry(s.carryIn),
+    })),
+  };
+}
+export const creativeFingerprint = snapshot => createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+
+// Field-level differences between an approved snapshot and the current one, readable in a refusal message.
+export function diffSnapshot(approved, current, plan) {
+  const flat = (o, p = '', out = {}) => {
+    if (o && typeof o === 'object' && !Array.isArray(o)) for (const [k, v] of Object.entries(o)) flat(v, p ? `${p}.${k}` : k, out);
+    else out[p] = JSON.stringify(o);
+    return out;
+  };
+  const a = flat({ ...approved, scenes: undefined, motifs: undefined }), b = flat({ ...current, scenes: undefined, motifs: undefined });
+  const out = [];
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) if (a[k] !== b[k]) out.push(`${k} ${a[k] ?? 'absent'} -> ${b[k] ?? 'absent'}`);
+  const am = new Map((approved?.motifs || []).map(m => [m.id, m])), cm = new Map((current?.motifs || []).map(m => [m.id, m]));
+  for (const [id, m] of am) if (!cm.has(id)) out.push(`motif ${id} removed`); else if (cm.get(id).description !== m.description) out.push(`motif ${id} description changed`);
+  for (const id of cm.keys()) if (!am.has(id)) out.push(`motif ${id} added`);
+  const as = approved?.scenes || [], cs = current?.scenes || [];
+  if (as.length !== cs.length) out.push(`scene count ${as.length} -> ${cs.length} (scenes added, removed, split or merged)`);
+  for (let i = 0; i < Math.min(as.length, cs.length); i++) {
+    const x = flat(as[i]), y = flat(cs[i]), name = `scene ${i + 1}${plan?.scenes?.[i]?.id ? ` (${plan.scenes[i].id})` : ''}`;
+    for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) if (x[k] !== y[k]) out.push(`${name} ${k} ${x[k] ?? 'absent'} -> ${y[k] ?? 'absent'}`);
+  }
+  return out;
+}
+
+// The words of the reel's script: the retimed transcript when there is one, else the plan's planned "script".
+export function scriptWords(plan, transcript) {
+  const words = Array.isArray(transcript?.words) ? transcript.words.filter(w => w.type !== 'spacing').map(w => normWord(w.text)).filter(Boolean)
+    : String(plan?.script ?? '').split(/\s+/).map(normWord).filter(Boolean);
+  return words.length ? words : null;
+}
+
+// Word changes between the approved script and the current one that need a new approval. Deleted fillers and deleted
+// immediate repetitions (stutters) are allowed; every other deletion, insertion or substitution is returned, with
+// negations, numbers and qualifiers first.
+export const SCRIPT_FILLERS = new Set(['um', 'uh', 'er', 'erm', 'ah', 'hmm', 'like', 'basically', 'actually', 'literally', 'so']);
+const FILLER_PAIRS = [['you', 'know'], ['i', 'mean']];
+export function scriptChanges(approved, current) {
+  const a = approved || [], b = current || [], n = a.length, m = b.length;
+  // LCS table (scripts are a few hundred words).
+  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const removed = [], added = [];
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) { i++; j++; }
+    else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) added.push({ type: 'added', word: b[j], index: j++ });
+    else removed.push({ type: 'removed', word: a[i], index: i++ });
+  }
+  const disallowed = [];
+  for (let k = 0; k < removed.length; k++) {
+    const r = removed[k], idx = r.index;
+    const pair = FILLER_PAIRS.find(([p, q]) => a[idx] === p && a[idx + 1] === q && removed[k + 1]?.index === idx + 1);
+    if (pair) { k++; continue; }
+    if (SCRIPT_FILLERS.has(r.word)) continue;
+    if (a[idx - 1] === r.word || a[idx + 1] === r.word) continue; // stutter: the same word is still beside it
+    disallowed.push(r);
+  }
+  disallowed.push(...added);
+  for (const c of disallowed) c.risk = riskOf(c.word);
+  const rank = c => c.risk === 'negation' ? 0 : c.risk === 'number' ? 1 : c.risk === 'qualifier' ? 2 : 3;
+  return disallowed.sort((x, y) => rank(x) - rank(y) || x.index - y.index);
+}
+
+export const preflightRequired = (reel, plan) => reel?.preflightRequired === true || plan?.schemaVersion >= 2;
+
+// validate: validateVisualPlan from short-form-edit (injected so this module stays pure).
+// Returns { required, ok, problems, warnings, fingerprint, snapshot, words, validation }.
+export function preflightStatus({ reel, plan, transcript, validate }) {
+  if (!preflightRequired(reel, plan)) return { required: false, ok: true, problems: [], warnings: [] };
+  const problems = [], warnings = [];
+  if (!plan) return { required: true, ok: false, warnings, problems: ['no assets/plan.json: write the creative plan with "schemaVersion": 2 (create-reel references/preflight.md)'] };
+  const validation = validate(plan, { stage: 'preflight' });
+  if (plan.schemaVersion !== 2) problems.push(`assets/plan.json is schema ${plan.schemaVersion ?? 1}; a new reel needs "schemaVersion": 2 with each scene's visualPurpose, brollMode and evidenceType`);
+  else problems.push(...validation.errors);
+  warnings.push(...(validation.warnings || []));
+  const snapshot = creativeSnapshot(reel, plan), fingerprint = creativeFingerprint(snapshot), words = scriptWords(plan, transcript);
+  const p = reel?.preflight;
+  if (validation.metrics?.paidAssets?.length && !p?.paidScope) warnings.push(`paid assets planned (${validation.metrics.paidAssets.join(', ')}) but no paid provider and spending limit are approved; ask before any paid call`);
+  if (!p || p.status !== 'approved') problems.push('no approved creative preflight: present the preflight report, stop, and record the person\'s explicit approval with preflight-reel --approve');
+  else {
+    if (p.fingerprint !== fingerprint) {
+      const diff = diffSnapshot(p.snapshot, snapshot, plan);
+      problems.push(`the creative plan changed since it was approved (${p.fingerprint.slice(0, 12)} -> ${fingerprint.slice(0, 12)}): ${diff.slice(0, 8).join('; ') || 'snapshot differs'}${diff.length > 8 ? `; and ${diff.length - 8} more` : ''}`);
+    }
+    if (Array.isArray(p.scriptWords) && words) {
+      const ch = scriptChanges(p.scriptWords, words);
+      if (ch.length) problems.push(`the script changed since approval: ${ch.slice(0, 6).map(c => `${c.type} "${c.word}" at word ${c.index + 1}${c.risk ? ` (${c.risk})` : ''}`).join('; ')}${ch.length > 6 ? `; and ${ch.length - 6} more` : ''}`);
+    } else if (Array.isArray(p.scriptWords) !== !!words) problems.push(words ? 'a script now exists but none was approved' : 'the approved script is missing from the plan and transcript');
+  }
+  return { required: true, ok: !problems.length, problems, warnings, fingerprint, snapshot, words, validation };
+}
+
+// Reads the inputs for preflightStatus from a project folder. Unreadable JSON is reported, never ignored.
+export function readPreflightInputs(dir) {
+  const read = name => {
+    const p = join(dir, 'assets', name);
+    if (!existsSync(p)) return { value: null };
+    try { return { value: JSON.parse(readFileSync(p, 'utf8')) }; } catch (e) { return { value: null, error: `assets/${name} is not valid JSON: ${e.message}` }; }
+  };
+  const plan = read('plan.json'), transcript = read('transcript.json');
+  return { plan: plan.value, transcript: transcript.value, errors: [plan.error, transcript.error].filter(Boolean) };
 }
 
 // ---------- fonts: every face the reel declares must come from its local file; nothing may load from the network.

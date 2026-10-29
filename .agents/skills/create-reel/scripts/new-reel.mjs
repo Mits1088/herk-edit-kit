@@ -8,7 +8,7 @@
 // Runs `scripts/new-video.mjs <slug>` (Herk's generator: copies the starter and the pinned GSAP), then replaces the
 // landscape starter with a native vertical composition: meta.json, root id / data-composition-id / data-width /
 // data-height / data-duration / data-fps, the timeline registration key, CSS sizes and staging all come from one ID
-// and one profile. Writes reel.json (profile, mode, style, fonts, empty direction, render log) and DESIGN.md (from brand/DESIGN.md when
+// and one profile. Writes reel.json (profile, mode, style, fonts, empty direction, the creative-preflight requirement, render log) and DESIGN.md (from brand/DESIGN.md when
 // present). --style installs that style's local fonts (fonts.mjs); the default is brand, and a missing file stops it.
 // Never overwrites an existing project.
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
@@ -73,6 +73,9 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
     width: profile.width, height: profile.height, fps: profile.fps,
     // The creative direction, filled in while planning; a final render refuses to start until every field is set.
     direction: Object.fromEntries(DIRECTION_FIELDS.map(k => [k, ''])),
+    // Gate B: no draft or final renders until a person approves the creative preflight (preflight-reel.mjs).
+    preflightRequired: true,
+    preflight: null,
     // Stage 2: a person approves a verified candidate before it becomes renders/final.mp4. Footage always requires it.
     requireHumanApproval: true,
     renders: [],

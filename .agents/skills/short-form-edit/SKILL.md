@@ -63,7 +63,9 @@ the next edit starts from it. Record the note and the resulting rule together.
    captions, graphics, and sound from the same map.
 
 User authorization persists. An instruction to make a finished video and iterate
-authorizes ordinary local editing and rendering. An explicit request for Kie
+authorizes ordinary local editing and rendering, after create-reel's creative
+preflight (Gate B) for a new Reel Studio reel: that one stop always happens, then
+production continues autonomously. Creative approval is not spending approval. An explicit request for Kie
 B-roll authorizes those generations. Resolve review gates through the current
 authorization; ask only for missing approval, not again at every draft. Never post
 the reel or contact anyone without explicit authorization.
@@ -71,7 +73,9 @@ the reel or contact anyone without explicit authorization.
 ## Design the emotional journey
 
 Write `DESIGN.md` and a beat plan before HTML. Identify the hook, open loop,
-escalation, evidence, payoff, and CTA. Give every shot a reason to exist.
+escalation, evidence, payoff, and CTA. Give every shot a reason to exist. In a
+Reel Studio project the plan is `assets/plan.json` schema v2: each scene's purpose,
+B-roll mode, evidence type and a specific visual intent ([plan-schema.md](references/plan-schema.md)).
 
 Read [curiosity-and-entertainment.md](references/curiosity-and-entertainment.md).
 Create `OPEN-LOOPS.json` with each honest viewer question, planted object,

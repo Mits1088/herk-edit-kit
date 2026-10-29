@@ -12,12 +12,17 @@
 // Mode B (footage): transcript, source transcript and EDL present; Herk's plan validator (source mapping, captions)
 // and footage validator; speech integrity (no split words, retained words match the source, risky removals flagged
 // with review clips and waveforms); EDL duration matches the composition.
+// Gate B: the creative preflight is approved and still matches the plan (required for a candidate of a new reel); a
+// schemaVersion 2 plan is validated at the production stage in every mode (planned assets present and hashed). Planned
+// callbacks are checked only as declarations: a named element must exist in the source; the transition itself is not
+// verified (Phase 2), so that row is never more than a WARNING.
 //
 // Every check is marked required or not and has a kind (technical, creative, checker, human, info). The blocking rule
 // lives in qa-core.mjs: any FAIL, or a required check that is not PASS / WARNING / NOT APPLICABLE, blocks Stage 1.
 // For a candidate (<slug>-candidate-vNNN.mp4) qa.json also records the full SHA-256, hashed before and after QA.
 // Exit 1 when Stage 1 is blocked.
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, rmSync, renameSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve, relative, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -26,7 +31,9 @@ import {
   makeCollector, evaluate, sha256File, isCandidateFile, qaDirFor, humanApprovalRequired, interpretLook, interpretLint,
   probeChecks, decodeCheck, AUDIO_FILTER, parseAudioAnalysis, audioChecks, speechIntegrity, planChecks, tailText, writeJson,
   reportMarkdown, writeProjectSummary, NETWORK_FONT, networkFontRefs, fontChecks, missingDirection,
+  preflightStatus, readPreflightInputs, visualPlanRow,
 } from './qa-core.mjs';
+import { validateVisualPlan } from '../../short-form-edit/scripts/validate-plan.mjs';
 import { faceCovers } from './fonts.mjs';
 import { planSamples, planEvents, collectPageEvents } from './samples.mjs';
 
@@ -76,6 +83,19 @@ const shaBefore = candidate ? await sha256File(render) : null;
   add('Direction', 'reel.json direction recorded (hook, coreClaim, heroBeat, motif, style)', missing.length ? (candidate ? 'FAIL' : 'WARNING') : 'PASS',
     missing.length ? `missing ${missing.join(', ')}${candidate ? '' : '; required before a final render'}` : reel.direction.hook.slice(0, 80), candidate ? req : {});
 }
+// Gate B: the creative preflight. Required for a candidate of a new reel; legacy reels are not gated.
+const preInputs = readPreflightInputs(dir);
+const pre = preflightStatus({ reel, plan: preInputs.plan, transcript: preInputs.transcript, validate: validateVisualPlan });
+{
+  const problems = pre.required ? [...preInputs.errors, ...pre.problems] : [];
+  add('Preflight', 'creative preflight approved and unchanged (Gate B)', !pre.required ? 'NOT APPLICABLE' : problems.length ? (candidate ? 'FAIL' : 'WARNING') : 'PASS',
+    !pre.required ? 'legacy reel: no creative preflight required' : problems.length ? problems.slice(0, 4).join('; ') : `approved by ${reel.preflight.approvedBy} (${pre.fingerprint.slice(0, 12)})${pre.warnings.length ? `; ${pre.warnings.join('; ')}` : ''}`,
+    pre.required && candidate ? req : {});
+}
+const projectHash = p => createHash('sha256').update(readFileSync(join(dir, p))).digest('hex');
+const projectHas = p => existsSync(join(dir, p));
+// Modes A and C: a schema v2 plan is validated here; Mode B gets the same check through validate-plan below.
+if (!footage && preInputs.plan?.schemaVersion >= 2) add(...visualPlanRow(validateVisualPlan(preInputs.plan, { stage: 'production', exists: projectHas, hash: projectHash }), preInputs.plan));
 {
   const r = run(process.execPath, [join(kitRoot, 'scripts/preflight.mjs'), dir]);
   add('Herk', 'preflight', r.status === 0 ? 'PASS' : 'FAIL', tailText(r.stdout + r.stderr), req);
@@ -122,6 +142,18 @@ const sourceTexts = [];
   walk(dir);
 }
 const fontRefs = networkFontRefs(sourceTexts);
+// Planned callbacks: declarations only. A callback may be purely conceptual (no shared element); one that names an
+// element should find it in the source. Neither proves the handoff renders as intended.
+const callbacks = (preInputs.plan?.schemaVersion >= 2 ? preInputs.plan.scenes || [] : []).flatMap(s => (s.carryOut || []).map(c => ({ from: s.id, ...c })));
+{
+  const named = callbacks.filter(c => c.element);
+  const declares = (text, id) => text.includes(`id="${id}"`) || text.includes(`id='${id}'`);
+  const missing = named.filter(c => !sourceTexts.some(t => /\.html$/i.test(t.file) && declares(t.text, String(c.element))));
+  add('Visual', 'planned callbacks: named elements exist in the source (rendered transition not verified, Phase 2)',
+    !callbacks.length ? 'NOT APPLICABLE' : missing.length ? 'WARNING' : 'PASS',
+    !callbacks.length ? 'no planned callbacks' : missing.length ? `not found: ${missing.map(c => `#${c.element} (${c.from} -> ${c.to})`).join(', ')}; planned callback only`
+      : `${callbacks.length} planned callback(s), ${named.length} with a named element found; ${callbacks.length - named.length} conceptual`, { kind: 'info' });
+}
 let pageEvents = [];
 {
   const require = createRequire(join(kitRoot, 'package.json'));
@@ -243,7 +275,7 @@ if (footage) {
   if (plan && retained && edl) {
     try {
       const { validatePlan } = await import(pathToFileURL(join(kitRoot, '.claude/skills/short-form-edit/scripts/validate-plan.mjs')).href);
-      for (const row of planChecks(validatePlan(plan, retained, edl, p => existsSync(join(dir, p))), plan)) add(...row);
+      for (const row of planChecks(validatePlan(plan, retained, edl, projectHas, projectHash), plan)) add(...row);
       const needsLedger = (plan.scenes || []).some(s => s.layout?.includes('broll') || s.mode === 'footage');
       if (!needsLedger) add('Herk', 'validate-footage (B-roll ledger)', 'NOT APPLICABLE', 'plan has no B-roll scenes');
       else {
@@ -370,6 +402,7 @@ const human = { kind: 'human' };
 add('Visual', 'G1 proof readable / G4 one hero per frame', 'NOT TESTED', 'judge by eye on the contact sheet', human);
 add('Visual', 'safe areas, text clipping, font rendering in the encoded frames', render ? 'NOT TESTED' : 'NOT APPLICABLE', render ? 'look at safe-area-sheet.jpg (guides exist only on the sheet)' : 'no render', human);
 add('Visual', 'continuity, animation timing, ending', render ? 'NOT TESTED' : 'NOT APPLICABLE', render ? 'watch the MP4 at full size; step through event-sheet.jpg and events/ for transitions' : 'no render', human);
+if (callbacks.length) add('Visual', 'planned callbacks read as intended (declared in the plan; not verified by any script)', render ? 'NOT TESTED' : 'NOT APPLICABLE', render ? `watch ${callbacks.map(c => `${c.from} -> ${c.to}`).join(', ')}` : 'no render', human);
 add('Visual', 'captions and A/V sync', expectsAudio || hasCaptions ? 'NOT TESTED' : 'NOT APPLICABLE', expectsAudio || hasCaptions ? 'watch and listen; check word timing' : 'no audio or captions', human);
 if (footage) {
   add('Speech', 'meaning preserved at every cut', 'NOT TESTED', flaggedCuts.length ? `read the transcript around ${flaggedCuts.length} flagged cut(s) and watch the review clips` : 'read the retained transcript against the source', human);

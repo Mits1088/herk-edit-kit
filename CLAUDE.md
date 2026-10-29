@@ -95,7 +95,8 @@ sync. Resolve problems before the final render. Save evidence in VERIFY.md.
 Use a Range-capable preview server for MP4 scrubbing (for example `npx serve`).
 
 Honor approvals already provided. When review approval is missing, prepare the
-concrete preview or cut proposal first. Never claim a lint result proves visual
+concrete preview or cut proposal first. A new Reel Studio reel always stops once at
+the creative preflight (create-reel Gate B), even when building was pre-authorized. Never claim a lint result proves visual
 quality. Only publish or upload a finished video when the user authorizes it.
 Automated browser checks must be headless, with Pointer Lock and cursor capture
 disabled; synthetic input must remain inside the virtual browser.
