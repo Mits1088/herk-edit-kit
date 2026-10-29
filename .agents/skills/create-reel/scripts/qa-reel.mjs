@@ -6,7 +6,9 @@
 // Source checks: Herk preflight, HyperFrames lint, seek-check (one deterministic clock), motionmaxxing lint.mjs (G5,
 // with explicit width/height/duration), and a DOM pass at sample times for text outside the canvas or the profile's
 // safe area, and font loading. Render checks: ffprobe against the profile, a full decode, audio measurements,
-// motionmaxxing look.py gates and contact sheet, and a timecoded safe-area sheet drawn here (guides only on that image).
+// motionmaxxing look.py gates and contact sheet, a timecoded safe-area sheet drawn here (guides only on that image),
+// and event frames from the MP4 around transitions (samples.mjs). Fonts: network fonts are blocked and reported; every
+// face reel.json "fonts" declares must load from its own local file and cover the weights the text uses.
 // Mode B (footage): transcript, source transcript and EDL present; Herk's plan validator (source mapping, captions)
 // and footage validator; speech integrity (no split words, retained words match the source, risky removals flagged
 // with review clips and waveforms); EDL duration matches the composition.
@@ -15,7 +17,7 @@
 // lives in qa-core.mjs: any FAIL, or a required check that is not PASS / WARNING / NOT APPLICABLE, blocks Stage 1.
 // For a candidate (<slug>-candidate-vNNN.mp4) qa.json also records the full SHA-256, hashed before and after QA.
 // Exit 1 when Stage 1 is blocked.
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, rmSync, renameSync } from 'node:fs';
 import { join, resolve, relative, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -23,8 +25,10 @@ import { skillDir, kitRoot, motionmaxxingDir, getProfile, safeRect, run, hyperfr
 import {
   makeCollector, evaluate, sha256File, isCandidateFile, qaDirFor, humanApprovalRequired, interpretLook, interpretLint,
   probeChecks, decodeCheck, AUDIO_FILTER, parseAudioAnalysis, audioChecks, speechIntegrity, planChecks, tailText, writeJson,
-  reportMarkdown, writeProjectSummary,
+  reportMarkdown, writeProjectSummary, NETWORK_FONT, networkFontRefs, fontChecks,
 } from './qa-core.mjs';
+import { faceCovers } from './fonts.mjs';
+import { planSamples, planEvents, collectPageEvents } from './samples.mjs';
 
 const args = process.argv.slice(2);
 if (!args[0] || args[0].startsWith('--') || args.includes('--help')) {
@@ -42,6 +46,11 @@ const fps = Number((html.match(/\bdata-fps\s*=\s*["'](\d+)/) || [])[1]) || profi
 const footage = reel?.mode === 'footage';
 const { results, add } = makeCollector();
 const req = { required: true };
+// Visual events from a short-form plan (any mode that has one): plan events, scene cuts, caption groups.
+let planEventCache = null;
+const planEventsFor = () => planEventCache ??= (() => {
+  try { return planEvents(JSON.parse(readFileSync(join(dir, 'assets/plan.json'), 'utf8'))); } catch { return []; }
+})();
 
 // Pick the render: --render, else the newest logged in reel.json, else the newest mp4 in renders/ (never final.mp4).
 let render = null;
@@ -88,7 +97,26 @@ const shaBefore = candidate ? await sha256File(render) : null;
   else for (const row of interpretLint(run(process.execPath, [lint, join(dir, 'index.html'), '--json', '--width', String(comp.width), '--height', String(comp.height), '--duration', String(comp.duration)]))) add(...row);
 }
 
-// DOM pass: visible text outside the canvas (clipping) or outside the safe area; font loading.
+// DOM pass: visible text outside the canvas (clipping) or outside the safe area at evenly spaced and event-targeted
+// times; fonts (declared faces loaded from their local files, network font requests blocked and reported).
+const declaredFonts = Array.isArray(reel?.fonts) ? reel.fonts : [];
+const fontFiles = Object.fromEntries(declaredFonts.map(f => {
+  const p = join(dir, f.file);
+  return [f.file, existsSync(p) && readFileSync(p).subarray(0, 4).toString('latin1') === 'wOF2'];
+}));
+const sourceTexts = [];
+{
+  const walk = (d, depth = 0) => {
+    if (depth > 4) return;
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) { if (!['node_modules', 'renders', '.git'].includes(e.name)) walk(join(d, e.name), depth + 1); }
+      else if (/\.(html|css)$/i.test(e.name)) sourceTexts.push({ file: relative(dir, join(d, e.name)).replaceAll('\\', '/'), text: readFileSync(join(d, e.name), 'utf8') });
+    }
+  };
+  walk(dir);
+}
+const fontRefs = networkFontRefs(sourceTexts);
+let pageEvents = [];
 {
   const require = createRequire(join(kitRoot, 'package.json'));
   let chromium = null;
@@ -96,18 +124,49 @@ const shaBefore = candidate ? await sha256File(render) : null;
   const exe = chromePath();
   if (!chromium || !exe) {
     add('Layout', 'text inside the canvas (no clipping)', 'NOT TESTED', !chromium ? 'playwright not installed' : 'Chrome not found; set CHROME_PATH', req);
-    add('Layout', 'fonts loaded', 'NOT TESTED', 'no browser');
+    for (const row of fontChecks({ refs: fontRefs })) add(...row);
+    add('Fonts', 'each declared face loaded from its local file', declaredFonts.length ? 'NOT TESTED' : 'NOT APPLICABLE', 'no browser', declaredFonts.length ? req : {});
   } else {
     let browser = null;
     try {
       browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--allow-file-access-from-files', '--disable-gpu', '--hide-scrollbars'] });
       const page = await browser.newPage({ viewport: { width: comp.width, height: comp.height }, deviceScaleFactor: 1 });
+      // Fonts must come from the project. Block any network font (and font-host stylesheet) and record it; other
+      // requests are left alone.
+      const net = { loaded: [], failed: [], blocked: [] };
+      await page.route(/^https?:/, route => {
+        const r = route.request();
+        if (r.resourceType() === 'font' || NETWORK_FONT.test(r.url())) { net.blocked.push(r.url()); return route.abort('blockedbyclient'); }
+        return route.continue();
+      });
+      page.on('requestfinished', r => { if (r.resourceType() === 'font' || /\.woff2?$/i.test(r.url())) net.loaded.push(r.url()); });
+      page.on('requestfailed', r => { if (r.resourceType() === 'font' || /\.woff2?$/i.test(r.url())) net.failed.push({ url: r.url(), error: r.failure()?.errorText || 'failed' }); });
       await page.goto(pathToFileURL(join(dir, 'index.html')).href, { waitUntil: 'load' });
-      await page.evaluate(() => document.fonts && document.fonts.ready);
+      // Fonts load lazily: ask for every declared face at both ends of its weight range, then read the FontFace set.
+      const fontState = await page.evaluate(async declared => {
+        for (const d of declared) for (const w of String(d.weight).split(/\s+/)) {
+          try { await document.fonts.load(`${d.style === 'italic' ? 'italic' : 'normal'} ${w} 64px "${d.family}"`, 'AaBb09'); } catch {}
+        }
+        await document.fonts.ready;
+        const faces = [...document.fonts].map(f => ({ family: f.family, weight: f.weight, style: f.style, status: f.status }));
+        const used = new Map();
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          const text = n.textContent.trim(); if (!text || !n.parentElement || /^(SCRIPT|STYLE)$/.test(n.parentElement.tagName)) continue;
+          const s = getComputedStyle(n.parentElement), key = `${s.fontFamily}|${s.fontWeight}|${s.fontStyle}`;
+          if (!used.has(key)) used.set(key, { family: s.fontFamily, weight: s.fontWeight, style: s.fontStyle, text: text.slice(0, 30) });
+        }
+        return { faces, used: [...used.values()] };
+      }, declaredFonts);
+      for (const row of fontChecks({ declared: declaredFonts, browser: { ...fontState, ...net }, files: fontFiles, refs: fontRefs, styleName: reel?.style || 'none', covers: faceCovers })) add(...row);
+
+      pageEvents = await page.evaluate(collectPageEvents, comp.id);
       const safe = safeRect({ ...profile, width: comp.width, height: comp.height });
-      const n = 12, times = Array.from({ length: n }, (_, i) => +(i * (comp.duration - 1 / fps) / (n - 1)).toFixed(3));
+      const n = 12, even = Array.from({ length: n }, (_, i) => +(i * (comp.duration - 1 / fps) / (n - 1)).toFixed(3));
+      const targeted = planSamples([...pageEvents, ...planEventsFor()], { fps, duration: comp.duration, cap: 36 });
+      const times = [...even.map(t => ({ t, label: `${t}s` })), ...targeted.map(s => ({ t: s.t, label: `${s.t}s ${s.reason}`, targeted: true }))];
       const found = await page.evaluate(([id, times, safe]) => {
-        const W = innerWidth, H = innerHeight, out = { clip: [], unsafe: [] };
+        const W = innerWidth, H = innerHeight, out = { clip: [], unsafe: [], eventClip: [], eventUnsafe: [] };
         // A clip is on screen only inside its data-start/data-duration window (HyperFrames hides it otherwise).
         const live = (el, t) => { for (let e = el; e && e.getAttribute; e = e.parentElement) {
           const s = e.getAttribute('data-start'), d = e.getAttribute('data-duration');
@@ -117,7 +176,7 @@ const shaBefore = candidate ? await sha256File(render) : null;
         const textNodes = [];
         const walker = document.createTreeWalker(document.querySelector(`[data-composition-id="${id}"]`), NodeFilter.SHOW_TEXT);
         for (let n = walker.nextNode(); n; n = walker.nextNode()) if (n.textContent.trim()) textNodes.push(n);
-        for (const t of times) {
+        for (const { t, label: at, targeted } of times) {
           const tl = window.__timelines[id]; tl.pause(); tl.seek(t, false);
           for (const n of textNodes) {
             const el = n.parentElement; if (!live(el, t) || !shown(el)) continue;
@@ -131,15 +190,13 @@ const shaBefore = candidate ? await sha256File(render) : null;
               for (const c of clips) { l = Math.max(l, c.left); tp = Math.max(tp, c.top); rt = Math.min(rt, c.right); bt = Math.min(bt, c.bottom); }
               const r = { left: l, top: tp, right: rt, bottom: bt, width: rt - l, height: bt - tp };
               if (r.width < 1 || r.height < 1) continue;
-              const label = `${t}s "${n.textContent.trim().slice(0, 40)}" [${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)}]`;
-              if (r.left < -1 || r.top < -1 || r.right > W + 1 || r.bottom > H + 1) out.clip.push(label);
-              else if (r.left < safe.x0 || r.top < safe.y0 || r.right > safe.x1 || r.bottom > safe.y1) out.unsafe.push(label);
+              const label = `${at} "${n.textContent.trim().slice(0, 40)}" [${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.right)},${Math.round(r.bottom)}]`;
+              if (r.left < -1 || r.top < -1 || r.right > W + 1 || r.bottom > H + 1) (targeted ? out.eventClip : out.clip).push(label);
+              else if (r.left < safe.x0 || r.top < safe.y0 || r.right > safe.x1 || r.bottom > safe.y1) (targeted ? out.eventUnsafe : out.unsafe).push(label);
             }
           }
         }
-        const faces = document.fonts ? [...document.fonts].map(f => `${f.family}:${f.status}`) : [];
-        const families = [...new Set(textNodes.map(n => getComputedStyle(n.parentElement).fontFamily))];
-        return { ...out, faces, families };
+        return out;
       }, [comp.id, times, safe]);
       const uniq = a => [...new Set(a)];
       add('Layout', 'text inside the canvas (no clipping)', found.clip.length ? 'FAIL' : 'PASS', uniq(found.clip).slice(0, 6).join('; ') || `${n} sample times`, req);
@@ -147,9 +204,10 @@ const shaBefore = candidate ? await sha256File(render) : null;
       add('Layout', `text inside the ${profile.name} safe area (x ${safe.x0}-${safe.x1}, y ${safe.y0}-${safe.y1})`,
         found.unsafe.length ? (strict ? 'FAIL' : 'WARNING') : 'PASS',
         uniq(found.unsafe).slice(0, 6).join('; ') || `${n} sample times`, req);
-      const failed = found.faces.filter(f => f.endsWith(':error'));
-      add('Layout', 'fonts loaded', failed.length ? 'FAIL' : found.faces.length ? 'PASS' : 'WARNING',
-        failed.length ? `failed: ${failed.join(', ')}` : found.faces.length ? found.faces.join(', ') : `no web fonts declared; text uses system fonts (${found.families.join(' / ')}), which can differ between machines`);
+      // Around transitions text is often off canvas on purpose (entering, exiting), so findings there are for review.
+      const ev = [...uniq(found.eventClip), ...uniq(found.eventUnsafe)];
+      add('Layout', 'text at event boundaries and during transitions', ev.length ? 'WARNING' : targeted.length ? 'PASS' : 'NOT APPLICABLE',
+        ev.length ? `review (entries and exits may be intentional): ${ev.slice(0, 5).join('; ')}` : `${targeted.length} targeted sample times from ${pageEvents.length + planEventsFor().length} events`);
     } catch (e) {
       add('Layout', 'DOM layout pass ran in headless Chrome', 'FAIL', `checker error: ${e.message.split('\n')[0]}`, { ...req, kind: 'checker' });
     } finally { if (browser) await browser.close(); }
@@ -266,6 +324,34 @@ if (!render) {
   if (r.status === 0 && existsSync(sheet)) sheets.push(relative(dir, sheet));
   else add('Render', 'safe-area review sheet', 'FAIL', `checker error: ${tailText(r.stderr)}`, { kind: 'checker' });
 
+  // Event frames from the encoded MP4 (not the DOM): before, at, during and after the moments that change.
+  const samples = planSamples([...pageEvents, ...planEventsFor()], { fps, duration: comp.duration, cap: 24 });
+  if (!samples.length) add('Render', 'event frames from the encoded video', 'NOT APPLICABLE', 'no clip, tween, plan or authored events found');
+  else {
+    const evDir = join(outDir, 'events');
+    rmSync(evDir, { recursive: true, force: true });
+    mkdirSync(evDir, { recursive: true });
+    const select = `select='${samples.map(s => `eq(n\\,${s.frame})`).join('+')}'`;
+    const stamp = font ? [`drawtext=fontfile='${font.replace(/:/g, '\\:')}':text='%{pts\\:hms}':x=12:y=h-th-12:fontsize=40:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=8`] : [];
+    const one = run('ffmpeg', ['-y', '-v', 'error', '-i', render, '-an', '-vf', [select, ...stamp, 'scale=540:-2'].join(','), '-fps_mode', 'vfr', '-q:v', '3', join(evDir, '%03d.jpg')]);
+    const rows = Math.ceil(samples.length / 6);
+    const evSheet = join(outDir, 'event-sheet.jpg');
+    const two = run('ffmpeg', ['-y', '-v', 'error', '-i', render, '-an', '-vf', [select, ...stamp, 'scale=180:-2', `tile=6x${rows}:padding=4:margin=4:color=0x111111`].join(','), '-fps_mode', 'vfr', '-frames:v', '1', '-q:v', '3', evSheet]);
+    const got = existsSync(evDir) ? readdirSync(evDir).filter(f => /^\d{3}\.jpg$/.test(f)).sort() : [];
+    if (one.status !== 0 || two.status !== 0 || got.length !== samples.length) {
+      add('Render', 'event frames from the encoded video', 'FAIL', `checker error: ${got.length}/${samples.length} frames; ${tailText(one.stderr + two.stderr)}`, { kind: 'checker' });
+    } else {
+      const index = samples.map((s, i) => {
+        const name = `f${String(s.frame).padStart(5, '0')}-${s.t.toFixed(2)}s.jpg`;
+        renameSync(join(evDir, got[i]), join(evDir, name));
+        return { file: name, ...s };
+      });
+      writeJson(join(evDir, 'index.json'), index);
+      add('Render', 'event frames from the encoded video', 'PASS', `${samples.length} frames (${[...new Set(samples.map(s => s.phase))].join(', ')}) in ${relative(dir, evDir).replaceAll('\\', '/')}; reasons in index.json`, { kind: 'info' });
+      sheets.push(relative(dir, evSheet), relative(dir, evDir));
+    }
+  }
+
   if (candidate) {
     const shaAfter = await sha256File(render);
     add('Render', 'candidate unchanged while QA ran (SHA-256 before and after)', shaAfter === shaBefore ? 'PASS' : 'FAIL', shaAfter === shaBefore ? shaBefore.slice(0, 12) : `${shaBefore.slice(0, 12)} -> ${shaAfter.slice(0, 12)}`, req);
@@ -277,7 +363,7 @@ const hasCaptions = /caption/i.test(html);
 const human = { kind: 'human' };
 add('Visual', 'G1 proof readable / G4 one hero per frame', 'NOT TESTED', 'judge by eye on the contact sheet', human);
 add('Visual', 'safe areas, text clipping, font rendering in the encoded frames', render ? 'NOT TESTED' : 'NOT APPLICABLE', render ? 'look at safe-area-sheet.jpg (guides exist only on the sheet)' : 'no render', human);
-add('Visual', 'continuity, animation timing, ending', render ? 'NOT TESTED' : 'NOT APPLICABLE', render ? 'watch the MP4 at full size' : 'no render', human);
+add('Visual', 'continuity, animation timing, ending', render ? 'NOT TESTED' : 'NOT APPLICABLE', render ? 'watch the MP4 at full size; step through event-sheet.jpg and events/ for transitions' : 'no render', human);
 add('Visual', 'captions and A/V sync', expectsAudio || hasCaptions ? 'NOT TESTED' : 'NOT APPLICABLE', expectsAudio || hasCaptions ? 'watch and listen; check word timing' : 'no audio or captions', human);
 if (footage) {
   add('Speech', 'meaning preserved at every cut', 'NOT TESTED', flaggedCuts.length ? `read the transcript around ${flaggedCuts.length} flagged cut(s) and watch the review clips` : 'read the retained transcript against the source', human);

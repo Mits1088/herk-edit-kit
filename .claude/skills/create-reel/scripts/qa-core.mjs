@@ -241,6 +241,65 @@ export function planChecks(v, plan) {
   ];
 }
 
+// ---------- fonts: every face the reel declares must come from its local file; nothing may load from the network.
+// A font that fails during a HyperFrames render falls back silently, so these checks run before the render is trusted.
+export const NETWORK_FONT = /https?:\/\/[^"')\s]*(?:fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|fonts\.bunny\.net|\.woff2?\b|\.[ot]tf\b)/i;
+
+// texts: [{ file, text }] of the project's HTML and CSS. Returns the remote font references found.
+export function networkFontRefs(texts) {
+  const out = [];
+  for (const { file, text } of texts) for (const m of text.matchAll(new RegExp(NETWORK_FONT.source, 'gi'))) out.push(`${file}: ${m[0]}`);
+  return out;
+}
+
+const cleanFamily = f => String(f || '').split(',')[0].trim().replace(/^["']|["']$/g, '');
+
+// declared: reel.json "fonts"; browser: { faces: [{family, weight, style, status}], used: [{family, weight, style, text}],
+// loaded: [url], failed: [{url, error}], blocked: [url] }; files: { [file]: true when present and a WOFF2 }; refs: source scan.
+// covers(face, weight, style) decides whether a declared face covers a weight/style (fonts.mjs faceCovers).
+export function fontChecks({ declared = [], browser, files = {}, refs = [], styleName = 'none', covers }) {
+  const req = { required: true }, out = [];
+  out.push(['Fonts', 'no network font references in the source', refs.length ? 'FAIL' : 'PASS', refs.slice(0, 4).join('; ') || 'none', req]);
+  if (!browser) return out;
+  out.push(['Fonts', 'no network font requests (blocked during QA)', browser.blocked.length ? 'FAIL' : 'PASS', browser.blocked.slice(0, 4).join('; ') || 'none', req]);
+  if (!declared.length) {
+    const failed = browser.faces.filter(f => f.status === 'error');
+    out.push(['Fonts', 'fonts loaded', failed.length ? 'FAIL' : browser.faces.length ? 'PASS' : 'WARNING',
+      failed.length ? `failed: ${failed.map(f => f.family).join(', ')}` : browser.faces.length ? browser.faces.map(f => `${f.family}:${f.status}`).join(', ')
+        : `no style fonts installed (reel.json style "${styleName}"); text uses system fonts (${[...new Set(browser.used.map(u => cleanFamily(u.family)))].join(' / ')}), which differ between machines`]);
+    return out;
+  }
+  const missing = declared.filter(f => !files[f.file]).map(f => f.file);
+  out.push(['Fonts', `declared font files present in the project (style ${styleName})`, missing.length ? 'FAIL' : 'PASS',
+    missing.length ? `missing or not WOFF2: ${missing.join(', ')}` : `${declared.length} file(s)`, req]);
+  // Each declared face: a matching FontFace that loaded, and a successful request for its own local file.
+  const faceProblems = [];
+  for (const d of declared) {
+    const face = browser.faces.find(f => cleanFamily(f.family) === d.family && (f.style || 'normal') === d.style && String(f.weight) === String(d.weight));
+    const fromFile = browser.loaded.some(u => decodeURIComponent(u).replaceAll('\\', '/').endsWith('/' + d.file));
+    const failed = browser.failed.find(x => decodeURIComponent(x.url).replaceAll('\\', '/').endsWith('/' + d.file));
+    if (!face) faceProblems.push(`${d.family} ${d.weight} ${d.style}: no @font-face declared`);
+    else if (face.status !== 'loaded') faceProblems.push(`${d.family} ${d.weight} ${d.style}: ${face.status}${failed ? ` (${failed.error})` : ''}`);
+    else if (!fromFile) faceProblems.push(`${d.family} ${d.weight} ${d.style}: loaded, but not from ${d.file}`);
+  }
+  out.push(['Fonts', 'each declared face loaded from its local file', faceProblems.length ? 'FAIL' : 'PASS',
+    faceProblems.slice(0, 6).join('; ') || declared.map(d => `${d.family} ${d.weight} ${d.style}`).join(', '), req]);
+  // Text in a declared family must be covered by a real face; otherwise the browser synthesizes bold or italic.
+  const families = new Set(declared.map(d => d.family));
+  const uncovered = [], foreign = [];
+  for (const u of browser.used) {
+    const fam = cleanFamily(u.family), style = /italic|oblique/.test(u.style) ? 'italic' : 'normal', weight = Number(u.weight);
+    if (!families.has(fam)) foreign.push(`${fam} ("${u.text}")`);
+    else if (!declared.some(d => d.family === fam && covers(d, weight, style))) uncovered.push(`${fam} ${weight} ${style} ("${u.text}")`);
+  }
+  const uniq = a => [...new Set(a)];
+  out.push(['Fonts', 'text weights and styles covered by installed faces', uncovered.length ? 'FAIL' : 'PASS',
+    uncovered.length ? `no face for ${uniq(uncovered).slice(0, 5).join('; ')} (the browser would synthesize it)` : `${browser.used.length} text style(s)`, req]);
+  if (foreign.length) out.push(['Fonts', 'text uses only the style\'s families', 'WARNING',
+    `not in style ${styleName}, rendered with whatever the machine has: ${uniq(foreign).slice(0, 5).join('; ')}`]);
+  return out;
+}
+
 // ---------- records
 export function writeJson(file, value) { writeFileSync(file, JSON.stringify(value, null, 2) + '\n'); }
 export function readJson(file) { return JSON.parse(readFileSync(file, 'utf8')); }

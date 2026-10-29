@@ -21,6 +21,7 @@
     "validate:footage": "node .claude/skills/short-form-edit/scripts/validate-footage.mjs",
     "preflight:all": "node scripts/preflight-all.mjs",
     "new-reel": "node .claude/skills/create-reel/scripts/new-reel.mjs",
+    "reel-fonts": "node .claude/skills/create-reel/scripts/fonts.mjs",
     "render-reel": "node .claude/skills/create-reel/scripts/render-reel.mjs",
     "qa:reel": "node .claude/skills/create-reel/scripts/qa-reel.mjs",
     "approve-reel": "node .claude/skills/create-reel/scripts/approve-reel.mjs",

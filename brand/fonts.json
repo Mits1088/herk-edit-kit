@@ -1,0 +1,22 @@
+{
+  "display": "Inter",
+  "body": "Inter",
+  "mono": "JetBrains Mono",
+  "notes": "Font files are your own and stay out of Git in brand/assets/fonts/. Paths are relative to brand/.",
+  "files": [
+    {
+      "family": "Inter",
+      "file": "assets/fonts/InterVariable.woff2",
+      "weight": "100 900",
+      "style": "normal",
+      "license": "assets/fonts/OFL-Inter.txt"
+    },
+    {
+      "family": "JetBrains Mono",
+      "file": "assets/fonts/JetBrainsMono-Regular.woff2",
+      "weight": "400",
+      "style": "normal",
+      "license": "assets/fonts/OFL-JetBrainsMono.txt"
+    }
+  ]
+}

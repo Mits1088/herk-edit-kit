@@ -3,17 +3,20 @@
 //
 // Usage:  node .claude/skills/create-reel/scripts/new-reel.mjs <slug> [--profile organic|organic-60|ad|ad-disclaimer]
 //                                                                  [--duration S] [--mode faceless|footage|brand] [--title "..."]
+//                                                                  [--style brand|vox-explainer|kallaway|none]
 //
 // Runs `scripts/new-video.mjs <slug>` (Herk's generator: copies the starter and the pinned GSAP), then replaces the
 // landscape starter with a native vertical composition: meta.json, root id / data-composition-id / data-width /
 // data-height / data-duration / data-fps, the timeline registration key, CSS sizes and staging all come from one ID
-// and one profile. Writes reel.json (profile, mode, render log) and DESIGN.md (from brand/DESIGN.md when present).
+// and one profile. Writes reel.json (profile, mode, style, fonts, render log) and DESIGN.md (from brand/DESIGN.md when
+// present). --style installs that style's local fonts (fonts.mjs); the default is brand when its font files exist.
 // Never overwrites an existing project.
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { skillDir, kitRoot, getProfile, safeRect } from './lib.mjs';
+import { installFonts, resolveStyle, NO_STYLE, FONT_CSS } from './fonts.mjs';
 
 export const MODES = ['faceless', 'footage', 'brand'];
 
@@ -29,12 +32,15 @@ export function fillTemplate(template, values) {
 }
 
 // Convert a freshly generated project folder to native vertical. Pure file work, so tests can run it in a temp dir.
-export function convertToVertical(dir, { slug, profile, duration, mode, title, brandDesign }) {
+export function convertToVertical(dir, { slug, profile, duration, mode, title, brandDesign, style = NO_STYLE }) {
   const id = compositionId(slug);
+  const primary = style === NO_STYLE ? null : resolveStyle(style).primary;
   const template = readFileSync(join(skillDir, 'runtime/vertical-index.html'), 'utf8');
   const escape = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   writeFileSync(join(dir, 'index.html'), fillTemplate(template, {
     ID: id, TITLE: escape(title), WIDTH: profile.width, HEIGHT: profile.height, FPS: profile.fps, DURATION: duration,
+    FONTLINK: primary ? `<link rel="stylesheet" href="${FONT_CSS}">\n` : '',
+    FONTFAMILY: primary ? `"${primary}",Arial,sans-serif` : 'Arial,sans-serif',
   }));
   copyFileSync(join(skillDir, 'runtime/reel-eases.js'), join(dir, 'assets/reel-eases.js'));
 
@@ -49,6 +55,9 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
     `- Canvas: ${profile.width}x${profile.height} native vertical, ${profile.fps} fps, ${duration} s (profile \`${profile.name}\`).`,
     `- Safe area for text, logos and key action: x ${r.x0}-${r.x1}, y ${r.y0}-${r.y1}. Review guide only; never drawn into the video.`,
     `- Production mode: ${mode}.`,
+    style === NO_STYLE
+      ? '- Fonts: none installed; text uses system fonts, which differ between machines. Install a style with fonts.mjs.'
+      : `- Fonts: style \`${style}\`, local files in assets/fonts/ linked by ${FONT_CSS} (listed in reel.json "fonts"). Change with fonts.mjs.`,
     `- Composition ID: \`${id}\` (meta.json, root div, data-composition-id and window.__timelines all use it).`,
     '- Eases: `ReelEases.*` from assets/reel-eases.js (motionmaxxing measured curves) on the one paused GSAP timeline.',
     '',
@@ -59,13 +68,13 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
   writeFileSync(join(dir, 'DESIGN.md'), design);
 
   writeFileSync(join(dir, 'reel.json'), JSON.stringify({
-    slug, compositionId: id, profile: profile.name, mode, duration,
+    slug, compositionId: id, profile: profile.name, mode, style: NO_STYLE, fonts: [], duration,
     width: profile.width, height: profile.height, fps: profile.fps,
     // Stage 2: a person approves a verified candidate before it becomes renders/final.mp4. Footage always requires it.
     requireHumanApproval: true,
     renders: [],
   }, null, 2) + '\n');
-  return { id };
+  return { id, ...installFonts(dir, style) };
 }
 
 function parseArgs(argv) {
@@ -87,7 +96,7 @@ function main() {
   const opts = parseArgs(process.argv.slice(2));
   const slug = opts._[0];
   if (!slug || opts.help) {
-    console.log('Usage: node .claude/skills/create-reel/scripts/new-reel.mjs <slug> [--profile organic] [--duration 20] [--mode faceless|footage|brand] [--title "..."]');
+    console.log('Usage: node .claude/skills/create-reel/scripts/new-reel.mjs <slug> [--profile organic] [--duration 20] [--mode faceless|footage|brand] [--title "..."] [--style brand]');
     process.exit(slug || opts.help ? 0 : 1);
   }
   const profile = getProfile(opts.profile);
@@ -99,6 +108,16 @@ function main() {
   const mode = opts.mode || 'faceless';
   if (!MODES.includes(mode)) throw new Error(`--mode must be one of ${MODES.join(', ')}`);
   const title = opts.title || slug;
+  // Check the style's font files before anything is created: a missing font stops here, never a quiet fallback.
+  let style = opts.style;
+  if (style === undefined) {
+    let brand = null; try { brand = resolveStyle('brand'); } catch {}
+    style = brand && !brand.missing.length ? 'brand' : NO_STYLE;
+    if (style === NO_STYLE) console.warn('Note: brand fonts not found (brand/fonts.json, brand/assets/fonts/); scaffolding with system fonts. Pass --style to pick one.');
+  } else if (style !== NO_STYLE) {
+    const s = resolveStyle(style);
+    if (s.missing.length) throw new Error(`Style "${s.id}" is missing font files:\n  ${s.missing.join('\n  ')}`);
+  }
 
   // Herk's own generator validates the slug, refuses existing projects, and copies the pinned GSAP.
   const gen = spawnSync(process.execPath, [join(kitRoot, 'scripts/new-video.mjs'), slug], { stdio: 'inherit', windowsHide: true });
@@ -107,8 +126,9 @@ function main() {
   const dir = join(kitRoot, 'video-projects', slug);
   const brandPath = join(kitRoot, 'brand/DESIGN.md');
   const brandDesign = existsSync(brandPath) ? readFileSync(brandPath, 'utf8') : null;
-  const { id } = convertToVertical(dir, { slug, profile, duration, mode, title, brandDesign });
-  console.log(`Converted to native vertical: ${profile.width}x${profile.height} @ ${profile.fps} fps, ${duration} s, composition "${id}", profile ${profile.name}, mode ${mode}.`);
+  const { id, fonts, unlicensed } = convertToVertical(dir, { slug, profile, duration, mode, title, brandDesign, style });
+  console.log(`Converted to native vertical: ${profile.width}x${profile.height} @ ${profile.fps} fps, ${duration} s, composition "${id}", profile ${profile.name}, mode ${mode}, style ${style} (${fonts.length} local font file(s)).`);
+  for (const f of unlicensed) console.log(`Note: no licence file shipped for ${f}; add one next to the font in its source folder.`);
   console.log(`Next: cd video-projects/${slug} && npx hyperframes lint`);
 }
 

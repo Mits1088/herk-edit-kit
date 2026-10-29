@@ -1,0 +1,29 @@
+/* Generated from this style's manifest by create-reel/scripts/fonts.mjs. Fontsource 5.3.0 (Google Fonts sources), latin subset, SIL OFL 1.1 */
+@font-face {
+  font-family: "Fraunces";
+  src: url("fraunces-latin-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Fraunces";
+  src: url("fraunces-latin-italic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: "Archivo";
+  src: url("archivo-latin-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Caveat";
+  src: url("caveat-latin-normal.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: block;
+}

@@ -12,7 +12,11 @@
   `requestAnimationFrame` or CSS animations driving what is drawn; seed any noise from the frame time.
 - Timed elements: `class="clip"`, `data-start`, `data-duration`, `data-track-index`; same-track clips never
   overlap. Videos muted, audio as sibling `<audio>`.
-- Keep text, logos and key action inside the profile's safe area; ship fonts locally with `@font-face`.
+- Keep text, logos and key action inside the profile's safe area.
+- Fonts: link `assets/fonts/fonts.css` (written by `new-reel --style` or `npm run reel-fonts -- <project> --style <s>`)
+  and use only the families and weights it declares; reel.json `fonts` lists them. No network fonts: a font that
+  fails during a HyperFrames render falls back silently, so QA treats any remote font as a failure.
+- Optional: `window.__events = [{ t, end?, label }]` marks the moments that matter (hero beat, reveal) so QA samples them first.
 
 ## Two render levels
 
@@ -34,13 +38,15 @@
 | HyperFrames | lint * | `hyperframes lint` | technical |
 | Clock | identity, one GSAP, paused timeline, duration, deterministic seeking * | `seek-check.mjs` | technical |
 | motionmaxxing | G5 no page chrome | `scripts/lint.mjs` with `--width --height --duration` | creative |
-| Layout | text outside the canvas * or the safe area *; fonts loaded | DOM pass in headless Chrome | technical |
+| Layout | text outside the canvas * or the safe area * (12 even samples); text at event boundaries (review) | DOM pass in headless Chrome | technical |
+| Fonts | no network font references * or requests * (blocked in QA); declared files present *; each declared face loaded from its own local file *; every text weight and style covered by a real face * | source scan, DOM pass | technical |
 | Render | size, native vertical, fps, h264, yuv420p, duration, audio stream when expected, full decode * | `ffprobe`, `ffmpeg -xerror` | technical |
 | Audio | loudness, clipping, dead air (required in Mode B) | `ffmpeg` silencedetect, astats, ebur128 | technical |
 | Speech | Mode B records, speech integrity, EDL duration * | `qa-core.mjs` | technical |
 | Herk, Captions | Mode B `validate-plan` source mapping *, caption alignment * when captions exist, `validate-footage` * when there is B-roll | short-form-edit validators | technical |
 | Render | candidate unchanged while QA ran * | SHA-256 before and after | technical |
 | motionmaxxing | G0, G2 no empty frame, G3 end hold; motion level (a question) | `scripts/look.py` | creative |
+| Render | event frames from the encoded MP4: `event-sheet.jpg`, and `events/` with reasons in `index.json` | `samples.mjs`, `ffmpeg` | info |
 | Visual, Speech | G1, G4, continuity, timing, captions and A/V sync, meaning at cuts, natural joins, framing | a person: the Stage 2 checklist | human |
 
 Statuses: PASS, FAIL, WARNING, NOT TESTED, NOT APPLICABLE. Stage 1 is **BLOCKED** by any FAIL, and by any
@@ -81,8 +87,21 @@ QA reads from the project's `assets/`: `source-transcript.json` (verified word t
 `reel.json` `requireHumanApproval` (default `true`, set by `new-reel`) may be `false` for Modes A and C; the
 promotion is still an explicit command and is recorded as without human approval. Mode B always requires it.
 
+## Targeted samples
+
+Twelve evenly spaced samples miss short moves. `samples.mjs` adds frames around the moments that change, from
+`window.__events` and `assets/plan.json` events (first), plan scene cuts, caption groups and clip windows, then the
+timeline's tweens (nested timelines resolved to the root clock). A short span (up to 1 s) gets frames before, at,
+during, at its end and after; a point, or a long span's ends, gets before, at and settled. Frames are deduplicated by
+index and capped (36 in the DOM pass, 24 from the MP4); over the cap, lower-priority events are thinned evenly
+across the film. Text off the canvas at those frames is a WARNING to review, because entries and exits are often
+intentional; the 12 even samples keep the blocking clipping check. A sheet does not replace watching at full speed.
+
 ## Known limitations
 
+- Style-library fonts are latin-subset WOFF2 (Fontsource, SIL OFL). Characters outside that subset fall back to a
+  system font; put a fuller file in the style's `fonts/` and manifest if a reel needs them.
+- The tween sampler assumes nested timelines run at timeScale 1; repeats count toward a tween's span.
 - `seek-check` and the DOM pass seek the GSAP timeline in plain Chrome. HyperFrames' own frame controller is
   exercised by the render itself, not by these checks. Clip visibility is inferred from `data-start`/`data-duration`.
 - `lint.mjs` reads text in the DOM; text drawn in `<canvas>` or images is invisible to it. Without `--width` and

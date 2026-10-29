@@ -11,9 +11,10 @@
    every axis: smooth not choppy, dark not paper, glow not ink.
    ============================================================================ */
 
-/* Type. The HyperFrames compiler embeds supported fonts by name at render time;
-   this @import is what makes standalone / browser preview show the right faces. */
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500;1,600&family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Mono:wght@400;700&display=swap");
+/* Type. Local font files (SIL OFL) in fonts/, declared in fonts/fonts.css. No network fonts: a font that fails
+   to load during a render falls back silently. Open previews through a local server (npx serve), since Chrome
+   blocks fonts on file:// pages. In a project, link assets/fonts/fonts.css instead (create-reel fonts.mjs). */
+@import url("fonts/fonts.css");
 
 :root {
   /* --- palette (mirror style.json + DESIGN.md). AIS brand, dark. ----------- */

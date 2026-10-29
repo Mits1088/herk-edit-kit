@@ -14,6 +14,11 @@ For a takeover, use an opaque background. Copy the chosen card into the video's
 `compositions/`, localize its CSS, fonts, and GSAP dependency, fill its named
 `data-slot` values, and wire its timing using the HyperFrames skill. Copying a
 card without its relative dependencies does not produce a complete asset.
+Fonts are local: each style ships WOFF2 files, licences and `fonts/fonts.css` in its folder, listed under
+`fonts.files` in `style.json`. In a Reel, install them with `npm run reel-fonts -- <project> --style <id>`
+and replace the `@import url("fonts/fonts.css")` line of a copied `tokens.css` with a link to
+`assets/fonts/fonts.css`. Never add a network font import. Preview cards through a local server
+(`npx serve`); Chrome blocks fonts on `file://` pages.
 
 Use `style-templates/` for a whole-scene starting point. A media template may
 require the student's own `assets/source.mp4`; check its README before rendering.

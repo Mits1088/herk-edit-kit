@@ -14,7 +14,8 @@ It joins three tools that already know their jobs:
 1. Open a terminal in this folder (`D:\herk-edit-kit`) and run `claude`.
 2. Optional but recommended: describe your brand once. Copy `brand/DESIGN.template.md` to `brand/DESIGN.md`,
    fill it in (or ask Claude to fill it in with you), and put your logo and font files in `brand/assets/`.
-   Every new Reel starts from that file.
+   List the font files in `brand/fonts.json` (family, file, weight range, style, licence). Every new Reel starts
+   from that file and copies those fonts into its own `assets/fonts/`.
 
 ## Make a Reel
 
@@ -128,7 +129,7 @@ shading exists only on that image, never in the video.
 | Render fails or Chrome times out | Close other apps and add `--workers 1`. Run `npx hyperframes doctor`. |
 | "Project already exists" | Pick a new name, or ask Claude to revise the existing project. |
 | Text sits under Instagram's buttons | QA shows it under Layout; ask Claude to move it inside the safe area. |
-| Fonts look different on another computer | Put the font files in the project's `assets/` and load them with `@font-face`. |
+| Fonts look different on another computer | Install a style with local fonts: `npm run reel-fonts -- video-projects/<slug> --style <name>` (`--list` shows them). QA's Fonts rows name any face that failed. |
 | A check says NOT TESTED: Chrome not found | Set `CHROME_PATH` to your Chrome or Chromium executable. |
 | `npm run check` reports skill errors after editing skills | Run `npm run sync:skills`, then `npm run check` again. |
 
@@ -136,7 +137,8 @@ shading exists only on that image, never in the video.
 
 - Skill: `.claude/skills/create-reel/` (`SKILL.md`, `references/modes.md`, `references/qa.md`).
   Codex gets a mirror in `.agents/skills/` via `npm run sync:skills`.
-- Scripts: `new-reel.mjs` (wraps `npm run new-video`, converts to vertical), `render-reel.mjs` (versioned
+- Scripts: `new-reel.mjs` (wraps `npm run new-video`, converts to vertical, installs the style's fonts),
+  `fonts.mjs` (style font manifests, install and re-sync), `samples.mjs` (event-targeted QA frames), `render-reel.mjs` (versioned
   drafts and candidates; draft quick checks; full QA on candidates), `qa-reel.mjs` (all checks plus the report),
   `qa-core.mjs` (blocking rule, records, speech integrity, safe promotion), `approve-reel.mjs` (Stage 2),
   `seek-check.mjs` (one clock, deterministic seeking).

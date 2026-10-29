@@ -19,7 +19,38 @@
     "body": "Archivo",
     "mono": "Archivo",
     "hand": "Caveat",
-    "notes": "Fraunces (300 + 900 italic) is the statement voice; Archivo is metadata; Caveat is handwritten margin notes only."
+    "notes": "Fraunces (300 + 900 italic) is the statement voice; Archivo is metadata; Caveat is handwritten margin notes only.",
+    "files": [
+      {
+        "family": "Fraunces",
+        "file": "fonts/fraunces-latin-normal.woff2",
+        "weight": "100 900",
+        "style": "normal",
+        "license": "fonts/OFL-Fraunces.txt"
+      },
+      {
+        "family": "Fraunces",
+        "file": "fonts/fraunces-latin-italic.woff2",
+        "weight": "100 900",
+        "style": "italic",
+        "license": "fonts/OFL-Fraunces.txt"
+      },
+      {
+        "family": "Archivo",
+        "file": "fonts/archivo-latin-normal.woff2",
+        "weight": "100 900",
+        "style": "normal",
+        "license": "fonts/OFL-Archivo.txt"
+      },
+      {
+        "family": "Caveat",
+        "file": "fonts/caveat-latin-normal.woff2",
+        "weight": "400 700",
+        "style": "normal",
+        "license": "fonts/OFL-Caveat.txt"
+      }
+    ],
+    "source": "Fontsource 5.3.0 (Google Fonts sources), latin subset, SIL OFL 1.1"
   },
   "motion": "Choppy / stop-motion. Snap-in with back.out(2.2), shutter feel via steps(), slow camera push on tier1, rack focus for depth.",
   "transitions": "Marker / circle wipes on (scaleX, scale from 0). Quick stepped slides. Never slow symmetric fades.",

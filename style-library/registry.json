@@ -28,7 +28,38 @@
         "body": "Archivo",
         "mono": "Archivo",
         "hand": "Caveat",
-        "notes": "Fraunces (300 + 900 italic) is the statement voice; Archivo is metadata; Caveat is handwritten margin notes only."
+        "notes": "Fraunces (300 + 900 italic) is the statement voice; Archivo is metadata; Caveat is handwritten margin notes only.",
+        "files": [
+          {
+            "family": "Fraunces",
+            "file": "fonts/fraunces-latin-normal.woff2",
+            "weight": "100 900",
+            "style": "normal",
+            "license": "fonts/OFL-Fraunces.txt"
+          },
+          {
+            "family": "Fraunces",
+            "file": "fonts/fraunces-latin-italic.woff2",
+            "weight": "100 900",
+            "style": "italic",
+            "license": "fonts/OFL-Fraunces.txt"
+          },
+          {
+            "family": "Archivo",
+            "file": "fonts/archivo-latin-normal.woff2",
+            "weight": "100 900",
+            "style": "normal",
+            "license": "fonts/OFL-Archivo.txt"
+          },
+          {
+            "family": "Caveat",
+            "file": "fonts/caveat-latin-normal.woff2",
+            "weight": "400 700",
+            "style": "normal",
+            "license": "fonts/OFL-Caveat.txt"
+          }
+        ],
+        "source": "Fontsource 5.3.0 (Google Fonts sources), latin subset, SIL OFL 1.1"
       },
       "cardCount": 106,
       "cards": [
@@ -2399,7 +2430,52 @@
         "display": "Plus Jakarta Sans",
         "body": "Inter",
         "mono": "Space Mono",
-        "notes": "Plus Jakarta Sans (600-800) is the glow headline/number voice; Inter (400-600) is body/labels; Space Mono is data chips/timestamps/percentages. No serif."
+        "notes": "Plus Jakarta Sans (600-800) is the glow headline/number voice; Inter (400-600) is body/labels; Space Mono is data chips/timestamps/percentages. No serif.",
+        "files": [
+          {
+            "family": "Plus Jakarta Sans",
+            "file": "fonts/plus-jakarta-sans-latin-normal.woff2",
+            "weight": "200 800",
+            "style": "normal",
+            "license": "fonts/OFL-PlusJakartaSans.txt"
+          },
+          {
+            "family": "Plus Jakarta Sans",
+            "file": "fonts/plus-jakarta-sans-latin-italic.woff2",
+            "weight": "200 800",
+            "style": "italic",
+            "license": "fonts/OFL-PlusJakartaSans.txt"
+          },
+          {
+            "family": "Inter",
+            "file": "fonts/inter-latin-normal.woff2",
+            "weight": "100 900",
+            "style": "normal",
+            "license": "fonts/OFL-Inter.txt"
+          },
+          {
+            "family": "Inter",
+            "file": "fonts/inter-latin-italic.woff2",
+            "weight": "100 900",
+            "style": "italic",
+            "license": "fonts/OFL-Inter.txt"
+          },
+          {
+            "family": "Space Mono",
+            "file": "fonts/space-mono-latin-400-normal.woff2",
+            "weight": "400",
+            "style": "normal",
+            "license": "fonts/OFL-SpaceMono.txt"
+          },
+          {
+            "family": "Space Mono",
+            "file": "fonts/space-mono-latin-700-normal.woff2",
+            "weight": "700",
+            "style": "normal",
+            "license": "fonts/OFL-SpaceMono.txt"
+          }
+        ],
+        "source": "Fontsource 5.3.0 (Google Fonts sources), latin subset, SIL OFL 1.1"
       },
       "cardCount": 300,
       "cards": [

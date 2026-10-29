@@ -48,16 +48,19 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
    world, the hook in the first second, the ending. Storyboard with scene timing.
 4. Get the approvals the owner skill requires (brief, storyboard, preview, draft). Honor approvals already given.
    Paid API calls, uploads and transcription services need explicit permission first.
-5. Create the project: `npm run new-reel -- <slug> --profile <p> --duration <s> --mode <faceless|footage|brand> --title "<title>"`.
+5. Create the project: `npm run new-reel -- <slug> --profile <p> --duration <s> --mode <faceless|footage|brand> --title "<title>" [--style <s>]`.
    It runs Herk's generator and converts the project to native 1080x1920. Never use `hyperframes init` or
-   render a landscape design and crop it.
+   render a landscape design and crop it. `--style` (`brand` by default when its fonts exist; `npm run reel-fonts -- --list`)
+   copies that style's font files into `assets/fonts/`. To change style later: `npm run reel-fonts -- <project> --style <s>`.
+   Never load fonts from the network.
 6. Author or edit `index.html` and `compositions/`. Rules: [qa.md](references/qa.md#composition-contract).
 7. Validate source: `npm run qa:reel -- video-projects/<slug> --source-only`. Fix FAILs. Preview in Studio
    (`npx hyperframes preview` from the project folder) when the owner skill's preview gate applies.
 8. Draft: `npm run render-reel -- video-projects/<slug> --draft` (quick checks only: decode, size, fps,
    duration, audio stream). Run `npm run qa:reel -- video-projects/<slug> --render renders/<draft>.mp4` when you
    need the review sheets for a draft.
-9. Look at the real frames: Read `look/sheet.jpg` and `safe-area-sheet.jpg` from the QA folder, plus any
+9. Look at the real frames: Read `look/sheet.jpg`, `safe-area-sheet.jpg` and `event-sheet.jpg` (frames before, at,
+   during and after each transition; full size in `events/`) from the QA folder, plus any
    `mid.jpg` / `strips.jpg`. Judge G1 (proof readable) and G4 (one hero per frame) by eye.
 10. Make only justified corrections; re-render a new draft version. motionmaxxing gates (G0-G5) are creative
     WARNINGs: review them, do not change the cut or the motion just to satisfy one; record why it is intended.
