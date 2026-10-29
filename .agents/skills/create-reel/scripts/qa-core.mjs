@@ -37,11 +37,21 @@ export function makeCollector() {
   return { results, add };
 }
 
-export function evaluate(results) {
+// scope says what was checked. Only full QA of a rendered video can be VERIFIED; a source-only run that passes is
+// SOURCE_VALIDATED and a draft's quick checks DRAFT_CHECKED, so neither reads as "the video is verified".
+// passed: nothing blocks at this scope (exit codes). technicallyVerified: passed full QA of a render (approval).
+const PASS_VERDICT = { render: 'VERIFIED', source: 'SOURCE_VALIDATED', draft: 'DRAFT_CHECKED' };
+export function evaluate(results, { scope = 'render' } = {}) {
+  if (!PASS_VERDICT[scope]) throw new Error(`Unknown QA scope ${scope}`);
   const blocking = results.filter(r => r.status === 'FAIL' || (r.required && !OK_REQUIRED.has(r.status)));
   const counts = results.reduce((c, r) => ((c[r.status] = (c[r.status] || 0) + 1), c), {});
-  return { technicallyVerified: blocking.length === 0, verdict: blocking.length ? 'BLOCKED' : 'VERIFIED', blocking, counts };
+  const passed = blocking.length === 0;
+  return { scope, passed, technicallyVerified: passed && scope === 'render', verdict: passed ? PASS_VERDICT[scope] : 'BLOCKED', blocking, counts };
 }
+
+// reel.json "direction": the compact creative direction, required before a final render.
+export const DIRECTION_FIELDS = ['hook', 'coreClaim', 'heroBeat', 'motif', 'style'];
+export const missingDirection = reel => DIRECTION_FIELDS.filter(k => !String(reel?.direction?.[k] ?? '').trim());
 
 export function sha256File(file) {
   return new Promise((res, rej) => {
@@ -295,8 +305,15 @@ export function fontChecks({ declared = [], browser, files = {}, refs = [], styl
   const uniq = a => [...new Set(a)];
   out.push(['Fonts', 'text weights and styles covered by installed faces', uncovered.length ? 'FAIL' : 'PASS',
     uncovered.length ? `no face for ${uniq(uncovered).slice(0, 5).join('; ')} (the browser would synthesize it)` : `${browser.used.length} text style(s)`, req]);
-  if (foreign.length) out.push(['Fonts', 'text uses only the style\'s families', 'WARNING',
-    `not in style ${styleName}, rendered with whatever the machine has: ${uniq(foreign).slice(0, 5).join('; ')}`]);
+  // A family outside the style with no loaded local face renders in whatever the machine has: usually a stale name
+  // left from an earlier style, or a system font. That fails. One the project loads itself is only a warning.
+  const backed = new Set(browser.faces.filter(f => f.status === 'loaded').map(f => cleanFamily(f.family)));
+  const unbacked = foreign.filter(x => !backed.has(x.slice(0, x.indexOf(' ("'))));
+  const extra = foreign.filter(x => !unbacked.includes(x));
+  out.push(['Fonts', 'every text family has a local face (no machine fallback)', unbacked.length ? 'FAIL' : 'PASS',
+    unbacked.length ? `not in style ${styleName} and not loaded from the project: ${uniq(unbacked).slice(0, 5).join('; ')}; rename to the style's families (reel-fonts renames by role)` : 'all text families load from the project', req]);
+  if (extra.length) out.push(['Fonts', 'text uses only the style\'s families', 'WARNING',
+    `loaded from the project but not in style ${styleName}: ${uniq(extra).slice(0, 5).join('; ')}`]);
   return out;
 }
 
@@ -313,6 +330,7 @@ export function reportMarkdown({ title, render, profileLine, record }) {
     ...(record.sha256 ? [`- SHA-256: \`${record.sha256}\``] : []),
     profileLine,
     `- Stage 1, automated technical verification: **${record.verdict}** (${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')})`,
+    ...(record.scope === 'source' ? ['- Source only: the composition was checked; no rendered video was. Render a candidate for Stage 1 verification.'] : []),
     ...(record.blocking.length ? ['- Blocking: ' + record.blocking.map(r => `[${r.area}] ${r.check}: ${r.status}`).join('; ')] : []),
     ...(record.candidate ? [`- Stage 2, human creative approval: ${approvalLine(record)}`] : []),
     '- Automated checks are not proof of visual or audio quality. Every NOT TESTED line needs a person.',

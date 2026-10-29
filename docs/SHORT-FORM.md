@@ -1,7 +1,9 @@
 # Reels and YouTube Shorts
 
-Use `short-form-edit` for a raw talking-head recording, reel, YouTube Short, or
-short advertisement. It defaults to 1080x1920. Request a separately composed
+New reels, Shorts, and short ads start in `create-reel` (Reel Studio), which
+hands a raw talking-head recording to `short-form-edit` as its Mode B owner.
+This page covers that editing stage; use `short-form-edit` directly for
+cutting-only work. It defaults to 1080x1920. Request a separately composed
 1920x1080 version when needed; a center crop is not a second composition.
 
 ## Start

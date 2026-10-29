@@ -38,6 +38,17 @@ Thumbs.db
 !examples/short-form/assets/
 !examples/short-form/assets/*.json
 
+# The default brand style's OFL fonts ship so every checkout renders the same type.
+# Other brand assets (your own logos, licensed fonts) stay local.
+!brand/assets/
+brand/assets/*
+!brand/assets/fonts/
+brand/assets/fonts/*
+!brand/assets/fonts/InterVariable.woff2
+!brand/assets/fonts/OFL-Inter.txt
+!brand/assets/fonts/JetBrainsMono-Regular.woff2
+!brand/assets/fonts/OFL-JetBrainsMono.txt
+
 # Three finished videos explicitly supplied for the public showcase.
 !examples/showcase/curiosity-reel-2.mp4
 !examples/showcase/curiosity-reel-1.mp4

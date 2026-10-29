@@ -8,10 +8,11 @@
 // Each entry is { family, file, weight ("400" or a variable range "100 900"), style, license }, paths relative to the
 // manifest's folder. Installing copies every file into <project>/assets/fonts/, writes assets/fonts/fonts.css (the one
 // stylesheet the composition links) and records style + fonts in reel.json, which QA checks against. A missing file is
-// an error, never a quiet fallback to system fonts. Re-running with another --style swaps the fonts; the composition's
-// font-family names are the author's to update.
+// an error, never a quiet fallback to system fonts. Re-running with another --style swaps the fonts and renames the
+// previous style's families in the composition's font-family values by manifest role (display, body, mono, hand);
+// anything it cannot map is reported, and QA fails text left in a family with no local face.
 import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
-import { join, basename, dirname, resolve } from 'node:path';
+import { join, basename, dirname, resolve, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { kitRoot } from './lib.mjs';
 
@@ -65,7 +66,63 @@ export function styleFontCss(style) {
     `Generated from this style's manifest by create-reel/scripts/fonts.mjs. ${style.manifest.source || ''}`.trim());
 }
 
+// Manifest roles, in priority order, used to carry a composition's families from one style to the next.
+export const ROLES = ['display', 'body', 'mono', 'hand'];
+const familiesOf = m => new Set([...ROLES.map(r => m[r]), ...(m.files || []).map(f => f.family)].filter(Boolean));
+
+// Old family -> new family by role. A family the new style also ships is kept. A family with several roles maps by
+// its first role and the others are reported, because those uses may want a different face.
+export function familyMap(from, to) {
+  const map = new Map(), notes = [], target = familiesOf(to);
+  const roles = new Map();
+  for (const r of ROLES) if (from[r]) roles.set(from[r], [...(roles.get(from[r]) || []), r]);
+  for (const [family, rs] of roles) {
+    if (target.has(family)) { notes.push(`${family} kept: the new style ships it too`); continue; }
+    const next = to[rs[0]] || to.body || to.display;
+    if (!next) { notes.push(`${family} (${rs.join(', ')}) left as is: the new style has no ${rs[0]} family`); continue; }
+    map.set(family, next);
+    if (rs.length > 1) notes.push(`${family} was ${rs.join(' and ')}; renamed to ${next} (${rs[0]}). Check its ${rs.slice(1).join(', ')} uses`);
+  }
+  return { map, notes };
+}
+
+// Rename whole family names inside CSS font-family values (stylesheets and style attributes). Fallbacks, generic
+// families and every other declaration are left as written. The original quote is kept; a bare name that needs
+// quoting gets single quotes, which are safe inside a double-quoted style attribute.
+export function renameFamilies(text, map) {
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let count = 0;
+  const out = text.replace(/(font-family\s*:\s*)([^;{}<>]*)/gi, (m, head, value) => {
+    for (const [from, to] of map) {
+      const re = new RegExp(`(^|,)(\\s*)(?:(["'])${esc(from)}\\3|${esc(from)}(?=\\s*(?:,|!|"|$)))`, 'g');
+      value = value.replace(re, (x, sep, ws, q) => {
+        count++;
+        const quote = q || (/^[A-Za-z_-][\w-]*$/.test(to) ? '' : "'");
+        return `${sep}${ws}${quote}${to}${quote}`;
+      });
+    }
+    return head + value;
+  });
+  return { text: out, count };
+}
+
+// The project's own HTML and CSS, not the generated fonts.css, renders or dependencies.
+function compositionFiles(dir) {
+  const out = [];
+  const walk = (d, depth) => {
+    if (depth > 4 || !existsSync(d)) return;
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) { if (!['node_modules', 'renders', '.git', 'fonts'].includes(e.name)) walk(p, depth + 1); }
+      else if (/\.(html|css)$/i.test(e.name)) out.push(p);
+    }
+  };
+  walk(dir, 0);
+  return out;
+}
+
 // Install a style's fonts into a project. Returns the reel.json "fonts" entries. Throws when any font file is missing.
+// When the project already had a style, its families in the composition are renamed to the new style's by role.
 export function installFonts(dir, name, root = kitRoot) {
   const fontDir = join(dir, 'assets/fonts');
   const reelPath = join(dir, 'reel.json');
@@ -74,6 +131,10 @@ export function installFonts(dir, name, root = kitRoot) {
   if (name !== NO_STYLE) {
     style = resolveStyle(name, root);
     if (style.missing.length) throw new Error(`Style "${style.id}" is missing font files:\n  ${style.missing.join('\n  ')}\nAdd them or pick another --style; nothing was changed.`);
+  }
+  let previous = null;
+  if (reel?.style && reel.style !== NO_STYLE && reel.style !== style?.id) {
+    try { previous = resolveStyle(reel.style, root); } catch {}
   }
   // Remove the fonts a previous install put here (only files it recorded), then copy the new set.
   for (const f of reel?.fonts || []) {
@@ -98,7 +159,19 @@ export function installFonts(dir, name, root = kitRoot) {
     Object.assign(reel, { style: style ? style.id : NO_STYLE, fonts });
     writeFileSync(reelPath, JSON.stringify(reel, null, 2) + '\n');
   }
-  return { style: style ? style.id : NO_STYLE, primary: style?.primary || null, fonts, unlicensed: style?.unlicensed || [] };
+  const renamed = [], notes = [];
+  if (previous && style) {
+    const m = familyMap(previous.manifest, style.manifest);
+    notes.push(...m.notes);
+    if (m.map.size) for (const p of compositionFiles(dir)) {
+      const r = renameFamilies(readFileSync(p, 'utf8'), m.map);
+      if (r.count) { writeFileSync(p, r.text); renamed.push({ file: relative(dir, p).replaceAll('\\', '/'), count: r.count }); }
+    }
+    for (const [a, b] of m.map) notes.push(`${a} -> ${b}`);
+  } else if (reel?.style && reel.style !== NO_STYLE && !style) {
+    notes.push(`The composition still names style "${reel.style}" families; they now fall back to system fonts.`);
+  }
+  return { style: style ? style.id : NO_STYLE, primary: style?.primary || null, fonts, unlicensed: style?.unlicensed || [], renamed, notes };
 }
 
 // Does a face cover a weight and style? weight is "400" or a variable range "100 900".
@@ -128,8 +201,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     const r = installFonts(dir, args[si + 1]);
     console.log(r.style === NO_STYLE ? 'Style fonts removed; the composition uses system fonts.' : `Installed ${r.fonts.length} font file(s) for style "${r.style}" into assets/fonts/.`);
     for (const f of r.unlicensed) console.log(`Note: no licence file shipped for ${f}; add one next to the font in its source folder.`);
+    for (const n of r.notes) console.log(`Families: ${n}`);
+    for (const f of r.renamed) console.log(`Renamed ${f.count} font-family name(s) in ${f.file}`);
     const html = existsSync(join(dir, 'index.html')) ? readFileSync(join(dir, 'index.html'), 'utf8') : '';
     if (!html.includes(FONT_CSS)) console.log(`index.html does not link ${FONT_CSS}; add <link rel="stylesheet" href="${FONT_CSS}">.`);
-    if (r.primary) console.log(`Update font-family names in the composition to this style's families (primary: "${r.primary}").`);
+    if (r.primary) console.log(`Check the remaining font-family names (and any set from JavaScript) against this style (primary: "${r.primary}"); qa:reel fails text in a family with no local face.`);
   } catch (e) { console.error(e.message); process.exit(1); }
 }

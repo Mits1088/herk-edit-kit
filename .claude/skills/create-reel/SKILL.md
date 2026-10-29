@@ -1,8 +1,7 @@
 ---
 name: create-reel
-description: Create, edit, render and quality-check premium Instagram Reels using Herk Edit Kit, motionmaxxing and HyperFrames.
+description: Create, edit, render and quality-check premium Instagram Reels using Herk Edit Kit, motionmaxxing and HyperFrames. The default for any Reel, YouTube Short, TikTok or short vertical ad, from footage or from scratch; it routes talking-head footage to short-form-edit (Mode B) itself. Use short-form-edit directly only for cutting-only work outside a Reel Studio project.
 argument-hint: "[Describe your Reel]"
-disable-model-invocation: true
 ---
 
 # Reel Studio: /create-reel
@@ -11,8 +10,9 @@ Creative brief from the user:
 
 $ARGUMENTS
 
-If the brief above is empty, ask for one in a single message (what the Reel is about, who it is for, any footage
-or assets and where they are, length, organic or ad) and stop until it arrives.
+If the brief above is empty, use the user's request from the conversation as the brief. If that is missing too,
+ask for one in a single message (what the Reel is about, who it is for, any footage or assets and where they are,
+length, organic or ad) and stop until it arrives.
 
 This skill is an orchestration layer. The craft lives in the skills it routes to; load them, do not restate them.
 Read `docs/REEL-STUDIO.md` once for the system overview.
@@ -45,16 +45,23 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
 2. Identify audience, objective and profile: `organic` (default), `organic-60`, `ad`, `ad-disclaimer`
    (`.claude/skills/create-reel/profiles.json`).
 3. Develop the direction with motionmaxxing's judgment (`references/judgment.md` in that skill): the idea, the
-   world, the hook in the first second, the ending. Storyboard with scene timing.
+   world, the hook in the first second, the ending. Storyboard with scene timing. Openings: one rough animated
+   opening plus two concise written alternatives (static preview frames of the alternatives when the visual
+   direction is uncertain); Mode C may develop three animated openings. Details: [modes.md](references/modes.md).
+   Record the chosen direction in `reel.json` `"direction"` (no new Markdown file): `hook`, `coreClaim`,
+   `heroBeat`, `motif`, `style`. A final render refuses to start until all five are filled.
 4. Get the approvals the owner skill requires (brief, storyboard, preview, draft). Honor approvals already given.
    Paid API calls, uploads and transcription services need explicit permission first.
 5. Create the project: `npm run new-reel -- <slug> --profile <p> --duration <s> --mode <faceless|footage|brand> --title "<title>" [--style <s>]`.
    It runs Herk's generator and converts the project to native 1080x1920. Never use `hyperframes init` or
-   render a landscape design and crop it. `--style` (`brand` by default when its fonts exist; `npm run reel-fonts -- --list`)
-   copies that style's font files into `assets/fonts/`. To change style later: `npm run reel-fonts -- <project> --style <s>`.
-   Never load fonts from the network.
+   render a landscape design and crop it. `--style` (default `brand`, whose OFL fonts ship with the kit;
+   `npm run reel-fonts -- --list`) copies that style's font files into `assets/fonts/`; a missing font file stops
+   scaffolding, and `--style none` (system fonts) must be chosen explicitly. To change style later:
+   `npm run reel-fonts -- <project> --style <s>`; it renames the previous style's families to the new style's by
+   role (display, body, mono) and lists anything it left alone. Never load fonts from the network.
 6. Author or edit `index.html` and `compositions/`. Rules: [qa.md](references/qa.md#composition-contract).
-7. Validate source: `npm run qa:reel -- video-projects/<slug> --source-only`. Fix FAILs. Preview in Studio
+7. Validate source: `npm run qa:reel -- video-projects/<slug> --source-only`. Fix FAILs. Its best verdict is
+   `SOURCE_VALIDATED`: the source passed, no video was checked. Preview in Studio
    (`npx hyperframes preview` from the project folder) when the owner skill's preview gate applies.
 8. Draft: `npm run render-reel -- video-projects/<slug> --draft` (quick checks only: decode, size, fps,
    duration, audio stream). Run `npm run qa:reel -- video-projects/<slug> --render renders/<draft>.mp4` when you

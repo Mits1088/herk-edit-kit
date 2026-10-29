@@ -6,6 +6,7 @@
 // --draft  renders/<slug>-draft-vNNN.mp4 at draft quality, then quick checks only (ffprobe dimensions, fps,
 //          duration, audio stream; full decode). Results in renders/<file>.qa/quick.json. No full QA.
 // --final  renders/<slug>-candidate-vNNN.mp4 at final quality, then runs full QA (qa-reel.mjs) on that exact file.
+//          Refused before rendering while any reel.json "direction" field (hook, coreClaim, heroBeat, motif, style) is empty.
 //          A candidate becomes renders/final.mp4 only through approve-reel.mjs after a person approves it.
 // Exit codes: 0 rendered and checks passed, 1 render or checks failed, 2 usage. A failed render or failed QA never
 // touches renders/final.mp4 or any earlier render. Quality comes from the project's profile. Renders with --strict
@@ -16,7 +17,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, resolve, basename } from 'node:path';
 import { getProfile, hyperframes, readComposition, run, skillDir } from './lib.mjs';
-import { probeChecks, decodeCheck, evaluate, makeCollector, sha256File, qaDirFor, writeJson } from './qa-core.mjs';
+import { probeChecks, decodeCheck, evaluate, makeCollector, sha256File, qaDirFor, writeJson, missingDirection } from './qa-core.mjs';
 
 const args = process.argv.slice(2);
 const kind = args.includes('--final') ? 'final' : args.includes('--draft') ? 'draft' : null;
@@ -32,6 +33,12 @@ const profile = getProfile(reel.profile);
 const wi = args.indexOf('--workers');
 const workers = wi >= 0 ? args[wi + 1] : 'auto';
 const label = kind === 'final' ? 'candidate' : 'draft';
+// A candidate is a deliberate piece of work: its creative direction must be on record before it is rendered.
+const undecided = kind === 'final' ? missingDirection(reel) : [];
+if (undecided.length) {
+  console.error(`Final render refused: reel.json "direction" is missing ${undecided.join(', ')}. Record the hook, core claim, hero beat, motif and style first (drafts do not need them).`);
+  process.exit(1);
+}
 const hooks = { renderer: process.env.REEL_STUDIO_RENDERER || null, qa: process.env.REEL_STUDIO_QA_SCRIPT || null };
 for (const [k, v] of Object.entries(hooks)) if (v) console.warn(`TEST HOOK ACTIVE: ${k} = ${v}`);
 
@@ -66,14 +73,14 @@ if (kind === 'draft') {
   const expectsAudio = reel.mode === 'footage' || /<audio\b/i.test(html);
   for (const row of probeChecks(probe, { width: comp.width, height: comp.height, fps: profile.fps, duration: comp.duration, audio: expectsAudio })) add(...row);
   add(...decodeCheck(run('ffmpeg', ['-v', 'error', '-xerror', '-i', out, '-f', 'null', '-'])));
-  const ev = evaluate(results);
+  const ev = evaluate(results, { scope: 'draft' });
   const qaDir = qaDirFor(dir, out);
   mkdirSync(qaDir, { recursive: true });
   writeJson(join(qaDir, 'quick.json'), { render: `renders/${file}`, level: 'draft quick checks', sha256, checkedAt: new Date().toISOString(), ...ev, results });
   for (const x of results) console.log(`${x.status.padEnd(14)} [${x.area}] ${x.check}: ${x.detail}`);
-  console.log(`Draft quick checks ${ev.verdict === 'VERIFIED' ? 'PASS' : 'FAIL'} (not full QA; drafts are never eligible for approval).`);
+  console.log(`Draft quick checks ${ev.passed ? 'PASS' : 'FAIL'}: ${ev.verdict} (not full QA; drafts are never eligible for approval).`);
   console.log(`Full QA on this draft if you want it: npm run qa:reel -- ${args[0]} --render renders/${file}`);
-  process.exit(ev.technicallyVerified ? 0 : 1);
+  process.exit(ev.passed ? 0 : 1);
 }
 
 // Final: full QA on this exact candidate.

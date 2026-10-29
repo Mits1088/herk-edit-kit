@@ -23,8 +23,8 @@ brand's own objects, and show me the storyboard and beat sheet before building.
 
 ## A reel with a clear payoff
 
-> Use short-form-edit to create a 9:16 reel from [local recording]. Explore three
-> opening directions, then build the strongest truthful promise and payoff. Keep
+> /create-reel Make a 9:16 reel from [local recording]. Build one rough opening and
+> write two alternatives, then build the strongest truthful promise and payoff. Keep
 > captions word-exact and choose moving footage for specific story beats. Show me
 > the rough edit before polishing. Save the project and review evidence together.
 

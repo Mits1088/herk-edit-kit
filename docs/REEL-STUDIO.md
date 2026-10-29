@@ -15,11 +15,13 @@ It joins three tools that already know their jobs:
 2. Optional but recommended: describe your brand once. Copy `brand/DESIGN.template.md` to `brand/DESIGN.md`,
    fill it in (or ask Claude to fill it in with you), and put your logo and font files in `brand/assets/`.
    List the font files in `brand/fonts.json` (family, file, weight range, style, licence). Every new Reel starts
-   from that file and copies those fonts into its own `assets/fonts/`.
+   from that file and copies those fonts into its own `assets/fonts/`. The kit ships Inter and JetBrains Mono
+   (SIL OFL) as the default brand fonts, so a fresh checkout renders the same type on every machine. If a listed
+   file is missing, `new-reel` stops; pass `--style none` to choose system fonts deliberately.
 
 ## Make a Reel
 
-Type `/create-reel` followed by your brief:
+Type `/create-reel` followed by your brief, or just ask Claude for a Reel in plain words; it loads the same skill:
 
 ```
 /create-reel A 20 second Reel explaining why our app saves freelancers 5 hours a week. Audience: freelance designers. End with "Try it free". Organic post.
@@ -129,7 +131,7 @@ shading exists only on that image, never in the video.
 | Render fails or Chrome times out | Close other apps and add `--workers 1`. Run `npx hyperframes doctor`. |
 | "Project already exists" | Pick a new name, or ask Claude to revise the existing project. |
 | Text sits under Instagram's buttons | QA shows it under Layout; ask Claude to move it inside the safe area. |
-| Fonts look different on another computer | Install a style with local fonts: `npm run reel-fonts -- video-projects/<slug> --style <name>` (`--list` shows them). QA's Fonts rows name any face that failed. |
+| Fonts look different on another computer | Install a style with local fonts: `npm run reel-fonts -- video-projects/<slug> --style <name>` (`--list` shows them). It renames the old style's families by role and lists what it left alone. QA's Fonts rows name any face that failed and any text in a family with no local face. |
 | A check says NOT TESTED: Chrome not found | Set `CHROME_PATH` to your Chrome or Chromium executable. |
 | `npm run check` reports skill errors after editing skills | Run `npm run sync:skills`, then `npm run check` again. |
 

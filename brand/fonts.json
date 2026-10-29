@@ -2,7 +2,7 @@
   "display": "Inter",
   "body": "Inter",
   "mono": "JetBrains Mono",
-  "notes": "Font files are your own and stay out of Git in brand/assets/fonts/. Paths are relative to brand/.",
+  "notes": "Default brand style. Inter and JetBrains Mono (SIL OFL 1.1) ship in brand/assets/fonts/ so every checkout renders the same type; replace them with your own and list them here. Only the four default files are tracked by Git. Paths are relative to brand/.",
   "files": [
     {
       "family": "Inter",

@@ -15,17 +15,22 @@ const core = await import('../.claude/skills/create-reel/scripts/qa-core.mjs');
 const { approveCandidate } = await import('../.claude/skills/create-reel/scripts/approve-reel.mjs');
 const { validatePlan } = await import('../.claude/skills/short-form-edit/scripts/validate-plan.mjs');
 
+// Render and audio tests synthesize media with ffmpeg; say so plainly instead of failing on a null exit status.
+const HAS_FFMPEG = spawnSync('ffmpeg', ['-version'], { windowsHide: true }).status === 0;
+const requireFfmpeg = () => assert.ok(HAS_FFMPEG, 'ffmpeg and ffprobe must be on PATH for this test');
+
 const SLUG = 'pipe-test';
-function project({ mode = 'faceless', requireHumanApproval } = {}) {
+const DIRECTION = { hook: 'Most to-do lists fail on day 3', coreClaim: 'Plans fail at the handoff', heroBeat: 'the list folds into one card', motif: 'a folding card', style: 'kallaway' };
+function project({ mode = 'faceless', requireHumanApproval, direction = DIRECTION } = {}) {
   const dir = join(mkdtempSync(join(tmpdir(), 'reel-approval-')), SLUG);
   cpSync(join(root, 'examples/starter'), dir, { recursive: true });
   mkdirSync(join(dir, 'assets')); mkdirSync(join(dir, 'renders'));
   writeFileSync(join(dir, 'assets/gsap.min.js'), '');
   convertToVertical(dir, { slug: SLUG, profile: getProfile('organic'), duration: 2, mode, title: 'Pipeline test' });
-  if (requireHumanApproval !== undefined) {
-    const reel = JSON.parse(readFileSync(join(dir, 'reel.json'), 'utf8'));
-    writeFileSync(join(dir, 'reel.json'), JSON.stringify({ ...reel, requireHumanApproval }, null, 2));
-  }
+  const reel = JSON.parse(readFileSync(join(dir, 'reel.json'), 'utf8'));
+  if (direction) reel.direction = direction;
+  if (requireHumanApproval !== undefined) reel.requireHumanApproval = requireHumanApproval;
+  writeFileSync(join(dir, 'reel.json'), JSON.stringify(reel, null, 2));
   return dir;
 }
 
@@ -62,12 +67,14 @@ async function candidateWithRecord(dir, version, { results } = {}) {
 const approve = (dir, c, extra = {}) => approveCandidate(dir, { candidate: c.rel, sha: c.record.sha256.slice(0, 12), approvedBy: 'Reviewer', ...extra });
 
 test('a successful draft render runs only the lightweight checks', () => {
+  requireFfmpeg();
   const dir = project();
   const r = render(dir, 'draft');
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const qaDir = join(dir, `renders/${SLUG}-draft-v001.qa`);
   const quick = JSON.parse(readFileSync(join(qaDir, 'quick.json'), 'utf8'));
-  assert.equal(quick.verdict, 'VERIFIED');
+  assert.equal(quick.verdict, 'DRAFT_CHECKED', 'a draft is never reported as VERIFIED');
+  assert.equal(quick.technicallyVerified, false);
   const checks = quick.results.map(x => x.check);
   assert.ok(checks.includes('every frame decodes (ffmpeg full decode)'));
   assert.ok(checks.some(c => c.startsWith('dimensions 1080x1920')) && checks.some(c => c.startsWith('duration 2 s')));
@@ -76,6 +83,7 @@ test('a successful draft render runs only the lightweight checks', () => {
 });
 
 test('a draft with the wrong shape fails its quick checks', () => {
+  requireFfmpeg();
   const dir = project();
   const r = render(dir, 'draft', { FAKE_RENDER: 'landscape' });
   assert.equal(r.status, 1);
@@ -85,6 +93,7 @@ test('a draft with the wrong shape fails its quick checks', () => {
 });
 
 test('a final render produces a versioned candidate and runs full QA on that exact file', () => {
+  requireFfmpeg();
   const dir = project();
   const r = render(dir, 'final');
   assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -98,7 +107,18 @@ test('a final render produces a versioned candidate and runs full QA on that exa
   assert.ok(!existsSync(core.finalPath(dir)), 'nothing promoted automatically');
 });
 
+test('a final render is refused before rendering until the creative direction is recorded', () => {
+  const dir = project({ direction: null });
+  assert.deepEqual(Object.keys(core.readJson(join(dir, 'reel.json')).direction), core.DIRECTION_FIELDS, 'scaffold writes an empty direction');
+  const r = render(dir, 'final');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /"direction" is missing hook, coreClaim, heroBeat, motif, style/);
+  assert.deepEqual(readdirSync(join(dir, 'renders')), [], 'nothing rendered');
+  assert.deepEqual(core.missingDirection({ direction: { ...DIRECTION, motif: '  ' } }), ['motif']);
+});
+
 test('failed renders and failed QA leave the approved final untouched', () => {
+  requireFfmpeg();
   const dir = project();
   writeFileSync(core.finalPath(dir), 'approved final bytes');
   assert.equal(render(dir, 'final', { FAKE_RENDER: 'fail' }).status, 1);
@@ -113,6 +133,10 @@ test('blocking rule: FAIL and required NOT TESTED block; warnings and optional N
   const row = (status, required = true, kind = 'technical') => ({ area: 'A', check: `${status}-${required}-${kind}`, status, detail: '', required, kind });
   assert.equal(core.evaluate([row('PASS'), row('WARNING'), row('NOT APPLICABLE'), row('NOT TESTED', false, 'human')]).technicallyVerified, true);
   assert.equal(core.evaluate([row('PASS'), row('FAIL', false)]).verdict, 'BLOCKED');
+  const source = core.evaluate([row('PASS')], { scope: 'source' });
+  assert.deepEqual([source.verdict, source.passed, source.technicallyVerified], ['SOURCE_VALIDATED', true, false], 'source-only QA never verifies a video');
+  assert.equal(core.evaluate([row('FAIL')], { scope: 'source' }).verdict, 'BLOCKED');
+  assert.throws(() => core.evaluate([], { scope: 'everything' }), /Unknown QA scope/);
   const missing = core.evaluate([row('PASS'), row('NOT TESTED')]);
   assert.equal(missing.technicallyVerified, false);
   assert.deepEqual(missing.blocking.map(b => b.status), ['NOT TESTED']);
@@ -152,6 +176,7 @@ test('probe and decode checks report decode, size, fps, duration and audio', () 
 });
 
 test('audio analysis measures loudness, peaks and dead air, and reports a failed run as a checker error', () => {
+  requireFfmpeg();
   const dir = mkdtempSync(join(tmpdir(), 'reel-audio-'));
   const f = join(dir, 'a.m4a');
   const mk = spawnSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1.5', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono:d=1.2', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1.5',

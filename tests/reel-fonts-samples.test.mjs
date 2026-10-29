@@ -6,7 +6,7 @@ import { resolve, join } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 const { getProfile } = await import('../.claude/skills/create-reel/scripts/lib.mjs');
 const { convertToVertical } = await import('../.claude/skills/create-reel/scripts/new-reel.mjs');
-const { listStyles, resolveStyle, styleFontCss, installFonts, faceCovers, FONT_CSS } = await import('../.claude/skills/create-reel/scripts/fonts.mjs');
+const { listStyles, resolveStyle, styleFontCss, installFonts, faceCovers, familyMap, renameFamilies, FONT_CSS } = await import('../.claude/skills/create-reel/scripts/fonts.mjs');
 const { fontChecks, networkFontRefs } = await import('../.claude/skills/create-reel/scripts/qa-core.mjs');
 const { planSamples, planEvents } = await import('../.claude/skills/create-reel/scripts/samples.mjs');
 const scratch = () => mkdtempSync(join(tmpdir(), 'reel-fonts-test-'));
@@ -36,6 +36,43 @@ test('library styles ship local, licensed WOFF2 fonts and no network font import
     assert.deepEqual(networkFontRefs([{ file: 'tokens.css', text: tokens }]), []);
   }
   assert.ok(listStyles().some(s => s.id === 'brand'), 'brand manifest is listed');
+});
+
+test('the default brand style ships its OFL fonts, so every checkout scaffolds the same type', () => {
+  const s = resolveStyle('brand');
+  assert.deepEqual([s.missing, s.unlicensed], [[], []]);
+  for (const f of s.files) {
+    assert.equal(readFileSync(f.path).subarray(0, 4).toString('latin1'), 'wOF2', f.file);
+    assert.match(readFileSync(f.licensePath, 'utf8'), /SIL OPEN FONT LICENSE/);
+  }
+});
+
+test('style families are renamed by role, only inside font-family values', () => {
+  const vox = resolveStyle('vox-explainer').manifest, kall = resolveStyle('kallaway').manifest, brand = resolveStyle('brand').manifest;
+  const k2v = familyMap(kall, vox);
+  assert.deepEqual([...k2v.map], [['Plus Jakarta Sans', 'Fraunces'], ['Inter', 'Archivo'], ['Space Mono', 'Archivo']]);
+  // Archivo is vox's body and mono: it maps by its first role and the other use is pointed out.
+  const v2k = familyMap(vox, kall);
+  assert.equal(v2k.map.get('Archivo'), 'Inter');
+  assert.ok(v2k.notes.some(n => /Archivo was body and mono; renamed to Inter \(body\)\. Check its mono uses/.test(n)));
+  // A family the new style also ships stays: brand's Inter is kallaway's body.
+  const b2k = familyMap(brand, kall);
+  assert.deepEqual([...b2k.map], [['JetBrains Mono', 'Space Mono']]);
+  assert.ok(b2k.notes.some(n => /Inter kept/.test(n)));
+
+  const src = [
+    'h1{font-family:"Plus Jakarta Sans",Arial,sans-serif;content:"Plus Jakarta Sans"}',
+    ".t{font-family: 'Inter' , sans-serif} .u{font-family:Inter Tight,serif} .v{font-family:Inter}",
+    '<p style="font-family:Space Mono,monospace">Space Mono</p>',
+  ].join('\n');
+  const r = renameFamilies(src, k2v.map);
+  assert.equal(r.count, 4);
+  assert.equal(r.text, [
+    'h1{font-family:"Fraunces",Arial,sans-serif;content:"Plus Jakarta Sans"}',
+    ".t{font-family: 'Archivo' , sans-serif} .u{font-family:Inter Tight,serif} .v{font-family:Archivo}",
+    '<p style="font-family:Archivo,monospace">Space Mono</p>',
+  ].join('\n'));
+  assert.equal(renameFamilies('a{font-family:JetBrains Mono}', b2k.map).text, "a{font-family:'Space Mono'}", 'a bare name that needs quotes gets single quotes');
 });
 
 test('an explicit style installs its fonts into the reel and links one stylesheet', () => {
@@ -68,6 +105,9 @@ test('re-syncing a style swaps the font files; a missing font changes nothing', 
   assert.deepEqual([...new Set(reel.fonts.map(f => f.family))], ['Fraunces', 'Archivo', 'Caveat']);
   assert.ok(!files.some(f => /jakarta|space-mono|^inter/.test(f)), `old fonts removed: ${files}`);
   assert.match(readFileSync(join(dir, FONT_CSS), 'utf8'), /Fraunces/);
+  const html = readFileSync(join(dir, 'index.html'), 'utf8');
+  assert.match(html, /font-family:"Fraunces",Arial,sans-serif/, 'the composition follows the new style');
+  assert.doesNotMatch(html, /Plus Jakarta Sans/);
 
   // A kit root whose brand manifest names a file that is not there.
   const kit = scratch();
@@ -104,7 +144,7 @@ const statusOf = (rows, check) => rows.find(r => r[1].startsWith(check))?.[2];
 
 test('font QA passes only when every declared face loaded from its own local file', () => {
   const ok = fontChecks({ declared, browser: goodBrowser(), files, styleName: 'x', covers: faceCovers });
-  assert.deepEqual(ok.map(r => r[2]), ['PASS', 'PASS', 'PASS', 'PASS', 'PASS']);
+  assert.deepEqual(ok.map(r => r[2]), ['PASS', 'PASS', 'PASS', 'PASS', 'PASS', 'PASS']);
 
   const b1 = goodBrowser(); b1.blocked.push('https://fonts.gstatic.com/s/inter.woff2');
   assert.equal(statusOf(fontChecks({ declared, browser: b1, files, covers: faceCovers }), 'no network font requests'), 'FAIL');
@@ -125,8 +165,15 @@ test('font QA passes only when every declared face loaded from its own local fil
 
   assert.equal(statusOf(fontChecks({ declared, browser: goodBrowser(), files: { 'assets/fonts/inter.woff2': true }, covers: faceCovers }), 'declared font files'), 'FAIL');
 
-  const b5 = goodBrowser(); b5.used.push({ family: 'Arial', weight: '400', style: 'normal', text: 'x' });
-  assert.equal(statusOf(fontChecks({ declared, browser: b5, files, covers: faceCovers }), "text uses only"), 'WARNING');
+  // A family left over from an earlier style (or a system font) has no local face: it fails, it is not a warning.
+  const b5 = goodBrowser(); b5.used.push({ family: '"Plus Jakarta Sans", Arial', weight: '700', style: 'normal', text: 'stale' });
+  const r5 = fontChecks({ declared, browser: b5, files, styleName: 'vox-explainer', covers: faceCovers }).find(r => r[1].startsWith('every text family'));
+  assert.deepEqual([r5[2], r5[4]?.required], ['FAIL', true]);
+  assert.match(r5[3], /Plus Jakarta Sans \("stale"\)/);
+  // A family the project loads itself, outside the style, is only a warning.
+  const b6 = goodBrowser(); b6.faces.push({ family: 'Own Face', weight: '400', style: 'normal', status: 'loaded' }); b6.used.push({ family: '"Own Face"', weight: '400', style: 'normal', text: 'x' });
+  const r6 = fontChecks({ declared, browser: b6, files, covers: faceCovers });
+  assert.deepEqual([statusOf(r6, 'every text family'), statusOf(r6, 'text uses only')], ['PASS', 'WARNING']);
 
   // Without declared fonts the old behaviour stands: system fonts are a warning, a broken face a failure.
   const none = fontChecks({ declared: [], browser: { ...goodBrowser(), faces: [] }, covers: faceCovers });

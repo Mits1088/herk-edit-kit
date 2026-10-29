@@ -5,6 +5,8 @@ permissions:
 jobs:
   check:
     strategy:
+      # Report every OS; one failure should not hide the others.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -14,6 +16,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # The Reel Studio tests synthesize and probe media with ffmpeg/ffprobe.
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+      - run: ffmpeg -version
       - run: npm ci
       - run: npm run check
       - run: npm test

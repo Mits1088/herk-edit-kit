@@ -25,7 +25,7 @@ import { skillDir, kitRoot, motionmaxxingDir, getProfile, safeRect, run, hyperfr
 import {
   makeCollector, evaluate, sha256File, isCandidateFile, qaDirFor, humanApprovalRequired, interpretLook, interpretLint,
   probeChecks, decodeCheck, AUDIO_FILTER, parseAudioAnalysis, audioChecks, speechIntegrity, planChecks, tailText, writeJson,
-  reportMarkdown, writeProjectSummary, NETWORK_FONT, networkFontRefs, fontChecks,
+  reportMarkdown, writeProjectSummary, NETWORK_FONT, networkFontRefs, fontChecks, missingDirection,
 } from './qa-core.mjs';
 import { faceCovers } from './fonts.mjs';
 import { planSamples, planEvents, collectPageEvents } from './samples.mjs';
@@ -70,6 +70,12 @@ mkdirSync(outDir, { recursive: true });
 const shaBefore = candidate ? await sha256File(render) : null;
 
 // ---------- source
+{
+  // Creative direction: required for a candidate, a reminder before that (planning is still under way).
+  const missing = missingDirection(reel);
+  add('Direction', 'reel.json direction recorded (hook, coreClaim, heroBeat, motif, style)', missing.length ? (candidate ? 'FAIL' : 'WARNING') : 'PASS',
+    missing.length ? `missing ${missing.join(', ')}${candidate ? '' : '; required before a final render'}` : reel.direction.hook.slice(0, 80), candidate ? req : {});
+}
 {
   const r = run(process.execPath, [join(kitRoot, 'scripts/preflight.mjs'), dir]);
   add('Herk', 'preflight', r.status === 0 ? 'PASS' : 'FAIL', tailText(r.stdout + r.stderr), req);
@@ -373,7 +379,7 @@ if (footage) {
 }
 
 // ---------- report
-const ev = evaluate(results);
+const ev = evaluate(results, { scope: render ? 'render' : 'source' });
 const sheetPaths = sheets.map(s => s.replaceAll('\\', '/'));
 const projectArg = relative(kitRoot, dir).replaceAll('\\', '/');
 const record = {
@@ -394,4 +400,5 @@ console.log(`\n* = required. Stage 1 ${ev.verdict}: ${relative(process.cwd(), jo
 for (const r of ev.blocking) console.log(`  blocking: ${r.status} [${r.area}] ${r.check}`);
 for (const s of sheets) console.log(`Review: ${relative(process.cwd(), join(dir, s))}`);
 if (candidate && ev.technicallyVerified) console.log(`Candidate ${record.render} is technically verified (SHA-256 ${shaBefore.slice(0, 12)}). Stage 2: a person must watch, listen and approve it.`);
-process.exitCode = ev.technicallyVerified ? 0 : 1;
+if (!render && ev.passed) console.log('Source validated only: no rendered video was checked. Stage 1 verification needs a candidate render.');
+process.exitCode = ev.passed ? 0 : 1;

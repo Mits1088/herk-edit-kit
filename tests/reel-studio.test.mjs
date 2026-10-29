@@ -18,10 +18,21 @@ test('create-reel skill has the required frontmatter and consumes $ARGUMENTS', (
   assert.ok(front, 'frontmatter block');
   const fields = Object.fromEntries(front[1].split(/\r?\n/).map(l => l.match(/^([a-z-]+):\s*(.*)$/)).filter(Boolean).map(m => [m[1], m[2]]));
   assert.equal(fields.name, 'create-reel');
-  assert.equal(fields.description, 'Create, edit, render and quality-check premium Instagram Reels using Herk Edit Kit, motionmaxxing and HyperFrames.');
+  assert.match(fields.description, /^Create, edit, render and quality-check premium Instagram Reels using Herk Edit Kit, motionmaxxing and HyperFrames\. The default for any Reel/);
   assert.equal(fields['argument-hint'], '"[Describe your Reel]"');
-  assert.equal(fields['disable-model-invocation'], 'true');
-  assert.match(text.slice(front[0].length), /\$ARGUMENTS/);
+  assert.ok(!('disable-model-invocation' in fields), 'Claude can load create-reel for a plain-language Reel request');
+  const body = text.slice(front[0].length);
+  assert.match(body, /\$ARGUMENTS/);
+  assert.match(body, /If the brief above is empty, use the user's request from the conversation/);
+});
+
+test('Reel requests route to create-reel in both guides; short-form-edit stays for cutting-only work', () => {
+  const claude = readFileSync(join(root, 'CLAUDE.md'), 'utf8');
+  assert.equal(claude, readFileSync(join(root, 'AGENTS.md'), 'utf8'), 'CLAUDE.md and AGENTS.md stay synchronized');
+  assert.match(claude, /\| Reels, Shorts, and short advertisements \(default\) \| `create-reel` \|/);
+  assert.match(claude, /\| Cutting-only short-form work on talking-head footage \| `short-form-edit` \|/);
+  assert.match(readFileSync(join(root, '.claude/skills/short-form-edit/SKILL.md'), 'utf8'), /^description: .*New Reels and Shorts start in create-reel/m);
+  assert.equal(readFileSync(join(root, '.agents/skills/create-reel/SKILL.md'), 'utf8').includes('disable-model-invocation'), false, 'Codex copy is in sync');
 });
 
 test('ReelEases are numerically identical to motionmaxxing measured eases', () => {

@@ -115,13 +115,15 @@ and [storytelling workbook](docs/STORYTELLING-WORKBOOK.md).
 
 ## Create a reel or YouTube Short
 
-> Use short-form-edit to turn my recording at [local path] into a 9:16 reel.
+> Make a 9:16 reel from my recording at [local path].
 > Build a truthful hook and payoff, preserve my meaning, tighten mistakes, and
 > add precise captions, purposeful moving footage, and sound design. Prepare
 > a draft for review. Use my existing footage before proposing generated assets.
 
-Codex: `$short-form-edit`. Claude Code: `/short-form-edit`.
-The skill includes planning references and validators for caption timing, source
+Claude Code: `/create-reel`, or just ask for a reel; Reel Studio picks the mode and
+hands talking-head footage to `short-form-edit`. Codex: `$create-reel`. Use
+`short-form-edit` directly only for cutting-only work outside a Reel Studio project.
+[Reel Studio guide](docs/REEL-STUDIO.md). `short-form-edit` includes planning references and validators for caption timing, source
 mapping, scene coverage, and footage reuse. It is an agent-guided workflow;
 review the actual motion and audio before publishing.
 [Short-form walkthrough and validation commands](docs/SHORT-FORM.md).
@@ -144,7 +146,7 @@ This is the main Herk Edit Kit repository. The newer video-pipeline kit has been
 merged here with both Git histories preserved. The original 12 projects remain
 in `video-projects/`, alongside the original shared brand examples and the
 `make-a-video`, `short-form-video`, and `website-to-hyperframes` skills.
-Use `short-form-edit` for new reels; `short-form-video` documents the older May
+Use `create-reel` for new reels; `short-form-video` documents the older May
 Shorts compositions. [Migration and compatibility notes](docs/MIGRATION.md).
 
 ## Explore and customize

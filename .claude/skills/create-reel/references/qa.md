@@ -39,7 +39,8 @@
 | Clock | identity, one GSAP, paused timeline, duration, deterministic seeking * | `seek-check.mjs` | technical |
 | motionmaxxing | G5 no page chrome | `scripts/lint.mjs` with `--width --height --duration` | creative |
 | Layout | text outside the canvas * or the safe area * (12 even samples); text at event boundaries (review) | DOM pass in headless Chrome | technical |
-| Fonts | no network font references * or requests * (blocked in QA); declared files present *; each declared face loaded from its own local file *; every text weight and style covered by a real face * | source scan, DOM pass | technical |
+| Direction | `reel.json` `"direction"` filled: hook, coreClaim, heroBeat, motif, style (* for a candidate; a WARNING before that, and `render-reel --final` refuses to start without it) | `qa-core.mjs` | technical |
+| Fonts | no network font references * or requests * (blocked in QA); declared files present *; each declared face loaded from its own local file *; every text weight and style covered by a real face *; every text family has a local face * (a family left from an earlier style, or a system font, fails) | source scan, DOM pass | technical |
 | Render | size, native vertical, fps, h264, yuv420p, duration, audio stream when expected, full decode * | `ffprobe`, `ffmpeg -xerror` | technical |
 | Audio | loudness, clipping, dead air (required in Mode B) | `ffmpeg` silencedetect, astats, ebur128 | technical |
 | Speech | Mode B records, speech integrity, EDL duration * | `qa-core.mjs` | technical |
@@ -51,6 +52,10 @@
 
 Statuses: PASS, FAIL, WARNING, NOT TESTED, NOT APPLICABLE. Stage 1 is **BLOCKED** by any FAIL, and by any
 required check that is not PASS, WARNING or NOT APPLICABLE (a required NOT TESTED never counts as passed).
+Verdicts name what was checked: **VERIFIED** only for full QA of a rendered video; a passing `--source-only` run is
+**SOURCE_VALIDATED** (no video checked) and passing draft quick checks are **DRAFT_CHECKED**. Neither is eligible
+for approval, and no automated verdict approves anything: Stage 2 needs a person to approve the exact candidate
+by its SHA-256, and a changed file invalidates that approval.
 Creative rules are never FAIL: a motionmaxxing gate finding is a WARNING to review in context. A checker that
 crashed, failed to start, or produced output QA cannot read is a FAIL of kind `checker`, never a quiet warning.
 A missing optional tool (motionmaxxing, python) is NOT TESTED and listed. Safe-area text is a WARNING for organic

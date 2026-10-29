@@ -1,6 +1,6 @@
 ---
 name: short-form-edit
-description: Turn talking-head footage into a finished reel, YouTube Short, or short advertisement with curiosity-led openings, earned payoffs, story-driven cuts, transcript-synced motion graphics, moving B-roll, captions, subtle music, and synchronized sound effects. Use for short-form editing; use edit-video for long-form videos and cut-silences for pause removal alone.
+description: Turn talking-head footage into a finished reel, YouTube Short, or short advertisement with curiosity-led openings, earned payoffs, story-driven cuts, transcript-synced motion graphics, moving B-roll, captions, subtle music, and synchronized sound effects. New Reels and Shorts start in create-reel, which loads this skill as the owner of Mode B (footage); use it directly for cutting-only short-form work or when the user names it. Use edit-video for long-form videos and cut-silences for pause removal alone.
 ---
 
 # Short form edit
@@ -81,8 +81,11 @@ open at once. Close the promised lesson before the CTA; a comment request must
 not be the only answer. A recurring object alone is not an open loop: establish
 what is missing or unresolved, then visibly change that state.
 
-Build three materially different rough openings using the same truthful source
-speech. Compare the first three seconds for topic clarity, curiosity, muted
+Build one rough animated opening and write two materially different alternatives
+(the line, the first image, why it hooks) using the same truthful source speech.
+When the visual direction is uncertain, make a static preview frame for each
+alternative. Animate all three only when the brief asks for a high-production
+piece. Compare the first three seconds for topic clarity, curiosity, muted
 comprehension, and follow-through. Choose and record the reason; do not select
 only the loudest effect. Render a low-resolution moving animatic with speech and
 rough sound before polishing materials. Fix predictability, missing context, or

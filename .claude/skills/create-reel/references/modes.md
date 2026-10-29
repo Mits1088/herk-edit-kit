@@ -19,6 +19,8 @@ Known conflicts, resolved:
 | HUD, chapter labels | `motion-showreel`: persistent HUD | motionmaxxing: never ship page chrome | No HUD unless the brief asks for it |
 | Eases | `make-a-video`: 3-4 GSAP eases per beat | motionmaxxing: 12 measured curves | `ReelEases.*`; built-in GSAP eases are fine where a measured curve does not fit |
 | Runtime | motionmaxxing: `Motion.film()` | HyperFrames: paused GSAP timeline | HyperFrames contract only; motionmaxxing's principles applied through GSAP |
+| Openings | `short-form-edit`: three rough openings | render cost | Modes A and B: one rough animated opening plus two written alternatives; Mode C may animate three |
+| Direction notes | separate brief files | one source of truth | `reel.json` `"direction"`: `hook`, `coreClaim`, `heroBeat`, `motif`, `style`; required before a final render |
 
 ## Mode A: faceless motion graphics
 
@@ -43,6 +45,11 @@ inside a word; review every removal that touches a negation, qualifier or number
 for the person rather than deciding alone. Save the verified source transcript (source timeline, word timings)
 as `assets/source-transcript.json` so QA can compare the edit against it. Human approval is always required.
 
+Openings (this replaces `short-form-edit`'s three rough openings inside Reel Studio): build one rough animated
+opening from the strongest truthful line, and write two alternatives in a sentence or two each (the line, the
+first image, why it hooks). When the visual direction is uncertain, make one static preview frame per alternative
+before choosing. Record the chosen hook and the reason in `reel.json` `"direction"`.
+
 ## Mode C: cinematic brand promotion
 
 Herk owns the production workflow; HyperFrames renders. Direction owner: motionmaxxing (brand idea, world, hero moment, sound plan, gates). Approvals: `make-a-video`
@@ -51,3 +58,5 @@ motionmaxxing's `scripts/brand.mjs` and `fetch_logo.mjs` capture a website only 
 and agrees. A showreel cut to music: `motion-showreel` for the beat grid, without its HUD unless asked.
 3D (`runtime/hero3d`) is not wired into the HyperFrames clock in Phase 1: do not use it until an adapter is
 built and seek-checked.
+Openings: a high-production brand film may develop three distinct animated openings before choosing; otherwise
+follow the lean rule of Mode B (one animated, two written).

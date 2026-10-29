@@ -8,8 +8,8 @@
 // Runs `scripts/new-video.mjs <slug>` (Herk's generator: copies the starter and the pinned GSAP), then replaces the
 // landscape starter with a native vertical composition: meta.json, root id / data-composition-id / data-width /
 // data-height / data-duration / data-fps, the timeline registration key, CSS sizes and staging all come from one ID
-// and one profile. Writes reel.json (profile, mode, style, fonts, render log) and DESIGN.md (from brand/DESIGN.md when
-// present). --style installs that style's local fonts (fonts.mjs); the default is brand when its font files exist.
+// and one profile. Writes reel.json (profile, mode, style, fonts, empty direction, render log) and DESIGN.md (from brand/DESIGN.md when
+// present). --style installs that style's local fonts (fonts.mjs); the default is brand, and a missing file stops it.
 // Never overwrites an existing project.
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,6 +17,7 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { skillDir, kitRoot, getProfile, safeRect } from './lib.mjs';
 import { installFonts, resolveStyle, NO_STYLE, FONT_CSS } from './fonts.mjs';
+import { DIRECTION_FIELDS } from './qa-core.mjs';
 
 export const MODES = ['faceless', 'footage', 'brand'];
 
@@ -70,6 +71,8 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
   writeFileSync(join(dir, 'reel.json'), JSON.stringify({
     slug, compositionId: id, profile: profile.name, mode, style: NO_STYLE, fonts: [], duration,
     width: profile.width, height: profile.height, fps: profile.fps,
+    // The creative direction, filled in while planning; a final render refuses to start until every field is set.
+    direction: Object.fromEntries(DIRECTION_FIELDS.map(k => [k, ''])),
     // Stage 2: a person approves a verified candidate before it becomes renders/final.mp4. Footage always requires it.
     requireHumanApproval: true,
     renders: [],
@@ -109,14 +112,12 @@ function main() {
   if (!MODES.includes(mode)) throw new Error(`--mode must be one of ${MODES.join(', ')}`);
   const title = opts.title || slug;
   // Check the style's font files before anything is created: a missing font stops here, never a quiet fallback.
-  let style = opts.style;
-  if (style === undefined) {
-    let brand = null; try { brand = resolveStyle('brand'); } catch {}
-    style = brand && !brand.missing.length ? 'brand' : NO_STYLE;
-    if (style === NO_STYLE) console.warn('Note: brand fonts not found (brand/fonts.json, brand/assets/fonts/); scaffolding with system fonts. Pass --style to pick one.');
-  } else if (style !== NO_STYLE) {
+  // The default is the brand style, whose OFL fonts ship with the kit; system fonts are an explicit --style none.
+  const style = opts.style ?? 'brand';
+  if (style !== NO_STYLE) {
     const s = resolveStyle(style);
-    if (s.missing.length) throw new Error(`Style "${s.id}" is missing font files:\n  ${s.missing.join('\n  ')}`);
+    if (s.missing.length) throw new Error(`Style "${s.id}" is missing font files:\n  ${s.missing.join('\n  ')}\n` +
+      (opts.style === undefined ? 'The default brand fonts ship in brand/assets/fonts/; restore them (git checkout -- brand/assets/fonts) or pass --style <name>, or --style none for system fonts.' : 'Add them or pick another --style.'));
   }
 
   // Herk's own generator validates the slug, refuses existing projects, and copies the pinned GSAP.

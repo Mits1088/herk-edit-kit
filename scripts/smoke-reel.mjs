@@ -18,6 +18,11 @@ cpSync(join(root, 'examples/starter'), dir, { recursive: true });
 for (const d of ['assets', 'compositions', 'renders']) mkdirSync(join(dir, d), { recursive: true });
 copyFileSync(join(root, 'node_modules/gsap/dist/gsap.min.js'), join(dir, 'assets/gsap.min.js'));
 convertToVertical(dir, { slug, profile: getProfile('organic'), duration: 2, mode: 'faceless', title: 'Reel smoke', style: 'kallaway' });
+// A final render needs the creative direction on record (reel.json "direction").
+const direct = d => { const p = join(d, 'reel.json'), r = JSON.parse(readFileSync(p, 'utf8'));
+  r.direction = { hook: 'Smoke test hook', coreClaim: 'The pipeline holds', heroBeat: 'the candidate', motif: 'a flat colour field', style: r.style };
+  writeFileSync(p, JSON.stringify(r, null, 2)); };
+direct(dir);
 const node = (script, args) => spawnSync(process.execPath, [join(scripts, script), dir, ...args], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
 const steps = [];
 const step = (name, r, expect) => {
@@ -26,8 +31,10 @@ const step = (name, r, expect) => {
   console.log(`ok  ${name}`);
 };
 
+step('source-only QA', node('qa-reel.mjs', ['--source-only']), 0);
+assert.equal(JSON.parse(readFileSync(join(dir, 'renders/source.qa/qa.json'), 'utf8')).verdict, 'SOURCE_VALIDATED', 'source-only QA never reports VERIFIED');
 step('draft render + quick checks', node('render-reel.mjs', ['--draft', '--workers', '1']), 0);
-assert.ok(existsSync(join(dir, `renders/${slug}-draft-v001.qa/quick.json`)));
+assert.equal(JSON.parse(readFileSync(join(dir, `renders/${slug}-draft-v001.qa/quick.json`), 'utf8')).verdict, 'DRAFT_CHECKED');
 step('final render + full QA (Stage 1)', node('render-reel.mjs', ['--final', '--workers', '1']), 0);
 const cand = join(dir, `renders/${slug}-candidate-v001.mp4`);
 const record = JSON.parse(readFileSync(recordPathFor(dir, cand), 'utf8'));
@@ -56,6 +63,7 @@ cpSync(join(root, 'examples/starter'), b, { recursive: true });
 for (const d of ['assets', 'compositions', 'renders']) mkdirSync(join(b, d), { recursive: true });
 copyFileSync(join(root, 'node_modules/gsap/dist/gsap.min.js'), join(b, 'assets/gsap.min.js'));
 convertToVertical(b, { slug: bSlug, profile: getProfile('organic'), duration: 4, mode: 'footage', title: 'Footage smoke' });
+direct(b);
 for (const f of ['plan.json', 'transcript.json', 'edit-decisions.json']) copyFileSync(join(root, 'examples/short-form/assets', f), join(b, 'assets', f));
 const kept = JSON.parse(readFileSync(join(b, 'assets/transcript.json'), 'utf8')).words.map(w => ({ text: w.text, start: w.sourceStart, end: w.sourceEnd }));
 writeFileSync(join(b, 'assets/source-transcript.json'), JSON.stringify({ words: [{ text: "Don't", start: 0.3, end: 0.6 }, ...kept] }));
@@ -66,7 +74,7 @@ assert.equal(mk.status, 0);
 const bq = spawnSync(process.execPath, [join(scripts, 'qa-reel.mjs'), b, '--render', bCand], { encoding: 'utf8', windowsHide: true });
 const bRec = JSON.parse(readFileSync(recordPathFor(b, join(b, bCand)), 'utf8'));
 const by = c => bRec.results.find(r => r.check.startsWith(c));
-for (const c of ['no cut splits a spoken word', 'retained transcript equals', 'validate-plan', 'caption words and timing', 'EDL duration'])
+for (const c of ['reel.json direction recorded', 'no cut splits a spoken word', 'retained transcript equals', 'validate-plan', 'caption words and timing', 'EDL duration'])
   assert.equal(by(c)?.status, 'PASS', `${c}: ${JSON.stringify(by(c))}`);
 assert.ok(['PASS', 'WARNING'].includes(by('integrated loudness')?.status), 'audio analysis ran (a quiet test tone may WARN)');
 assert.equal(by('cuts that remove')?.status, 'WARNING', 'removed "Don\'t" is flagged');
