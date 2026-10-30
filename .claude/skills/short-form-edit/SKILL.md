@@ -237,7 +237,10 @@ authenticity. Save the source URL or supplied path, original file, and checksum.
 Inspect the artwork before use, preserve its shape and proportions, and animate
 the authentic asset or the surface carrying it. Do not alter a logo's geometry
 to create depth. Audit every logo occurrence in the final encoded reel against
-its source asset, including small marks and recurring motifs. If no verified
+its source asset, including small marks and recurring motifs.
+A product's installed software can be the official source when it ships its art
+as data (Claude Code's Clawd mascot is glyph tables in the CLI): extract it verbatim,
+render it by the product's own rules, and record version, offsets and hash. If no verified
 asset is available, use plain brand-name text rather than fabricate a mark.
 
 ### Balance graphics with moving footage
@@ -302,6 +305,9 @@ human reactions where they support the story.
    swipes support movement; restrained success tones support checks. Align the
    audible onset or impact peak, not just the beginning of an audio file with
    leading silence. Vary effect density and levels. Voice remains dominant.
+   Duck the effects under speech as well as the bed: a long whoosh or a hit stacked
+   over a hero beat can mask the line it illustrates (find-skills: hits +13.7 dB over
+   the voice at 19 s drowned the speaker; fixed by a 5 dB speech duck and halved hits).
    Score anticipation, contact, and release separately. A brief bed dip can make
    the next contact more distinct without raising its volume. Let some cuts pass
    without a whoosh. Record cue purpose and audition transitions when supported.

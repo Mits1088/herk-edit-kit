@@ -460,11 +460,16 @@ if (!render) {
     const d = join(outDir, sub);
     rmSync(d, { recursive: true, force: true });
     mkdirSync(d, { recursive: true });
-    const x = run('ffmpeg', ['-y', '-v', 'error', '-i', render, '-an', '-vf', [`select='${frames.map(f => `eq(n\\,${f})`).join('+')}'`, `scale=${width}:-2`].join(','), '-fps_mode', 'vfr', '-q:v', '3', join(d, '%03d.jpg')]);
-    const got = readdirSync(d).filter(f => /^\d{3}\.jpg$/.test(f)).sort();
-    if (x.status !== 0 || got.length !== frames.length) return { error: `checker error: ${got.length}/${frames.length} frames; ${tailText(x.stderr)}` };
+    // In batches: one select expression with ~140 eq() terms fails in ffmpeg ("Cannot allocate memory" on Windows).
     const name = f => `f${String(f).padStart(5, '0')}.jpg`;
-    frames.forEach((f, i) => renameSync(join(d, got[i]), join(d, name(f))));
+    const BATCH = 32;
+    for (let b = 0; b < frames.length; b += BATCH) {
+      const part = frames.slice(b, b + BATCH);
+      const x = run('ffmpeg', ['-y', '-v', 'error', '-i', render, '-an', '-vf', [`select='${part.map(f => `eq(n\\,${f})`).join('+')}'`, `scale=${width}:-2`].join(','), '-fps_mode', 'vfr', '-q:v', '3', join(d, '%03d.jpg')]);
+      const got = readdirSync(d).filter(f => /^\d{3}\.jpg$/.test(f)).sort();
+      if (x.status !== 0 || got.length !== part.length) return { error: `checker error: ${b + got.length}/${frames.length} frames; ${tailText(x.stderr)}` };
+      part.forEach((f, i) => renameSync(join(d, got[i]), join(d, name(f))));
+    }
     return { dir: d, url: f => pathToFileURL(join(d, name(f))).href, file: f => `${sub}/${name(f)}` };
   };
   // Screenshots a sheet page into <outDir>/<jpg>; returns null when drawn, else why not.
