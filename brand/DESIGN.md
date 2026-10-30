@@ -44,24 +44,30 @@ brightened for screen).
 - **Inter (variable; 900 for captions and display)**: headlines, captions and labels.
   File: `brand/assets/fonts/InterVariable.woff2` (OFL, licence in `OFL-Inter.txt`).
 - **JetBrains Mono (Regular)**: terminal text, commands and code. File: `brand/assets/fonts/JetBrainsMono-Regular.woff2` (OFL).
-- Captions: Inter 900 caps, 62 px (54 px when a chunk exceeds 18 characters), one dark box with a thin light edge,
-  hand-grouped phrases, accent on roughly a quarter of chunks.
-- Hierarchy at 1080x1920: headline 96-140 px, sub-line 36-48 px, captions 54-62 px. Nothing under 32 px; terminal
-  text must stay readable on a phone.
+- Default caption style for this brand: Inter 900 caps, 62 px (54 px when a chunk exceeds 18 characters), one dark
+  box with a thin light edge, hand-grouped phrases, accent on roughly a quarter of chunks. A project's DESIGN.md may
+  choose another caption style when its visual direction needs it (for example smaller sentence-case captions under
+  full-screen illustrations).
+- Default hierarchy at 1080x1920: headline 96-140 px, sub-line 36-48 px, captions 54-62 px. Nothing under 32 px (a
+  readability floor, not a style); terminal text must stay readable on a phone.
 
 Ship font files locally in the project's `assets/` with `@font-face`; system fonts can differ between machines.
 
 ## Motion Rules
 
+These are this brand's defaults. A project's DESIGN.md may override layouts, the split position, speaker time and
+motion density when its story needs it; record why there.
+
 - Feel: restrained and certain. Graphics make a point, then get out of the way of the speaker.
 - Eases: `ReelEases.*` (motionmaxxing measured curves). Default landings `softLand`, hero and CTA `snapSettle`,
   exits `accelExit`, fades `cruise`.
-- Layouts: split (speaker at native resolution under y 880, graphic above), full-screen graphic, and punch-in on the
-  face for conviction beats. Hard cuts between layouts on phrase boundaries, never inside a phrase.
+- Layouts: split (by default speaker at native resolution under y 880, graphic above), full-screen graphic, and
+  punch-in on the face for conviction beats; choose by what the viewer needs to see. Hard cuts between layouts on phrase boundaries, never inside a phrase.
 - Punch-ins use the widest full-height crop and push in from the top edge so the head is never cut.
-- Pacing: speaker on screen about 80 % of the reel and never gone more than about 3 s. Visuals land on the spoken
+- Pacing (default for this brand's talking-head reels): speaker on screen about 80 % of the reel and rarely gone more
+  than about 3 s; a story told mostly in full-screen illustration may go further, with the reason in its DESIGN.md. Visuals land on the spoken
   word (bars fill on the numbers, names highlight as they are said). End within a quarter-second of the last word.
-- Recurring devices that worked: counters and odometers rolling to a spoken number, stamps (MISSED, PATCHED),
+- Recurring devices that worked (options, not requirements): counters and odometers rolling to a spoken number, stamps (MISSED, PATCHED),
   real captured pages pushed in with an underline, and a callback to the opening graphic for the payoff.
 
 ## Sound

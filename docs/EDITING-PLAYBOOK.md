@@ -35,6 +35,8 @@ Real examples of notes that became rules:
 | "The lips are behind the voice by the end." | Cuts select exact frames in one pass, and a sync check compares every cut frame against the raw. |
 | "Captions should never blink out." | On shots full of text to read, captions move to a clear zone instead of disappearing. |
 | "You cut out my natural pause after 'first', it feels too quick." Then, after a fix that added silence there: "You muted out the word first." | Speech is cut between phrases at real silence, never inside one. A filler that runs straight into the next word stays, because cutting it clips the words around it. |
+| "When the avatar is full screen the top half is a shade of yellow." | A texture layer (an SVG noise filter with a blend mode) kept painting while its scene was hidden. Grain is now a baked image, and QA compares encoded talking-head frames with a footage-only reference and tests every sample time for layers that paint while hidden. |
+| "The sound effects are slightly too loud, they can be overpowering." | QA measures the effects against the voice from the stems and the mix gains (and estimates it from the encoded mix), and warns above starting points calibrated on that reel. The fix lowered the effects about 4 dB. |
 | "The caption covers my mouth in the first second." | A caption that runs across a cut moves with the cut, and the first 2.5 s are checked frame by frame for anything over the mouth. |
 
 The editing knowledge lives in the skill files, so you can read it, edit it, and share it.
@@ -54,7 +56,7 @@ This is the order the `short-form-edit` and `edit-video` skills follow.
 
 ## House reel style (the numbers)
 
-Measured on Nate's 27 top Instagram Reels (March to September 2026). Use them as a starting point for your own style, not as law.
+Measured on Nate's 27 top Instagram Reels (March to September 2026). Use them as a starting point for your own style, not as law. A brief, the project's DESIGN.md or `brand/DESIGN.md` overrides any of them (caption look, layout shares, speaker time, shot length); the order is in `.claude/skills/create-reel/references/modes.md`.
 
 **Pacing**
 - Speech starts within 0.1 s. The file ends right after the last word. No intro or outro card.
@@ -115,6 +117,7 @@ Rules that came from mistakes:
 - Vary the actual sound files for repeated items (click, tap, ceramic touch) so a list doesn't sound like a percussion loop.
 - Master near -14 LUFS with true peak at or below -1.5 dBTP. **Measure the final encoded file,** not just the WAV.
 - Never fade the last spoken word.
+- **Measure the effects against the voice, not the master.** Keep `stem-voice` and `stem-sfx` and write the gains the mix applied to `assets/audio/mix-levels.json`; QA then reports the effects in LU against the voice and the loudest hits in dB. Compare RMS, never peaks: the limiter flattens every hit to the same ceiling. Defaults that warn (stem hits +15 dB, integrated +3 LU) are starting points; set your own in `reel.json` `audio`.
 
 ## Other formats
 

@@ -14,9 +14,15 @@ plan is approved and still matches. Projects created before Gate B have no such 
    cost per `docs/TOOLS-AND-API-KEYS.md`, with permission), then local silence and mistake cuts (Mode B owner rules).
 3. **Story and openings**: hook, payoff, CTA; the existing openings rule (one rough opening plus two written
    alternatives, [modes.md](modes.md)). Before approval, show the rough opening in Studio preview or as static
-   snapshots (`npx hyperframes snapshot --describe false`), never as a `render-reel` draft.
-4. **One visual world**: ground, light, material, type and the motif that recurs (`motionmaxxing/references/world.md`;
-   `video-storytelling` for persistent-world thinking). Record it in `reel.json` `direction` and `DESIGN.md`.
+   snapshots (`npx hyperframes snapshot --describe false`), never as a `render-reel` draft. Where it is feasible
+   without paid production, also prepare three storyboard keyframes or equivalent static concepts (the hook, the
+   hero beat, one more representative scene) so the person approves pictures, not only prose.
+   If the person supplied a reference video, analyse it first (`short-form-edit/references/reference-analysis.md`):
+   separate the techniques worth adopting from its distinctive styling, and list which ideas you adopt and why.
+   Without a reference, plan normally.
+4. **One visual world**: ground, light, material, type, and any motif that recurs if one helps
+   (`motionmaxxing/references/world.md`; `video-storytelling` for persistent-world thinking). Decide what the visuals
+   do with `short-form-edit/references/visual-principles.md`. Record it in `reel.json` `direction` and `DESIGN.md`.
 5. **Each scene's visual**: `visualPurpose`, `brollMode`, `evidenceType`, and for every shown visual a specific
    `visualIntent` (what happens on screen, what the viewer understands) and an `asset` plan with `whyThis`.
    Talking-head holds are `performance` with `brollMode: none`; they need no motion and no carry.
@@ -86,11 +92,21 @@ Present this in the conversation (keep it short) and save the same facts in `DES
 
 1. **Mode, profile, length** and the one-line idea.
 2. **Hook**: the chosen opening and the two alternatives, one line each; why the chosen one.
-3. **World**: ground, light, type, the recurring motif.
+3. **World**: ground, light, type, and the recurring motif if there is one. With a reference: the techniques adopted
+   and why, and what was deliberately not borrowed.
 4. **Scene by scene, what the viewer sees** (`preflight-reel` prints the table): purpose, mode, evidence, intent, and
    why each visual is meaningful rather than generic.
-5. **Planned callbacks**: what recurs and how it changes. Say plainly that they are planned and built per scene, not
-   verified rendered transitions.
+5. **How the story works visually**, answered from the plan's existing fields (`preflight-reel` prints a read-only
+   "Story mechanics" block to help; nothing in it is a target):
+   - the primary visual mechanism, and what the viewer sees happen rather than simply appear (`visualIntent`, `events`);
+   - which objects or concepts return and how they change, if any (`motifs`, `carryIn`/`carryOut`);
+   - how the layouts serve attention (`layout`, `visualPurpose`);
+   - which numerical claims deserve a visual demonstration and which are fine as speech;
+   - where anticipation, motion and stillness go (`events`, `holdReason`);
+   - why each visual beats generic footage or a title card (`asset.whyThis`).
+   Plain footage, a simple demonstration or the speaker's face are valid answers.
+   Planned callbacks: say plainly that they are planned and built per scene, not verified rendered transitions.
+   Keyframes: the three static concepts, if prepared.
 6. **Authentic versus simulated**: which visuals are real evidence and which are reconstructed, illustrative or
    simulated.
 7. **Assets and cost**: the asset-gap table, paid calls planned, and the provider and spending limit you are asking for.

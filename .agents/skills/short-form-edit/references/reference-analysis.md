@@ -27,3 +27,29 @@ that every new edit needs the same number of cuts.
 
 Write which mechanisms fit this recording and which would distract from it.
 Design new copy, scenes, and motion from the student's own transcript and brief.
+
+## Look at the real frames
+
+A reference is optional: without one, plan from the transcript, the brief and
+[visual-principles.md](visual-principles.md). With one, study its frames and timing, not a summary:
+
+```bash
+ffmpeg -i ref.mp4 -vf "fps=2,scale=180:320,tile=10x5" -frames:v 1 sheet.jpg            # 2 fps contact sheet
+ffmpeg -ss 2.6 -i ref.mp4 -frames:v 1 frame.jpg                                         # full-size frames
+ffmpeg -ss 1.8 -t 1.6 -i ref.mp4 -vf "fps=10,scale=162:-1,tile=8x2" -frames:v 1 strip.jpg # easing and anticipation
+ffmpeg -i ref.mp4 -vf "select='gt(scene,0.25)',showinfo" -an -f null - 2>&1 | grep pts_time # cut times
+```
+
+Record per change: the layout (face, split, full-screen illustration, UI), what acts on what, which objects return in
+a new state, how numbers are shown, where it holds still, and how captions and type are sized. Do not describe sound
+you did not hear.
+
+## Separate technique from styling
+
+| Adopt (technique) | Adapt (to this subject and brand) | Do not borrow |
+| --- | --- | --- |
+| e.g. a crowd that thins while a counter steps down | the speaker's own numbers as quantities in this project's world | the reference's characters, mascot, palette, typefaces, assets, copy |
+
+Present the adopted ideas at Gate B with one line each on why they suit this reel, and the three keyframes or
+equivalent static concepts (create-reel `references/preflight.md`). Imitating a reference's distinctive characters or
+assets is never the default; do it only when the person asks and has the rights.

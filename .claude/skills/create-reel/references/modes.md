@@ -10,6 +10,12 @@
    progress patterns, persistent HUDs). If the brief asks for one of those, the brief wins; say so in the QA notes.
 4. Herk's `MOTION_PHILOSOPHY.md` and the owner skill's house style.
 
+Style (caption look, speaker time, split position, motion density, motifs) follows its own order: the brief, the
+project's `DESIGN.md`, `brand/DESIGN.md`, then `docs/EDITING-PLAYBOOK.md` defaults. These are preferences per brand or
+project, never global rules; one reel's look (for example a character or a palette that worked) stays in that
+project unless the person asks to make it the brand's. In every mode, decide what the visuals do with
+`short-form-edit/references/visual-principles.md`: decision principles, not required effects.
+
 Known conflicts, resolved:
 
 | Topic | Source A | Source B | Reel Studio rule |

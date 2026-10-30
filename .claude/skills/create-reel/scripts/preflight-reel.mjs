@@ -7,7 +7,8 @@
 //                --approved-by "<name>" [--paid-provider <name> --spend-limit "<limit>" [--max-calls N]] [--note "..."]
 //
 // Without --approve it only reads: it checks assets/plan.json (schemaVersion 2) at the preflight stage (no asset files
-// needed yet), and reports the fingerprint, simulated and authentic scenes, planned paid assets and planned callbacks.
+// needed yet), and reports the fingerprint, simulated and authentic scenes, planned paid assets, planned callbacks and
+// a read-only story-mechanics summary (layouts, recurring motifs, scenes naming numbers, holds; information only).
 // --approve re-runs that check and writes reel.json "preflight" only when the plan is valid and the --fingerprint prefix
 // matches the plan the person reviewed. Run it only after the person approved in a later message than the report, never
 // on the agent's own judgement. It is a workflow safeguard, not proof of who approved: anyone who can edit the project
@@ -73,6 +74,59 @@ export function approvePreflight(dir, { fingerprint, approvedBy, paidProvider, s
   return reel.preflight;
 }
 
+// Story mechanics: a read-only summary of decisions already in the schema v2 plan, for the person reviewing Gate B.
+// Information only: nothing here is required, scored or part of the fingerprint. No layout mix, object count,
+// character, animated-number treatment or speaker time is expected; a reel of plain footage is as valid as one full
+// of graphics. Speaker layouts are face, split and broll-split; paper and broll take the full frame.
+export function storyMechanics(plan) {
+  const scenes = Array.isArray(plan?.scenes) ? plan.scenes : [];
+  const events = Array.isArray(plan?.events) ? plan.events : [];
+  const dur = (s) => Math.max(0, Number(s.end) - Number(s.start)) || 0;
+  const round = (x) => Math.round(x * 100) / 100;
+  const layouts = {};
+  for (const s of scenes) {
+    const k = s.layout || '?';
+    layouts[k] ||= { scenes: 0, seconds: 0 };
+    layouts[k].scenes++; layouts[k].seconds = round(layouts[k].seconds + dur(s));
+  }
+  const SPEAKER = new Set(['face', 'split', 'broll-split']);
+  const hasSpeaker = scenes.some((s) => SPEAKER.has(s.layout));
+  let longest = null;
+  if (hasSpeaker) {
+    let run = 0, ids = [];
+    longest = { seconds: 0, scenes: [] };
+    for (const s of scenes) {
+      if (SPEAKER.has(s.layout)) { run = 0; ids = []; continue; }
+      ids.push(s.id); run += dur(s);
+      if (run > longest.seconds) longest = { seconds: round(run), scenes: [...ids] };
+    }
+  }
+  const motifs = {};
+  for (const s of scenes) for (const m of s.motifs || []) (motifs[m] ||= []).push(s.id);
+  const motifReturns = Object.entries(motifs).filter(([, ids]) => ids.length > 1).map(([motif, ids]) => ({ motif, scenes: ids }));
+  const numericScenes = scenes.filter((s) => /\d/.test(`${s.anchor || ''} ${s.visualIntent || ''}`))
+    .map((s) => ({ id: s.id, brollMode: s.brollMode || null, layout: s.layout || null }));
+  const withEvents = new Set(events.map((e) => e.visual));
+  const purposes = {};
+  for (const s of scenes) purposes[s.visualPurpose || '?'] = (purposes[s.visualPurpose || '?'] || 0) + 1;
+  return {
+    layouts, hasSpeaker, longestWithoutSpeaker: longest, purposes, motifReturns, numericScenes,
+    holds: scenes.filter((s) => s.holdReason).map((s) => s.id),
+    scenesWithoutEvents: scenes.filter((s) => !withEvents.has(s.id)).map((s) => s.id),
+    events: events.length,
+  };
+}
+
+function printMechanics(sm) {
+  console.log('\nStory mechanics (information for the reviewer; nothing here is required):');
+  console.log(`  Layouts: ${Object.entries(sm.layouts).map(([k, v]) => `${k} ${v.scenes} (${v.seconds} s)`).join(', ') || 'none'}`);
+  if (sm.hasSpeaker) console.log(`  Longest stretch without the speaker: ${sm.longestWithoutSpeaker.seconds} s${sm.longestWithoutSpeaker.scenes.length ? ` (${sm.longestWithoutSpeaker.scenes.join(', ')})` : ''}`);
+  console.log(`  Purposes: ${Object.entries(sm.purposes).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`);
+  console.log(`  Recurring motifs: ${sm.motifReturns.map((r) => `${r.motif} (${r.scenes.join(', ')})`).join('; ') || 'none'}`);
+  console.log(`  Scenes naming a number: ${sm.numericScenes.map((n) => `${n.id} ${n.brollMode || '?'}`).join(', ') || 'none'}${sm.numericScenes.length ? ' (say which deserve a visual demonstration and which are fine as speech)' : ''}`);
+  console.log(`  Holds with a reason: ${sm.holds.join(', ') || 'none'}; ${sm.events} planned visual event(s); scenes without events: ${sm.scenesWithoutEvents.join(', ') || 'none'}`);
+}
+
 function printReport(r) {
   const { plan, status } = r, v = status.validation, m = v?.metrics || {};
   const scenes = plan?.scenes || [];
@@ -90,6 +144,7 @@ function printReport(r) {
   console.log(`Simulated (not real evidence): ${m.simulatedScenes?.join(', ') || 'none'}`);
   console.log(`Paid assets planned: ${m.paidAssets?.join(', ') || 'none'}${m.paidAssets?.length ? ` (approved scope: ${r.reel.preflight?.paidScope ? JSON.stringify(r.reel.preflight.paidScope) : 'none; ask for a provider and spending limit'})` : ''}`);
   console.log(`Planned callbacks (declared, not verified as rendered transitions): ${(m.callbacks || []).map(c => `${c.from} -> ${c.to} ${c.motif}${c.element ? ` #${c.element}` : ''}${c.adjacent ? '' : ' (callback)'}`).join(', ') || 'none'}`);
+  if (scenes.length) printMechanics(storyMechanics(plan));
   const approval = r.reel.preflight;
   console.log(`\nApproval: ${status.ok ? `APPROVED by ${approval.approvedBy} at ${approval.approvedAt}; the current plan matches` : approval?.status === 'approved' ? 'approved earlier, but no longer valid:' : 'not approved'}`);
   if (!status.ok) for (const p of status.problems) if (!r.errors.includes(p)) console.log(`  - ${p}`);
@@ -114,7 +169,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       console.log('Recorded in reel.json "preflight". This is a workflow safeguard, not proof of identity.');
     } else {
       const r = preflightReport(o._[0]);
-      if (o.json) console.log(JSON.stringify({ required: r.status.required, valid: !r.errors.length, approved: r.status.ok, errors: r.errors, problems: r.status.problems, warnings: r.status.warnings, fingerprint: r.status.fingerprint ?? null, metrics: r.status.validation?.metrics ?? null }, null, 2));
+      if (o.json) console.log(JSON.stringify({ required: r.status.required, valid: !r.errors.length, approved: r.status.ok, errors: r.errors, problems: r.status.problems, warnings: r.status.warnings, fingerprint: r.status.fingerprint ?? null, metrics: r.status.validation?.metrics ?? null, storyMechanics: r.plan?.scenes ? storyMechanics(r.plan) : null }, null, 2));
       else printReport(r);
       process.exitCode = r.errors.length ? 1 : 0;
     }

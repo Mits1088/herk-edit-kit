@@ -24,6 +24,12 @@ export const MODES = ['faceless', 'footage', 'brand'];
 // A CSS-safe composition ID derived from the slug (ids may not start with a digit in a #selector).
 export const compositionId = slug => (/^[a-z]/.test(slug) ? slug : `reel-${slug}`);
 
+// The profile's safe area as CSS custom properties (px), so captions follow the profile, not one fixed coordinate.
+export function safeVars(profile) {
+  const r = safeRect(profile);
+  return `--safe-top:${r.y0}px;--safe-bottom:${profile.height - r.y1}px;--safe-left:${r.x0}px;--safe-right:${profile.width - r.x1}px`;
+}
+
 export function fillTemplate(template, values) {
   const out = template.replace(/\{\{([A-Z]+)\}\}/g, (m, k) => {
     if (!(k in values)) throw new Error(`Template value missing: ${k}`);
@@ -42,6 +48,7 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
     ID: id, TITLE: escape(title), WIDTH: profile.width, HEIGHT: profile.height, FPS: profile.fps, DURATION: duration,
     FONTLINK: primary ? `<link rel="stylesheet" href="${FONT_CSS}">\n` : '',
     FONTFAMILY: primary ? `"${primary}",Arial,sans-serif` : 'Arial,sans-serif',
+    SAFEVARS: safeVars(profile),
   }));
   copyFileSync(join(skillDir, 'runtime/reel-eases.js'), join(dir, 'assets/reel-eases.js'));
 

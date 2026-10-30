@@ -56,6 +56,9 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
    that skill): the idea, one visual world, the hook in the first second, the ending. Openings: one rough animated
    opening plus two concise written alternatives (static preview frames of the alternatives when the visual
    direction is uncertain); Mode C may develop three animated openings. Details: [modes.md](references/modes.md).
+   Decide what the visuals do with `short-form-edit/references/visual-principles.md` (decisions, not required
+   effects). If the person supplied a reference video, analyse it first and adopt its techniques, not its styling
+   (`short-form-edit/references/reference-analysis.md`); without one, plan normally.
    Record the chosen direction in `reel.json` `"direction"`: `hook`, `coreClaim`, `heroBeat`, `motif`, `style`.
    Write `DESIGN.md` and `assets/plan.json` with `"schemaVersion": 2`: each scene's purpose, B-roll mode, evidence
    type, a specific visual intent and an asset plan, plus any motifs and planned callbacks
@@ -97,6 +100,9 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
 13. Deliver: `renders/final.mp4` (or the pending candidate), the project folder, and `QA.md` with an honest
     summary using PASS / FAIL / WARNING / NOT TESTED / NOT APPLICABLE. Never claim a check ran that did not, that
     you listened to audio, or that loudness numbers or transcript checks prove speech sounds natural.
+14. After the person's feedback, write the short retrospective in `short-form-edit` ("House style and notes"): what
+    worked, what failed, why, and whether it is a general principle, a technical defect or a project preference.
+    Promote only the first two; one reel's look stays in its project.
 
 Revisions reuse the existing project and render the next version number; earlier renders are never overwritten.
 

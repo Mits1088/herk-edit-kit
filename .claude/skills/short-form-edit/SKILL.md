@@ -26,10 +26,20 @@ Read `docs/EDITING-PLAYBOOK.md` before planning. It holds Nate's measured reel
 style (pacing, layouts, captions, B-roll order, sound palette), the raw-reel,
 long-to-Short, and narrated-explainer variants, and the lessons that cost time.
 Use it as the default when the user gives no style; the user's brief wins.
+Style precedence: the brief, then the project's DESIGN.md, then `brand/DESIGN.md`,
+then the playbook. Caption style, speaker time, split position and motion density
+are style choices, not rules.
 
 When the user gives a note on a draft, fix the edit, then offer to write the
 note into the relevant skill or reference as a rule, check, or script change, so
 the next edit starts from it. Record the note and the resulting rule together.
+
+After a finished reel and the person's feedback, write a short retrospective: what
+visually worked, what failed, the underlying reason, and which kind of lesson it is:
+a general editing principle, a technical defect, or a project-specific preference.
+Promote only the first two, with the evidence, into skills, references or checks.
+Keep preferences in the project's DESIGN.md (or `brand/DESIGN.md` when the person
+wants them for every reel); never turn one project's style into a global rule.
 
 ## Establish the edit
 
@@ -73,7 +83,11 @@ the reel or contact anyone without explicit authorization.
 ## Design the emotional journey
 
 Write `DESIGN.md` and a beat plan before HTML. Identify the hook, open loop,
-escalation, evidence, payoff, and CTA. Give every shot a reason to exist. In a
+escalation, evidence, payoff, and CTA. Give every shot a reason to exist.
+Decide what the visuals do with [visual-principles.md](references/visual-principles.md):
+cause and effect, continuity, attention-led layout, visualised explanation,
+intentional pacing, hierarchy, and a job for every major visual. They are
+decisions, not effects; plain footage or the speaker's face often wins. In a
 Reel Studio project the plan is `assets/plan.json` schema v2: each scene's purpose,
 B-roll mode, evidence type and a specific visual intent ([plan-schema.md](references/plan-schema.md)).
 
@@ -155,8 +169,12 @@ a distinct opening-hook gate in the verification report.
   at the payoff. Show relationships and transformations, not just successive
   title cards. A viewer watching muted should still follow the central idea.
 - Keep text within a phone-safe region. For 1080x1920, start with x=90..930,
-  y=200..1600, reserving the right edge and bottom for social UI. Adjust captions
-  to actual face position in every layout. Use short phrase groups and exact
+  y=200..1600, reserving the right edge and bottom for social UI; in a Reel Studio
+  project use the profile's safe area (`create-reel/profiles.json`, exposed to new
+  compositions as `--safe-*` CSS variables) so ads and other formats get theirs.
+  Place captions per layout from those bounds, not from one fixed pixel value,
+  and keep characters and key action out of the right-hand button zone. Adjust
+  captions to actual face position in every layout. Use short phrase groups and exact
   word onsets; keyword emphasis must preserve the speaker's wording.
 
 For a minimal, Apple-style brief, read

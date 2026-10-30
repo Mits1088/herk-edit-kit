@@ -170,6 +170,117 @@ export function audioChecks(run, analysis, { duration, required }) {
   return out;
 }
 
+// ---------- audio balance: how loud the sound effects sit against the voice. Measurements, not listening.
+// Two sources, reported separately:
+//  1. Stems (preferred): assets/audio/stem-voice.wav and stem-sfx.wav plus the gains the mix applied to them
+//     (assets/audio/mix-levels.json {"voice": g, "sfx": g} or reel.json "audio": {"stemGains": {...}}). Then the effects
+//     level in the mix is computed exactly: integrated loudness and the loudest 150 ms hits against the voice.
+//  2. The encoded mix (diagnostic only): RMS in 150 ms windows at each planned visual event against the median of
+//     voice-only windows (transcript words with no event nearby). Voice and effects overlap there, so this estimates.
+// Thresholds are starting points, not limits, set per reel in reel.json "audio": {"sfxHitMaxOverVoiceDb": 15,
+// "mixHitMaxOverVoiceDb": 10, "sfxMaxOverVoiceLU": 3}. Calibrated on Caveman v5, whose v002 mix the person judged too
+// loud and whose v003 mix was the correction: stems hits +17.1 / +13.2 dB, stems integrated +4.8 / +0.9 LU, encoded
+// event windows +12.0 / +8.3 dB. The two sources read differently (the mix window also holds the voice), hence two
+// hit limits. Peak level is useless here: the master limiter flattens every hit to the same ceiling.
+export const AUDIO_BALANCE_DEFAULTS = { sfxHitMaxOverVoiceDb: 15, mixHitMaxOverVoiceDb: 10, sfxMaxOverVoiceLU: 3 };
+const db = (x) => (x > 0 ? 20 * Math.log10(x) : -Infinity);
+export function rmsDb(samples, sr, t0, dur) {
+  const a = Math.max(0, Math.floor(t0 * sr)), b = Math.min(samples.length, Math.floor((t0 + dur) * sr));
+  if (b <= a) return -Infinity;
+  let s = 0; for (let i = a; i < b; i++) s += samples[i] * samples[i];
+  return db(Math.sqrt(s / (b - a)));
+}
+const median = (xs) => { const v = xs.filter(Number.isFinite).sort((p, q) => p - q); return v.length ? v[Math.floor(v.length / 2)] : null; };
+// Voice level: median RMS of 150 ms windows inside spoken words, optionally only those far from any event.
+function voiceLevel(samples, sr, words, events = [], keepClear = 0) {
+  const w = [];
+  for (const x of words || []) {
+    const s = Number(x.start), e = Number(x.end); if (!(e - s >= 0.15)) continue;
+    const mid = (s + e) / 2 - 0.075;
+    if (keepClear && events.some((t) => Math.abs(t - mid) < keepClear)) continue;
+    w.push(rmsDb(samples, sr, mid, 0.15));
+  }
+  return median(w);
+}
+// Loudest 150 ms hits: windows starting at each event time (and 50 ms later) on the given signal.
+function hits(samples, sr, events) {
+  return events.map((t) => ({ t, db: Math.max(rmsDb(samples, sr, t, 0.15), rmsDb(samples, sr, t + 0.05, 0.15)) })).filter((h) => Number.isFinite(h.db)).sort((a, b) => b.db - a.db);
+}
+export function audioBalance({ mix = null, sr = 16000, events = [], words = [], stems = null, gains = null, limits = {} } = {}) {
+  const L = { ...AUDIO_BALANCE_DEFAULTS, ...limits }, out = [];
+  const fmt = (h, ref) => `${h.t.toFixed(2)} s +${(h.db - ref).toFixed(1)} dB`;
+  if (stems?.voice && stems?.sfx && gains && Number(gains.voice) > 0 && Number(gains.sfx) > 0) {
+    const gv = db(Number(gains.voice)), gs = db(Number(gains.sfx));
+    const v = voiceLevel(stems.voice, sr, words);
+    const hs = hits(stems.sfx, sr, events.length ? events : []).map((h) => ({ ...h, db: h.db + gs }));
+    const ref = v === null ? null : v + gv;
+    const integrated = stems.lufs && Number.isFinite(stems.lufs.voice) && Number.isFinite(stems.lufs.sfx) ? (stems.lufs.sfx + gs) - (stems.lufs.voice + gv) : null;
+    const over = ref === null || !hs.length ? null : hs[0].db - ref;
+    const loud = (over !== null && over > L.sfxHitMaxOverVoiceDb) || (integrated !== null && integrated > L.sfxMaxOverVoiceLU);
+    out.push(['Audio', 'sound effects against the voice (stems with mix gains)', ref === null ? 'NOT TESTED' : loud ? 'WARNING' : 'PASS',
+      ref === null ? 'no spoken words long enough to measure the voice stem' :
+        `${integrated !== null ? `effects ${integrated >= 0 ? '+' : ''}${integrated.toFixed(1)} LU vs voice (integrated); ` : ''}loudest hits ${hs.slice(0, 3).map((h) => fmt(h, ref)).join(', ') || 'none at planned events'}; starting points: hits <= +${L.sfxHitMaxOverVoiceDb} dB, integrated <= +${L.sfxMaxOverVoiceLU} LU (reel.json "audio")`, { kind: 'technical' }]);
+  } else if (stems?.voice && stems?.sfx) {
+    out.push(['Audio', 'sound effects against the voice (stems with mix gains)', 'NOT TESTED', 'stems found but not the gains the mix applied: add assets/audio/mix-levels.json {"voice": g, "sfx": g}', { kind: 'info' }]);
+  }
+  if (mix) {
+    const voice = voiceLevel(mix, sr, words, events, 0.6);
+    const hs = hits(mix, sr, events);
+    if (voice === null || !hs.length) out.push(['Audio', 'effects hits against the voice in the encoded mix (diagnostic)', 'NOT APPLICABLE', !hs.length ? 'no planned events to measure' : 'no voice-only stretch to measure', { kind: 'info' }]);
+    else {
+      const over = hs[0].db - voice;
+      out.push(['Audio', 'effects hits against the voice in the encoded mix (diagnostic)', over > L.mixHitMaxOverVoiceDb ? 'WARNING' : 'PASS',
+        `loudest event windows ${hs.slice(0, 3).map((h) => fmt(h, voice)).join(', ')} over voice-only RMS (voice and effects overlap here: an estimate, not proof; starting point <= +${L.mixHitMaxOverVoiceDb} dB; listen)`, { kind: 'info' }]);
+    }
+  }
+  return out;
+}
+
+// ---------- overlay leaks and footage colour integrity (rows from frames.mjs measurements)
+export function overlayLeakRow(results) {
+  const n = results.length, leaks = results.filter((r) => r.leak), errors = results.filter((r) => r.error);
+  if (!n) return ['Visual', 'no layer paints while its clip is hidden (pixel test)', 'NOT APPLICABLE', 'no sample times', { kind: 'technical' }];
+  if (errors.length) return ['Visual', 'no layer paints while its clip is hidden (pixel test)', 'FAIL', `checker error: ${errors[0].error}`, { kind: 'checker' }];
+  return ['Visual', 'no layer paints while its clip is hidden (pixel test)', leaks.length ? 'FAIL' : 'PASS',
+    leaks.length ? `${leaks.length} of ${n} times: ${leaks.slice(0, 4).map((l) => `${l.t.toFixed(2)} s ${l.count} px (max ${l.max}/255) in [${l.box.join(',')}], hidden clips there include ${l.hiddenClips.slice(0, 4).join(', ')}`).join('; ')}. Something under a hidden clip still paints (for example an SVG filter or blend mode): bake it into an image, or check it in the encoded frames`
+      : `${n} sample times: hidden clips paint nothing`, { required: true, kind: 'technical' }];
+}
+// Encoded talking-head frames against the footage-only reference, per horizontal band, outside intentional overlays.
+// The encoder's colour path and the browser's differ by a roughly uniform offset (about -11 luma on the Caveman
+// renders, in every band), so the test is relative: a band that departs from the others is a local tint (Caveman v4's
+// leak: top band +20.7, bottom -11.2, a spread of 32 against about 2 once fixed). A large uniform offset is a WARNING
+// to look at, not a failure. A tint covering the whole frame evenly is not separable from that offset here; the
+// pixel leak test above is the primary check for it.
+export const FOOTAGE_COLOUR_LIMITS = { spread: 12, global: 25, minCoverage: 0.15 };
+export function footageColourRow(results, limits = {}) {
+  const L = { ...FOOTAGE_COLOUR_LIMITS, ...limits };
+  const check = 'talking-head footage keeps its colour (encoded frame vs footage-only reference)';
+  if (!results.length) return ['Visual', check, 'NOT APPLICABLE', 'no face scenes in the plan, or no render', { kind: 'technical' }];
+  const errors = results.filter((r) => r.error);
+  if (errors.length) return ['Visual', check, 'FAIL', `checker error: ${errors[0].error}`, { kind: 'checker' }];
+  const local = [], global = [];
+  let worstSpread = 0, offsets = [];
+  for (const r of results) {
+    const bands = (r.bands || []).filter((b) => b.coverage >= L.minCoverage);
+    if (bands.length < 2) continue;
+    const d = bands.map((b) => b.dLuma).sort((a, b) => a - b);
+    const spread = d[d.length - 1] - d[0], mid = d[Math.floor(d.length / 2)];
+    worstSpread = Math.max(worstSpread, spread); offsets.push(mid);
+    if (spread > L.spread) {
+      const by = (r.bands || []).map((b) => (b.coverage >= L.minCoverage ? `${b.dLuma >= 0 ? '+' : ''}${Math.round(b.dLuma)}` : '·')).join(' ');
+      local.push(`${r.t.toFixed(2)} s luma by band, top to bottom: ${by} (spread ${spread.toFixed(1)})`);
+    }
+    if (Math.abs(mid) > L.global) global.push(`${r.t.toFixed(2)} s ${mid >= 0 ? '+' : ''}${mid.toFixed(1)}`);
+  }
+  if (!offsets.length) return ['Visual', check, 'NOT TESTED', 'overlays cover most of every face frame; nothing left to compare', { kind: 'technical' }];
+  const status = local.length ? 'FAIL' : global.length ? 'WARNING' : 'PASS';
+  const offset = offsets.sort((a, b) => a - b)[Math.floor(offsets.length / 2)];
+  return ['Visual', check, status,
+    local.length ? `${local.slice(0, 4).join('; ')} (band spread limit ${L.spread}). Part of the footage is tinted outside every visible overlay: compare the side-by-side frames in footage/`
+      : `${results.length} face frame(s); bands agree within ${worstSpread.toFixed(1)} luma; uniform offset ${offset >= 0 ? '+' : ''}${offset.toFixed(1)} (encoder colour path)${global.length ? `, large at ${global.slice(0, 3).join(', ')}: look at footage/` : ''}; grading on the video and visible overlays are allowed`,
+    { required: true, kind: 'technical' }];
+}
+
 // ---------- Mode B speech integrity: compare the retained edit against the verified source transcript.
 // A word scan for risky removals (negations, qualifiers, numbers). It flags cuts for a person; it does not judge meaning.
 const NEGATIONS = new Set(['not', 'no', 'never', 'none', 'nobody', 'nothing', 'neither', 'nor', 'without', 'cannot', 'nowhere', 'hardly', 'barely']);

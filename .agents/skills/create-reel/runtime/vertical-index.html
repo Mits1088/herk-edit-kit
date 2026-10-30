@@ -6,7 +6,8 @@
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:{{WIDTH}}px;height:{{HEIGHT}}px;overflow:hidden;background:#0b0d10;color:#f2efe9;font-family:{{FONTFAMILY}}}
-#{{ID}}{position:relative;width:{{WIDTH}}px;height:{{HEIGHT}}px;overflow:hidden;background:#0b0d10}
+/* The profile's safe area in px (profiles.json): place captions and key text from these, per layout. */
+#{{ID}}{position:relative;width:{{WIDTH}}px;height:{{HEIGHT}}px;overflow:hidden;background:#0b0d10;{{SAFEVARS}}}
 /* Ground: a lit surface, not a flat swatch. Oversized so its slow drift never shows an edge. */
 .ground{position:absolute;left:-120px;top:-160px;width:1320px;height:2240px;background:radial-gradient(ellipse 70% 45% at 50% 38%,#2a2f36 0%,#15181c 55%,#0b0d10 100%)}
 .light{position:absolute;left:-200px;top:520px;width:1480px;height:900px;background:radial-gradient(ellipse at center,rgba(255,196,140,.22),transparent 65%)}

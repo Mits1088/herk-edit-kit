@@ -31,8 +31,9 @@ import {
   makeCollector, evaluate, sha256File, isCandidateFile, qaDirFor, humanApprovalRequired, interpretLook, interpretLint,
   probeChecks, decodeCheck, AUDIO_FILTER, parseAudioAnalysis, audioChecks, speechIntegrity, planChecks, tailText, writeJson,
   reportMarkdown, writeProjectSummary, NETWORK_FONT, networkFontRefs, fontChecks, missingDirection,
-  preflightStatus, readPreflightInputs, visualPlanRow,
+  preflightStatus, readPreflightInputs, visualPlanRow, audioBalance, overlayLeakRow, footageColourRow,
 } from './qa-core.mjs';
+import { overlayLeakAt, footageReference, bandCompare } from './frames.mjs';
 import { validateVisualPlan } from '../../short-form-edit/scripts/validate-plan.mjs';
 import { faceCovers } from './fonts.mjs';
 import { planSamples, planEvents, collectPageEvents } from './samples.mjs';
@@ -155,6 +156,7 @@ const callbacks = (preInputs.plan?.schemaVersion >= 2 ? preInputs.plan.scenes ||
       : `${callbacks.length} planned callback(s), ${named.length} with a named element found; ${callbacks.length - named.length} conceptual`, { kind: 'info' });
 }
 let pageEvents = [];
+const domSheets = []; // review folders made during the DOM pass, listed with the render's sheets
 {
   const require = createRequire(join(kitRoot, 'package.json'));
   let chromium = null;
@@ -246,6 +248,37 @@ let pageEvents = [];
       const ev = [...uniq(found.eventClip), ...uniq(found.eventUnsafe)];
       add('Layout', 'text at event boundaries and during transitions', ev.length ? 'WARNING' : targeted.length ? 'PASS' : 'NOT APPLICABLE',
         ev.length ? `review (entries and exits may be intentional): ${ev.slice(0, 5).join('; ')}` : `${targeted.length} targeted sample times from ${pageEvents.length + planEventsFor().length} events`);
+
+      // Overlay leaks: at every sample time (even and event-targeted, including scene boundaries), does anything paint
+      // while its clip is hidden the way the runtime hides it? Real pixels, not the DOM's word for it.
+      const leakResults = [];
+      for (const { t } of times) leakResults.push(await overlayLeakAt(page, comp.id, t));
+      add(...overlayLeakRow(leakResults));
+
+      // Footage colour: talking-head frames of the encoded render against a footage-only reference of the same frame
+      // (every overlay removed, the video's own filters kept, visible overlays left out of the comparison).
+      const faceScenes = (preInputs.plan?.scenes || []).filter(s => s.layout === 'face');
+      if (render && faceScenes.length && /<video\b/i.test(html)) {
+        const footDir = join(outDir, 'footage');
+        rmSync(footDir, { recursive: true, force: true });
+        mkdirSync(footDir, { recursive: true });
+        const colour = [];
+        for (const s of faceScenes) {
+          const frame = Math.round((Number(s.start) + Math.min(1, (Number(s.end) - Number(s.start)) / 2)) * fps), t = frame / fps;
+          const ref = await footageReference(page, comp.id, t);
+          if (!ref.png) continue;
+          const stem = join(footDir, `${s.id}-${t.toFixed(2)}s`);
+          writeFileSync(`${stem}-reference.png`, ref.png);
+          const x = run('ffmpeg', ['-y', '-v', 'error', '-i', render, '-vf', `select=eq(n\\,${frame})`, '-frames:v', '1', `${stem}-encoded.png`]);
+          if (x.status !== 0 || !existsSync(`${stem}-encoded.png`)) { colour.push({ t, error: `could not extract frame ${frame}: ${tailText(x.stderr)}` }); continue; }
+          const cmp = await bandCompare(page, readFileSync(`${stem}-encoded.png`), ref.png, ref.masks, { bands: 6 });
+          colour.push({ t, scene: s.id, ...cmp });
+          run('ffmpeg', ['-y', '-v', 'error', '-i', `${stem}-encoded.png`, '-i', `${stem}-reference.png`, '-filter_complex', 'hstack=2,scale=1080:-2', '-q:v', '3', `${stem}-encoded-vs-reference.jpg`]);
+          rmSync(`${stem}-encoded.png`, { force: true }); rmSync(`${stem}-reference.png`, { force: true });
+        }
+        add(...footageColourRow(colour, reel?.qa?.footageColour || {}));
+        domSheets.push(relative(dir, footDir));
+      } else add(...footageColourRow([]));
     } catch (e) {
       add('Layout', 'DOM layout pass ran in headless Chrome', 'FAIL', `checker error: ${e.message.split('\n')[0]}`, { ...req, kind: 'checker' });
     } finally { if (browser) await browser.close(); }
@@ -289,7 +322,7 @@ if (footage) {
 
 // ---------- render
 const expectsAudio = /<audio\b/i.test(html) || (existsSync(join(dir, 'compositions')) && readdirSync(join(dir, 'compositions')).some(f => /<audio\b/i.test(readFileSync(join(dir, 'compositions', f), 'utf8'))));
-const sheets = [];
+const sheets = [...domSheets];
 if (!render) {
   if (sourceOnly) add('Render', 'rendered MP4', 'NOT APPLICABLE', '--source-only: source checks only; no render is verified by this run');
   else add('Render', 'rendered MP4', 'NOT TESTED', 'no render found; run render-reel.mjs', req);
@@ -302,6 +335,28 @@ if (!render) {
   if (hasAudio) {
     const r = run('ffmpeg', ['-hide_banner', '-nostats', '-i', render, '-vn', '-af', AUDIO_FILTER, '-f', 'null', '-']);
     for (const row of audioChecks(r, parseAudioAnalysis(r.stderr), { duration: comp.duration, required: footage })) add(...row);
+    // Effects against the voice: from the stems when they and the mix gains are known, and a diagnostic on the
+    // encoded mix at the planned events. Measurements only; a person still listens.
+    try {
+      const SR = 16000;
+      const pcm = (file) => {
+        const d = run('ffmpeg', ['-v', 'error', '-i', file, '-vn', '-ac', '1', '-ar', String(SR), '-f', 'f32le', '-'], { encoding: 'buffer' });
+        if (d.status !== 0 || !d.stdout?.length) return null;
+        const b = Buffer.from(d.stdout); return new Float32Array(b.buffer, b.byteOffset, Math.floor(b.length / 4));
+      };
+      const lufsOf = (file) => parseAudioAnalysis(run('ffmpeg', ['-hide_banner', '-nostats', '-i', file, '-af', 'ebur128', '-f', 'null', '-']).stderr).lufs;
+      const events = (preInputs.plan?.events || []).map(e => Number(e.time)).filter(Number.isFinite);
+      let words = [];
+      try { words = JSON.parse(readFileSync(join(dir, 'assets/transcript.json'), 'utf8')).words || []; } catch {}
+      const stemFile = (k) => join(dir, 'assets/audio', `stem-${k}.wav`);
+      let gains = reel?.audio?.stemGains || null;
+      try { gains ||= JSON.parse(readFileSync(join(dir, 'assets/audio/mix-levels.json'), 'utf8')); } catch {}
+      const stems = existsSync(stemFile('voice')) && existsSync(stemFile('sfx'))
+        ? { voice: pcm(stemFile('voice')), sfx: pcm(stemFile('sfx')), lufs: gains ? { voice: lufsOf(stemFile('voice')), sfx: lufsOf(stemFile('sfx')) } : null } : null;
+      for (const row of audioBalance({ mix: pcm(render), sr: SR, events, words, stems, gains, limits: reel?.audio || {} })) add(...row);
+    } catch (e) {
+      add('Audio', 'sound effects against the voice', 'FAIL', `checker error: ${e.message.split('\n')[0]}`, { kind: 'checker' });
+    }
   } else if (footage) add('Audio', 'ffmpeg audio analysis', 'NOT TESTED', 'no audio stream to measure', req);
 
   // Review clips and waveforms around every flagged cut (edited timeline), for a person to watch and hear.

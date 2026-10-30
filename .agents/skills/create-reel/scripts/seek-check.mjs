@@ -5,8 +5,10 @@
 //
 // Static checks: meta.json, root id, data-composition-id, data-width/height/duration and the window.__timelines key agree;
 // exactly one timeline registration and one GSAP script. Runtime checks (headless Chrome via Playwright): the registered
-// timeline is paused and as long as data-duration; every sample time renders the same pixels when reached forward,
-// backward, repeatedly, and in a shuffled order. Source scan warns about Math.random, Date, performance.now,
+// timeline is paused and as long as data-duration; every sample time renders the same animated state and pixels when
+// reached forward, backward, repeatedly, in a shuffled order, and on a freshly loaded page seeked straight to it. On a
+// mismatch it names the differing elements and properties, or, when only pixels differ, the region and the visible
+// elements there. These orders are the source of truth; a timeline-settling line in a composition never replaces them. Source scan warns about Math.random, Date, performance.now,
 // requestAnimationFrame, timers and CSS animations.
 // Exit: 0 PASS (warnings allowed), 1 FAIL, 2 bad usage.
 import { readFileSync, existsSync } from 'node:fs';
@@ -92,17 +94,24 @@ if (chromium && exe) {
       const times = frames.map(f => f / fps);
       // Seek, let Chrome paint (two animation frames), then fingerprint both the animated state and the pixels.
       // State = computed transform / opacity / visibility / filter of every element in the composition: the clock itself.
-      const shot = async t => {
-        const state = await page.evaluate(([id, time]) => new Promise(done => {
+      // Each element's row is kept (not only the hash) so a mismatch can name the elements and properties involved.
+      const PROPS = ['transform', 'opacity', 'visibility', 'display', 'filter', 'left', 'top', 'width', 'height', 'clipPath', 'color', 'backgroundColor', 'backgroundPosition'];
+      const shotOn = async (pg, t) => {
+        const rows = await pg.evaluate(([id, time, props]) => new Promise(done => {
           const tl = window.__timelines[id]; tl.pause(); tl.seek(time, false);
           const els = document.querySelectorAll(`[data-composition-id="${id}"], [data-composition-id="${id}"] *`);
-          const props = ['transform', 'opacity', 'visibility', 'display', 'filter', 'left', 'top', 'width', 'height', 'clipPath', 'color', 'backgroundColor', 'backgroundPosition'];
-          const sig = [...els].map(e => { const s = getComputedStyle(e); return props.map(p => s[p]).join('|') + '|' + e.textContent.length; }).join(';');
-          requestAnimationFrame(() => requestAnimationFrame(() => done(sig)));
-        }), [comp.id, t]);
-        const pixels = await page.screenshot({ type: 'png' });
-        return { s: createHash('sha256').update(state).digest('hex'), h: createHash('sha256').update(pixels).digest('hex') };
+          const name = e => {
+            const cls = typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+            const clip = e.closest('[data-start]');
+            return `${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}${cls}${clip && clip !== e && clip.id ? ` in #${clip.id}` : ''}`;
+          };
+          const out = [...els].map(e => { const s = getComputedStyle(e); return [name(e), ...props.map(p => s[p]), String(e.textContent.length)]; });
+          requestAnimationFrame(() => requestAnimationFrame(() => done(out)));
+        }), [comp.id, t, PROPS]);
+        const png = await pg.screenshot({ type: 'png' });
+        return { rows, s: createHash('sha256').update(rows.map(r => r.slice(1).join('|')).join(';')).digest('hex'), h: createHash('sha256').update(png).digest('hex'), png };
       };
+      const shot = t => shotOn(page, t);
       const hashes = new Map(times.map(t => [t, []]));
       const record = async (order, label) => { for (const t of order) hashes.get(t).push({ label, ...(await shot(t)) }); };
       await record(times, 'forward');
@@ -114,19 +123,67 @@ if (chromium && exe) {
       const shuffled = [...times];
       for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
       await record(shuffled, 'shuffled');
-      // Name which seek orders agree with each other at a mismatching frame, e.g. "forward | backward=repeat=shuffled".
+      // Fresh-page initialisation: a newly loaded page seeked straight to each sample, the way a render worker starts.
+      for (const t of times) {
+        const fresh = await browser.newPage({ viewport: { width: comp.width || 1080, height: comp.height || 1920 }, deviceScaleFactor: 1 });
+        try {
+          await fresh.goto(pathToFileURL(htmlPath).href, { waitUntil: 'load' });
+          await fresh.evaluate(() => document.fonts && document.fonts.ready);
+          hashes.get(t).push({ label: 'fresh', ...(await shotOn(fresh, t)) });
+        } finally { await fresh.close(); }
+      }
+      // Name which seek orders agree with each other at a mismatching frame, e.g. "forward=fresh | backward=repeat=shuffled".
       const groups = (t, key) => {
         const by = new Map();
         for (const x of hashes.get(t)) by.set(x[key], [...(by.get(x[key]) || []), x.label]);
         return [...by.values()].map(g => g.join('=')).join(' | ');
       };
-      const compare = (key, what) => {
-        const bad = times.filter(t => new Set(hashes.get(t).map(x => x[key])).size !== 1);
-        add(bad.length ? 'FAIL' : 'PASS', `identical ${what} at ${times.length} frames reached forward, backward, repeatedly and shuffled`,
-          bad.length ? `differs at ${bad.map(t => `${t.toFixed(3)} s (${groups(t, key)})`).join(', ')}` : `frames ${frames.join(', ')} @ ${fps} fps`);
+      // Which elements and properties differ between the first two disagreeing seek orders.
+      const explainState = t => {
+        const list = hashes.get(t), a = list[0], b = list.find(x => x.s !== a.s);
+        if (!b) return '';
+        if (a.rows.length !== b.rows.length) return `; element count differs (${a.label} ${a.rows.length}, ${b.label} ${b.rows.length})`;
+        const diffs = [];
+        for (let i = 0; i < a.rows.length && diffs.length < 12; i++) {
+          const ch = PROPS.map((p, k) => (a.rows[i][k + 1] !== b.rows[i][k + 1] ? `${p} ${a.label}=${a.rows[i][k + 1]} ${b.label}=${b.rows[i][k + 1]}` : null)).filter(Boolean);
+          if (ch.length) diffs.push(`${a.rows[i][0]}: ${ch.join(', ')}`);
+        }
+        return diffs.length ? `; differing elements: ${diffs.join(' ; ')}` : '';
       };
-      compare('s', 'animated state');
-      compare('h', 'pixels');
+      // Pixels can differ while the state matches (anti-aliasing, compositing layers, media decode). Then report where:
+      // the bounding box and count of pixels that differ by more than 2 levels, and the visible elements at its centre.
+      const explainPixels = async t => {
+        const list = hashes.get(t), a = list[0], b = list.find(x => x.h !== a.h);
+        if (!b) return '';
+        const d = await page.evaluate(async ([pa, pb]) => {
+          const load = async b64 => { const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob()); const c = new OffscreenCanvas(bmp.width, bmp.height); const g = c.getContext('2d'); g.drawImage(bmp, 0, 0); return g.getImageData(0, 0, bmp.width, bmp.height); };
+          const A = await load(pa), B = await load(pb);
+          let n = 0, max = 0, x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+          for (let i = 0; i < A.data.length; i += 4) {
+            const m = Math.max(Math.abs(A.data[i] - B.data[i]), Math.abs(A.data[i + 1] - B.data[i + 1]), Math.abs(A.data[i + 2] - B.data[i + 2]));
+            if (m > max) max = m;
+            if (m > 2) { n++; const p = i / 4, x = p % A.width, y = (p - x) / A.width; if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+          }
+          return { n, max, box: n ? [x0, y0, x1, y1] : null };
+        }, [a.png.toString('base64'), b.png.toString('base64')]);
+        if (!d.n) return `; ${a.label} vs ${b.label}: max difference ${d.max}/255, no pixel over 2 levels (sub-visible)`;
+        const [x0, y0, x1, y1] = d.box;
+        const at = await page.evaluate(([id, time, x, y]) => {
+          const tl = window.__timelines[id]; tl.seek(time, false);
+          return document.elementsFromPoint(x, y).filter(e => getComputedStyle(e).opacity !== '0' && getComputedStyle(e).visibility !== 'hidden')
+            .slice(0, 3).map(e => `${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}${typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/)[0] : ''}`);
+        }, [comp.id, t, Math.round((x0 + x1) / 2), Math.round((y0 + y1) / 2)]);
+        return `; ${a.label} vs ${b.label}: ${d.n} px differ (max ${d.max}/255) in [${x0},${y0},${x1},${y1}]${at.length ? `, visible there: ${at.join(', ')}` : ''}`;
+      };
+      const compare = async (key, what) => {
+        const bad = times.filter(t => new Set(hashes.get(t).map(x => x[key])).size !== 1);
+        const why = [];
+        for (const t of bad) why.push(`${t.toFixed(3)} s (${groups(t, key)})${key === 's' ? explainState(t) : await explainPixels(t)}`);
+        add(bad.length ? 'FAIL' : 'PASS', `identical ${what} at ${times.length} frames reached forward, backward, repeatedly, shuffled and on a fresh page`,
+          bad.length ? `differs at ${why.join(', ')}` : `frames ${frames.join(', ')} @ ${fps} fps`);
+      };
+      await compare('s', 'animated state');
+      await compare('h', 'pixels');
       const distinct = new Set(times.map(t => hashes.get(t)[0].h)).size;
       add(distinct > 1 ? 'PASS' : 'WARNING', 'the picture changes over time', `${distinct} distinct frames of ${times.length}`);
     }
