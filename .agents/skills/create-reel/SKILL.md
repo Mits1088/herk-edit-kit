@@ -75,24 +75,58 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
    gates (preview, draft) still apply; honor approvals already given for them. Uploads and transcription services
    need explicit permission first.
 6. Author or edit `index.html` and `compositions/`. Rules: [qa.md](references/qa.md#composition-contract).
+   Build pictures before motion: make a few representative scenes first (the hook, the hero beat, the scene most
+   likely to fall back on a generic panel) as their static hero frame at final fidelity, snapshot them
+   (`npx hyperframes snapshot --describe false`) and judge them at phone size (about 360 px wide) with sound off
+   against their `visualIntent` and the Gate B keyframes (`short-form-edit/references/quality-gates.md`, Layout and
+   Editorial variety). Animate a scene only once its frame reads; rebuild the ones that don't. Then build the rest
+   the same way.
 7. Validate source: `npm run qa:reel -- video-projects/<slug> --source-only`. Fix FAILs. Its best verdict is
    `SOURCE_VALIDATED`: the source passed, no video was checked. Preview in Studio
    (`npx hyperframes preview` from the project folder) when the owner skill's preview gate applies.
 8. Draft: `npm run render-reel -- video-projects/<slug> --draft` (quick checks only: decode, size, fps,
-   duration, audio stream). Run `npm run qa:reel -- video-projects/<slug> --render renders/<draft>.mp4` when you
-   need the review sheets for a draft.
-9. Look at the real frames: Read `look/sheet.jpg`, `safe-area-sheet.jpg` and `event-sheet.jpg` (frames before, at,
-   during and after each transition; full size in `events/`) from the QA folder, plus any
-   `mid.jpg` / `strips.jpg`. Judge G1 (proof readable) and G4 (one hero per frame) by eye.
-10. Make only justified corrections; re-render a new draft version. motionmaxxing gates (G0-G5) are creative
-    WARNINGs: review them, do not change the cut or the motion just to satisfy one; record why it is intended.
-    A checker FAIL (a tool crashed or could not read its input) is a real problem: fix the tool or input.
+   duration, audio stream), then `npm run qa:reel -- video-projects/<slug> --render renders/<draft>.mp4` for the
+   review sheets. The delivery review below needs them.
+9. **Delivery review of the latest render.** The question is whether each scene delivers its approved intent, not
+   whether it has defects. Read the draft's QA folder: `intent-sheet.jpg` (one encoded frame per plan scene at phone
+   width, beside its Gate B keyframe, with the approved intent printed on the sheet only), `motion-sheet.jpg` (each
+   scene left to right about every 0.4 s, planned events outlined), `event-sheet.jpg` and `events/`,
+   `look/sheet.jpg`, `safe-area-sheet.jpg`, plus any `mid.jpg` / `strips.jpg`. Watch the MP4 at full speed too when
+   the runtime allows it; otherwise say the review used stills. Apply the reviews that already exist, during
+   production rather than only at the end:
+   - per scene, write one sentence of your own about what the encoded frame shows at phone size with sound off
+     (motionmaxxing `references/judgment.md`, Honest seeing), one about what moves or changes across its motion
+     strip (the action the intent names happening, or only its end state appearing; a deliberate hold is an
+     answer), then a verdict: `delivered`, `partial` or `missing` against its `visualIntent`. Delivered means a
+     viewer with sound off would see the intent happen, not just its last frame;
+   - an adjacent-silhouette pass with labels and headings ignored (`short-form-edit/references/quality-gates.md`,
+     Editorial variety): name any scenes that read as the same frame;
+   - the Gate B keyframes against the encoded frames: the build meets or beats them;
+   - the slide test (motionmaxxing `judgment.md`): which frames would pass as a slide, and which frame is worth a
+     screenshot;
+   - the entertainment review (`short-form-edit/references/curiosity-and-entertainment.md`, Review) and the
+     contiguous strips across transitions (`video-storytelling`, Gates): attention drops, predictable sequences,
+     unresolved promises, reading overload.
+   Record it in `ENTERTAINMENT-REVIEW.md`, section `## Delivery review`, naming the render and its SHA-256
+   ([format](references/qa.md#delivery-review)). Then also judge G1 (proof readable) and G4 (one hero per frame).
+10. Act on the review without asking: rebuild every `partial` or `missing` scene (a stronger mechanism, a bigger
+    hero, the world instead of a panel, whatever the intent needs), render a new draft version and review that
+    render again. This corrects the build to meet the approved plan, so it needs no new approval; only a change to
+    the plan itself does (render-reel names it). Otherwise make only justified corrections. motionmaxxing gates
+    (G0-G5) are creative WARNINGs: review them, do not change the cut or the motion just to satisfy one; record why
+    it is intended. A checker FAIL (a tool crashed or could not read its input) is a real problem: fix the tool or
+    input. Do not mark a scene delivered to get past the QA row; it proves the review happened, not that it is good.
 11. Stage 1: `npm run render-reel -- video-projects/<slug> --final` renders `renders/<slug>-candidate-vNNN.mp4`
     and runs full QA on it automatically. It is technically verified only when every essential check passes
     (any FAIL, or a required check NOT TESTED, blocks). Mode B also needs `assets/source-transcript.json`,
     `transcript.json`, `edit-decisions.json` and `plan.json`; see [qa.md](references/qa.md#mode-b-speech-integrity).
-12. Stage 2: give the person the verified candidate path, its SHA-256 prefix, the project `QA.md` checklist and
-    any flagged cuts (`<candidate>.qa/cuts/`). Ask them to watch and listen and approve that file explicitly.
+    For a reel with a creative preflight, the delivery review is one of those checks: it must have judged this
+    candidate, or the latest draft when nothing changed since, and found every scene delivered. If the source
+    changed after the reviewed draft, read the candidate's own `intent-sheet.jpg`, update the review to name the
+    candidate and run `npm run qa:reel -- video-projects/<slug> --render renders/<candidate>.mp4` again.
+12. Stage 2: present a candidate only when its delivery review has no `partial` or `missing` scene. Give the person
+    the verified candidate path, its SHA-256 prefix, the project `QA.md` checklist, the delivery review (verdicts
+    and what was rebuilt, in a few lines) and any flagged cuts (`<candidate>.qa/cuts/`). Ask them to watch and listen and approve that file explicitly.
     **Never run `approve-reel` because Stage 1 passed, or on an approval given in the same message as the
     render.** Run it only when the person approves that named candidate in a later message, or let them run:
     `npm run approve-reel -- video-projects/<slug> --candidate renders/<file>.mp4 --sha <12 hex> --approved-by "<name>"`.

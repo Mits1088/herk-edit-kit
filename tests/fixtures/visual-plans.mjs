@@ -76,3 +76,17 @@ export function readyAsset(dir, plan, sceneId, file, bytes = `synthetic asset fo
 }
 
 export const writePlan = (dir, plan) => { mkdirSync(join(dir, 'assets'), { recursive: true }); writeFileSync(join(dir, 'assets/plan.json'), JSON.stringify(plan, null, 2)); };
+
+// A delivery review (ENTERTAINMENT-REVIEW.md "## Delivery review") for a plan: every scene described in the reviewer's
+// own words. verdicts: { sceneId: 'partial' | 'missing' } overrides the default 'delivered'; skip drops scenes.
+export function deliveryReviewText(plan, { render, sha, verdicts = {}, skip = [], seen = {}, motion = {}, notes = true } = {}) {
+  const rows = plan.scenes.filter(s => !skip.includes(s.id)).map(s =>
+    `| ${s.id} | ${s.kind || s.id} | ${seen[s.id] ?? `the encoded frame for ${s.id} shows its main object large and lit at phone size`} | ${motion[s.id] ?? 'the object enters from the left and settles'} | ${verdicts[s.id] || 'delivered'} | ${verdicts[s.id] ? 'rebuild it' : ''} |`);
+  return ['# Entertainment review', '', 'Other findings stay above the delivery review.', '', '## Delivery review', '',
+    `Reviewed render: ${render} (SHA-256 ${sha.slice(0, 12)})`, '',
+    '| Scene | Intent (short) | Seen at phone size, sound off | Motion (strip) | Verdict | Fix |', '| --- | --- | --- | --- | --- | --- |', ...rows, '',
+    ...(notes ? ['Modality: intent and motion sheets plus event frames; no full-speed viewing in this test.',
+      'Silhouettes (labels ignored): every adjacent pair has a different shape and action.',
+      'Keyframes: each encoded frame matches or beats its Gate B keyframe.',
+      'Slide test: no frame would pass as a slide; the second scene is the screenshot frame.'] : []), ''].join('\n');
+}

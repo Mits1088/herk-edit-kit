@@ -13,7 +13,10 @@
 // that approval. Timing, caption, layout and animation changes keep the approval. Legacy reels are not gated.
 // Exit codes: 0 rendered and checks passed, 1 render or checks failed, 2 usage. A failed render or failed QA never
 // touches renders/final.mp4 or any earlier render. Quality comes from the project's profile. Renders with --strict
-// so lint errors stop it. Each render is appended to reel.json "renders". HyperFrames telemetry is disabled.
+// so lint errors stop it. Each render is appended to reel.json "renders" with its SHA-256 and the hash of the source
+// it was rendered from (delivery-review.mjs), so a delivery review of the latest draft carries over to a candidate only
+// when nothing changed in between. Before --final it says when QA will block on the delivery review; it never refuses.
+// HyperFrames telemetry is disabled.
 //
 // Test hooks (tests only): REEL_STUDIO_RENDERER=<node script> replaces the HyperFrames CLI with the same arguments;
 // REEL_STUDIO_QA_SCRIPT=<node script> replaces qa-reel.mjs. Both are announced loudly and recorded in reel.json.
@@ -22,6 +25,7 @@ import { join, resolve, basename } from 'node:path';
 import { getProfile, hyperframes, readComposition, run, skillDir } from './lib.mjs';
 import { probeChecks, decodeCheck, evaluate, makeCollector, sha256File, qaDirFor, writeJson, missingDirection, preflightStatus, readPreflightInputs } from './qa-core.mjs';
 import { validateVisualPlan } from '../../short-form-edit/scripts/validate-plan.mjs';
+import { REVIEW_FILE, deliveryReviewRow, projectSourceHash } from './delivery-review.mjs';
 
 const args = process.argv.slice(2);
 const kind = args.includes('--final') ? 'final' : args.includes('--draft') ? 'draft' : null;
@@ -69,6 +73,20 @@ const file = `${reel.slug}-${label}-v${version}.mp4`;
 const out = join(rendersDir, file);
 if (existsSync(out)) { console.error(`Refusing to overwrite ${file}`); process.exit(1); }
 
+// Creative execution review (create-reel step 9): a candidate is verified only when the delivery review judged the
+// latest render of this same source and every scene delivered. Say so before spending a final render; do not refuse.
+const sourceHash = projectSourceHash(dir, { profile });
+if (kind === 'final') {
+  const inputs = readPreflightInputs(dir);
+  const reviewPath = join(dir, REVIEW_FILE);
+  if (preflightStatus({ reel, plan: inputs.plan, transcript: inputs.transcript, validate: validateVisualPlan }).required) {
+    const renders = [...(reel.renders || []), { file: `renders/${file}`, sourceHash }];
+    const [, , status, detail] = deliveryReviewRow({ text: existsSync(reviewPath) ? readFileSync(reviewPath, 'utf8') : null, plan: inputs.plan,
+      render: `renders/${file}`, renders, candidate: true, required: true });
+    if (status !== 'PASS') console.warn(`Delivery review: QA will block this candidate (${status}): ${detail}`);
+  }
+}
+
 const quality = kind === 'final' ? profile.finalQuality : profile.draftQuality;
 console.log(`Rendering ${file} (${quality}, ${profile.width}x${profile.height} @ ${profile.fps} fps, workers ${workers})`);
 const renderArgs = ['render', '--quality', quality, '--fps', String(profile.fps), '--workers', String(workers), '--strict', '--quiet', '--output', `renders/${file}`];
@@ -77,7 +95,7 @@ if (r.status !== 0 || !existsSync(out)) { console.error(`Render failed (exit ${r
 
 const sha256 = await sha256File(out);
 reel.renders = reel.renders || [];
-reel.renders.push({ file: `renders/${file}`, kind: label, version: Number(version), quality, fps: profile.fps, sha256, renderedAt: new Date().toISOString(), ...(hooks.renderer || hooks.qa ? { testHooks: hooks } : {}) });
+reel.renders.push({ file: `renders/${file}`, kind: label, version: Number(version), quality, fps: profile.fps, sha256, sourceHash, renderedAt: new Date().toISOString(), ...(hooks.renderer || hooks.qa ? { testHooks: hooks } : {}) });
 writeFileSync(reelPath, JSON.stringify(reel, null, 2) + '\n');
 console.log(`Rendered ${basename(dir)}/renders/${file} (SHA-256 ${sha256.slice(0, 12)})`);
 

@@ -84,6 +84,9 @@ HyperFrames seeks frames; a render worker can start anywhere. Root cause first:
 | Render | candidate unchanged while QA ran * | SHA-256 before and after | technical |
 | motionmaxxing | G0, G2 no empty frame, G3 end hold; motion level (a question) | `scripts/look.py` | creative |
 | Render | event frames from the encoded MP4: `event-sheet.jpg`, and `events/` with reasons in `index.json` | `samples.mjs`, `ffmpeg` | info |
+| Render | intent sheet: one encoded frame per plan scene at its last planned event (settled) or its midpoint, 360 px wide, beside `keyframes/<scene id>.*` when it exists, with the approved intent on the sheet only: `intent-sheet.jpg`, frames in `intent/` | `delivery-review.mjs`, `ffmpeg`, headless Chrome | info |
+| Render | motion sheet: each plan scene left to right from its first to its last frame, about every 0.4 s (4 to 12 frames), each planned event's frame added and outlined: `motion-sheet.jpg`, frames in `motion/` | `delivery-review.mjs`, `ffmpeg`, headless Chrome | info |
+| Visual | delivery review recorded: `ENTERTAINMENT-REVIEW.md` `## Delivery review` names this render (or, for a candidate, the render logged just before it with the same source hash), and every plan scene has an own-words frame description, a motion note and a verdict; modality, silhouette and slide notes present (keyframe note when keyframes exist). Missing, incomplete or stale: NOT TESTED; any `partial` or `missing` scene: FAIL (* for a candidate of a reel with a creative preflight; a WARNING on drafts; NOT APPLICABLE for legacy reels) | `deliveryReviewRow` (delivery-review.mjs) | technical |
 | Visual, Speech | G1, G4, continuity, timing, captions and A/V sync, meaning at cuts, natural joins, framing | a person: the Stage 2 checklist | human |
 
 Statuses: PASS, FAIL, WARNING, NOT TESTED, NOT APPLICABLE. Stage 1 is **BLOCKED** by any FAIL, and by any
@@ -96,6 +99,45 @@ Creative rules are never FAIL: a motionmaxxing gate finding is a WARNING to revi
 crashed, failed to start, or produced output QA cannot read is a FAIL of kind `checker`, never a quiet warning.
 A missing optional tool (motionmaxxing, python) is NOT TESTED and listed. Safe-area text is a WARNING for organic
 profiles (the guide is approximate) and a FAIL for ad profiles.
+
+## Delivery review
+
+My own creative execution review of the latest render (create-reel step 9), kept in the project's
+`ENTERTAINMENT-REVIEW.md` next to the entertainment findings. QA reads only this section; the rest of the file is free.
+
+```markdown
+## Delivery review
+
+Reviewed render: renders/<slug>-draft-v003.mp4 (SHA-256 1a2b3c4d5e6f)
+
+| Scene | Intent (short) | Seen at phone size, sound off | Motion (strip) | Verdict | Fix |
+| --- | --- | --- | --- | --- | --- |
+| s01 | lamp clicks on, the cone hits the glass | a dark code panel with one typed line; no lamp, no glass | the line types on; nothing arrives or lights up | partial | rebuild as the pane with the lamp |
+| s02 | ... | ... | ... | delivered | |
+
+Modality: intent, motion and event sheets; no full-speed viewing was available.
+Silhouettes (labels ignored): s01, s02 and s05 are the same rounded panel; s07 is the only full-frame picture.
+Keyframes: s01 and s07 fall short of their Gate B frames; s11 matches.
+Slide test: s05 and s11 would pass as slides; s07 is the screenshot frame.
+```
+
+- `Reviewed render` names the file and at least 12 hex of its SHA-256 (`reel.json` `renders` logs both). A review
+  counts for the render under QA when it names that file, or, for a candidate, the render logged immediately before
+  it with the same recorded source hash. Anything else is stale: review the newer render.
+- The source hash covers every render input `render-reel` knows of: the project's files by content (files over
+  64 MB by size and modification time), files the HTML or CSS references outside the project (`src`, `href`,
+  `poster`, `url()`; a missing one counts too), the profile's size, frame rate and encoding, and the HyperFrames
+  version. Left out: `reel.json`, Markdown, `renders/`, `archive/`, `snapshots/`, `keyframes*/`, dot folders and the
+  quality preset (so a draft's review can carry to the final render of the same inputs).
+- One row per plan scene, by id. Verdicts: `delivered`, `partial`, `missing`. The frame description (six words or
+  more) and the motion note (four or more) must not repeat the approved intent: say what the encoded frame and the
+  strip show, not what they were meant to show. The motion note says whether the action the intent names happens
+  across the strip or only its end state appears; "holds on the face" is a valid note for a deliberate hold.
+- `Modality:` says how the motion was judged (full-speed viewing, or stills only). A strip is not playback.
+- Any `partial` or `missing` scene blocks a candidate. The fix is to rebuild the scene, render a new draft and review
+  that render; it needs no approval because it corrects the build to meet the approved plan.
+- The row checks that the review happened, on the latest render, for every scene. It cannot judge whether the review
+  is honest or the taste is good, and a `delivered` verdict is not proof. The person's Stage 2 viewing stays final.
 
 ## Mode B speech integrity
 
@@ -166,3 +208,8 @@ intentional; the 12 even samples keep the blocking clipping check. A sheet does 
 - `visualIntent` checks reject only purely generic wording; they cannot tell whether a visual is meaningful. The
   person's preflight review does that.
 - The creative-preflight record, like a render approval, binds a decision to a fingerprint; it is not a signature.
+- The delivery-review row checks the record's coverage and freshness only: no script judges whether a frame
+  delivers its intent. The motion sheet samples about every 0.4 s, so timing, easing, one-frame pops and freezes still
+  need contiguous strips across transitions (`video-storytelling`, Gates) and full-speed viewing. Files over 64 MB
+  enter the source hash by size and modification time. References built at runtime in JavaScript (a path assembled
+  from strings) are not found by the reference scan; keep media paths literal in the HTML.

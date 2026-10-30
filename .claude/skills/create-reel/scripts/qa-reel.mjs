@@ -16,6 +16,9 @@
 // schemaVersion 2 plan is validated at the production stage in every mode (planned assets present and hashed). Planned
 // callbacks are checked only as declarations: a named element must exist in the source; the transition itself is not
 // verified (Phase 2), so that row is never more than a WARNING.
+// Delivery review (delivery-review.mjs): intent-sheet.jpg puts one encoded frame per plan scene, at phone width, beside
+// its Gate B keyframe and its approved intent; a required row (candidate of a gated reel) reads the "## Delivery review"
+// section of ENTERTAINMENT-REVIEW.md and blocks while it is missing, stale or marks any scene partial or missing.
 //
 // Every check is marked required or not and has a kind (technical, creative, checker, human, info). The blocking rule
 // lives in qa-core.mjs: any FAIL, or a required check that is not PASS / WARNING / NOT APPLICABLE, blocks Stage 1.
@@ -37,6 +40,7 @@ import { overlayLeakAt, footageReference, bandCompare } from './frames.mjs';
 import { validateVisualPlan } from '../../short-form-edit/scripts/validate-plan.mjs';
 import { faceCovers } from './fonts.mjs';
 import { planSamples, planEvents, collectPageEvents } from './samples.mjs';
+import { REVIEW_FILE, PHONE_WIDTH, intentFrames, findKeyframes, intentSheetHtml, motionFrames, motionSheetHtml, deliveryReviewRow } from './delivery-review.mjs';
 
 const args = process.argv.slice(2);
 if (!args[0] || args[0].startsWith('--') || args.includes('--help')) {
@@ -54,6 +58,9 @@ const fps = Number((html.match(/\bdata-fps\s*=\s*["'](\d+)/) || [])[1]) || profi
 const footage = reel?.mode === 'footage';
 const { results, add } = makeCollector();
 const req = { required: true };
+const chromeRequire = createRequire(join(kitRoot, 'package.json'));
+const loadChromium = () => { try { return chromeRequire('playwright').chromium; } catch { return null; } };
+const launchChrome = (chromium, exe) => chromium.launch({ executablePath: exe, headless: true, args: ['--allow-file-access-from-files', '--disable-gpu', '--hide-scrollbars'] });
 // Visual events from a short-form plan (any mode that has one): plan events, scene cuts, caption groups.
 let planEventCache = null;
 const planEventsFor = () => planEventCache ??= (() => {
@@ -158,9 +165,7 @@ const callbacks = (preInputs.plan?.schemaVersion >= 2 ? preInputs.plan.scenes ||
 let pageEvents = [];
 const domSheets = []; // review folders made during the DOM pass, listed with the render's sheets
 {
-  const require = createRequire(join(kitRoot, 'package.json'));
-  let chromium = null;
-  try { ({ chromium } = require('playwright')); } catch {}
+  const chromium = loadChromium();
   const exe = chromePath();
   if (!chromium || !exe) {
     add('Layout', 'text inside the canvas (no clipping)', 'NOT TESTED', !chromium ? 'playwright not installed' : 'Chrome not found; set CHROME_PATH', req);
@@ -169,7 +174,7 @@ const domSheets = []; // review folders made during the DOM pass, listed with th
   } else {
     let browser = null;
     try {
-      browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--allow-file-access-from-files', '--disable-gpu', '--hide-scrollbars'] });
+      browser = await launchChrome(chromium, exe);
       const page = await browser.newPage({ viewport: { width: comp.width, height: comp.height }, deviceScaleFactor: 1 });
       // Fonts must come from the project. Block any network font (and font-host stylesheet) and record it; other
       // requests are left alone.
@@ -445,10 +450,82 @@ if (!render) {
     }
   }
 
+  // Delivery review sheets (step 9), drawn from the encoded MP4. Intent sheet: each plan scene's frame at its main
+  // planned event, at phone width, beside its Gate B keyframe, with the approved intent on the sheet only. Motion
+  // sheet: each scene left to right about every 0.4 s, planned events outlined, so the action is judged, not only its
+  // end state.
+  const planScenes = preInputs.plan?.scenes || [];
+  // Extracts the given frames (scaled to width) into <outDir>/<sub>/f<frame>.jpg; returns the names or an error.
+  const extract = (sub, frames, width) => {
+    const d = join(outDir, sub);
+    rmSync(d, { recursive: true, force: true });
+    mkdirSync(d, { recursive: true });
+    const x = run('ffmpeg', ['-y', '-v', 'error', '-i', render, '-an', '-vf', [`select='${frames.map(f => `eq(n\\,${f})`).join('+')}'`, `scale=${width}:-2`].join(','), '-fps_mode', 'vfr', '-q:v', '3', join(d, '%03d.jpg')]);
+    const got = readdirSync(d).filter(f => /^\d{3}\.jpg$/.test(f)).sort();
+    if (x.status !== 0 || got.length !== frames.length) return { error: `checker error: ${got.length}/${frames.length} frames; ${tailText(x.stderr)}` };
+    const name = f => `f${String(f).padStart(5, '0')}.jpg`;
+    frames.forEach((f, i) => renameSync(join(d, got[i]), join(d, name(f))));
+    return { dir: d, url: f => pathToFileURL(join(d, name(f))).href, file: f => `${sub}/${name(f)}` };
+  };
+  // Screenshots a sheet page into <outDir>/<jpg>; returns null when drawn, else why not.
+  const draw = async (htmlFile, jpg) => {
+    const chromium = loadChromium(), exe = chromePath();
+    if (!chromium || !exe) return `sheet not drawn (no headless Chrome); open ${relative(outDir, htmlFile).replaceAll('\\', '/')}`;
+    let browser = null;
+    try {
+      browser = await launchChrome(chromium, exe);
+      const page = await browser.newPage({ viewport: { width: 800, height: 600 }, deviceScaleFactor: 1 });
+      await page.goto(pathToFileURL(htmlFile).href, { waitUntil: 'load' });
+      await page.setViewportSize({ width: await page.evaluate(() => document.querySelector('main').scrollWidth), height: 600 });
+      await page.screenshot({ path: join(outDir, jpg), type: 'jpeg', quality: 82, fullPage: true });
+      return null;
+    } catch (e) { return `sheet not drawn (${e.message.split('\n')[0]})`; } finally { if (browser) await browser.close(); }
+  };
+  const title = reel?.slug || basename(dir);
+  const intentCheck = `intent sheet: one encoded frame per plan scene at phone width (${PHONE_WIDTH} px)`;
+  const motionCheck = 'motion sheet: each plan scene as frames in time order (about every 0.4 s, planned events outlined)';
+  if (!planScenes.length) { add('Render', intentCheck, 'NOT APPLICABLE', 'no plan scenes'); add('Render', motionCheck, 'NOT APPLICABLE', 'no plan scenes'); }
+  else {
+    const items = intentFrames(preInputs.plan, { fps, duration: comp.duration });
+    const keyframes = findKeyframes(dir, items.map(i => i.id));
+    const ix = extract('intent', [...new Set(items.map(i => i.frame))].sort((a, b) => a - b), PHONE_WIDTH);
+    if (ix.error) add('Render', intentCheck, 'FAIL', ix.error, { kind: 'checker' });
+    else {
+      const rows = items.map(i => ({ ...i, file: ix.file(i.frame), keyframe: keyframes[i.id] || null }));
+      writeJson(join(ix.dir, 'index.json'), rows);
+      writeFileSync(join(ix.dir, 'sheet.html'), intentSheetHtml(rows.map(i => ({ ...i, frameUrl: ix.url(i.frame), keyframeUrl: i.keyframe && pathToFileURL(join(dir, i.keyframe)).href })), { title }));
+      const why = await draw(join(ix.dir, 'sheet.html'), 'intent-sheet.jpg');
+      add('Render', intentCheck, why ? 'WARNING' : 'PASS', `${rows.length} scenes, ${Object.keys(keyframes).length} with a Gate B keyframe; ${why || relative(dir, join(outDir, 'intent-sheet.jpg')).replaceAll('\\', '/')}; frames in intent/`, { kind: 'info' });
+      sheets.push(...(why ? [] : [relative(dir, join(outDir, 'intent-sheet.jpg'))]), relative(dir, ix.dir));
+    }
+    const strips = motionFrames(preInputs.plan, { fps, duration: comp.duration });
+    const mx = extract('motion', [...new Set(strips.flatMap(r => r.frames.map(f => f.frame)))].sort((a, b) => a - b), 270);
+    if (mx.error) add('Render', motionCheck, 'FAIL', mx.error, { kind: 'checker' });
+    else {
+      const rows = strips.map(r => ({ ...r, frames: r.frames.map(f => ({ ...f, file: mx.file(f.frame) })) }));
+      writeJson(join(mx.dir, 'index.json'), rows);
+      writeFileSync(join(mx.dir, 'sheet.html'), motionSheetHtml(rows.map(r => ({ ...r, frames: r.frames.map(f => ({ ...f, frameUrl: mx.url(f.frame) })) })), { title }));
+      const why = await draw(join(mx.dir, 'sheet.html'), 'motion-sheet.jpg');
+      const n = rows.reduce((k, r) => k + r.frames.length, 0);
+      add('Render', motionCheck, why ? 'WARNING' : 'PASS', `${rows.length} scenes, ${n} frames; ${why || relative(dir, join(outDir, 'motion-sheet.jpg')).replaceAll('\\', '/')}; stills, not full-speed viewing`, { kind: 'info' });
+      sheets.push(...(why ? [] : [relative(dir, join(outDir, 'motion-sheet.jpg'))]), relative(dir, mx.dir));
+    }
+  }
+
   if (candidate) {
     const shaAfter = await sha256File(render);
     add('Render', 'candidate unchanged while QA ran (SHA-256 before and after)', shaAfter === shaBefore ? 'PASS' : 'FAIL', shaAfter === shaBefore ? shaBefore.slice(0, 12) : `${shaBefore.slice(0, 12)} -> ${shaAfter.slice(0, 12)}`, req);
   }
+}
+
+// ---------- creative execution review: my own review of this render against the approved intents (step 9). Required for
+// a candidate of a gated reel; it proves the review covers every scene of the latest render, not that it is right.
+if (render) {
+  const reviewPath = join(dir, REVIEW_FILE);
+  const plan = preInputs.plan;
+  const keyframes = findKeyframes(dir, (plan?.scenes || []).map(s => s.id));
+  add(...deliveryReviewRow({ text: existsSync(reviewPath) ? readFileSync(reviewPath, 'utf8') : null, plan, render: relative(dir, render).replaceAll('\\', '/'),
+    sha: shaBefore, renders: reel?.renders || [], candidate, required: candidate && pre.required, keyframes }));
 }
 
 // ---------- judgement that no script can make: the Stage 2 checklist (never blocks Stage 1, never passes itself)

@@ -3,6 +3,8 @@
 // and the approval command. No personal media, no API calls. Needs Chrome, ffmpeg and python like a real render.
 // Writes to tmp/reel-smoke-<time>/ (gitignored). The approvals here are automated test approvals of synthetic plans and files.
 // Gate B: a new reel is refused until its creative preflight is approved; a legacy reel and a brand reel also render for real.
+// Delivery review: the draft's QA draws the intent sheet, a synthetic review of that draft carries to a candidate rendered
+// from the same source, and a candidate without a current review is blocked.
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -12,7 +14,7 @@ const scripts = join(root, '.claude/skills/create-reel/scripts');
 const { getProfile } = await import('../.claude/skills/create-reel/scripts/lib.mjs');
 const { convertToVertical } = await import('../.claude/skills/create-reel/scripts/new-reel.mjs');
 const { sha256File, recordPathFor, finalPath } = await import('../.claude/skills/create-reel/scripts/qa-core.mjs');
-const { facelessPlan, footagePlan, brandPlan, readyAsset, writePlan } = await import('../tests/fixtures/visual-plans.mjs');
+const { facelessPlan, footagePlan, brandPlan, readyAsset, writePlan, deliveryReviewText } = await import('../tests/fixtures/visual-plans.mjs');
 
 const slug = 'reel-smoke';
 const dir = join(root, `tmp/reel-smoke-${Date.now()}`, slug);
@@ -58,6 +60,20 @@ step('Gate B refuses an unapproved plan', node('render-reel.mjs', ['--draft', '-
 step('creative preflight approved (automated test approval)', approvePlan(dir), 0);
 step('draft render + quick checks', node('render-reel.mjs', ['--draft', '--workers', '1']), 0);
 assert.equal(JSON.parse(readFileSync(join(dir, `renders/${slug}-draft-v001.qa/quick.json`), 'utf8')).verdict, 'DRAFT_CHECKED');
+const draftFile = `renders/${slug}-draft-v001.mp4`;
+const dq = node('qa-reel.mjs', ['--render', draftFile]);
+const dRec = JSON.parse(readFileSync(recordPathFor(dir, join(dir, draftFile)), 'utf8'));
+const dRow = c => dRec.results.find(r => r.check.startsWith(c));
+assert.equal(dRow('intent sheet')?.status, 'PASS', `intent sheet on the draft: ${JSON.stringify(dRow('intent sheet'))}`);
+assert.ok(existsSync(join(dir, `renders/${slug}-draft-v001.qa/intent-sheet.jpg`)) && existsSync(join(dir, `renders/${slug}-draft-v001.qa/intent/index.json`)));
+assert.equal(dRow('motion sheet')?.status, 'PASS', `motion sheet on the draft: ${JSON.stringify(dRow('motion sheet'))}`);
+assert.ok(existsSync(join(dir, `renders/${slug}-draft-v001.qa/motion-sheet.jpg`)));
+assert.equal(dRow('delivery review')?.status, 'NOT APPLICABLE', 'no review yet; a draft is not gated');
+steps.push({ name: 'draft QA with intent sheet', exit: dq.status, verdict: dRec.verdict });
+console.log('ok  draft QA draws the intent sheet');
+// Automated test review of a synthetic draft: it exercises the record, not anyone's judgement.
+const reel1 = JSON.parse(readFileSync(join(dir, 'reel.json'), 'utf8'));
+writeFileSync(join(dir, 'ENTERTAINMENT-REVIEW.md'), deliveryReviewText(facelessPlan(2), { render: draftFile, sha: reel1.renders.at(-1).sha256 }));
 step('final render + full QA (Stage 1)', node('render-reel.mjs', ['--final', '--workers', '1']), 0);
 const cand = join(dir, `renders/${slug}-candidate-v001.mp4`);
 const record = JSON.parse(readFileSync(recordPathFor(dir, cand), 'utf8'));
@@ -72,13 +88,22 @@ assert.equal(res('planned callbacks: named elements').status, 'PASS', 'a concept
 assert.equal(res('each declared face loaded from its local file').status, 'PASS', 'local fonts loaded');
 assert.equal(res('no network font requests').status, 'PASS');
 assert.equal(res('event frames from the encoded video').status, 'PASS', 'event frames extracted from the MP4');
+assert.equal(res('delivery review').status, 'PASS', `the draft's review carries to a candidate of the same source: ${res('delivery review').detail}`);
+assert.equal(res('delivery review').required, true);
 step('approve verified candidate', node('approve-reel.mjs', ['--candidate', `renders/${slug}-candidate-v001.mp4`, '--sha', record.sha256.slice(0, 12), '--approved-by', 'smoke-test (automated, synthetic file)']), 0);
 assert.equal(await sha256File(finalPath(dir)), record.sha256);
+// The latest render is now candidate v001, so the draft's review no longer describes it: v002 is blocked until reviewed.
+const blockedFinal = node('render-reel.mjs', ['--final', '--workers', '1']);
+step('a candidate without a current delivery review is blocked', blockedFinal, 1);
+assert.match(blockedFinal.stderr, /Delivery review: QA will block this candidate/);
+const blockedRec = JSON.parse(readFileSync(recordPathFor(dir, join(dir, `renders/${slug}-candidate-v002.mp4`)), 'utf8'));
+assert.match(blockedRec.results.find(r => r.check.startsWith('delivery review')).detail, /stale: it judged reel-smoke-draft-v001\.mp4, but the latest render before this one is reel-smoke-candidate-v001\.mp4/);
+writeFileSync(join(dir, 'ENTERTAINMENT-REVIEW.md'), deliveryReviewText(facelessPlan(2), { render: `renders/${slug}-candidate-v002.mp4`, sha: blockedRec.sha256 }));
 step('second final render + full QA', node('render-reel.mjs', ['--final', '--workers', '1']), 0);
-const v2 = join(dir, `renders/${slug}-candidate-v002.mp4`);
+const v2 = join(dir, `renders/${slug}-candidate-v003.mp4`);
 const r2 = JSON.parse(readFileSync(recordPathFor(dir, v2), 'utf8'));
 appendFileSync(v2, 'tampered');
-step('approval refuses a candidate modified after QA', node('approve-reel.mjs', ['--candidate', `renders/${slug}-candidate-v002.mp4`, '--sha', r2.sha256.slice(0, 12), '--approved-by', 'smoke-test']), 1);
+step('approval refuses a candidate modified after QA', node('approve-reel.mjs', ['--candidate', `renders/${slug}-candidate-v003.mp4`, '--sha', r2.sha256.slice(0, 12), '--approved-by', 'smoke-test']), 1);
 assert.equal(await sha256File(finalPath(dir)), record.sha256, 'approved final unchanged');
 
 // Mode B: real qa-reel on the public short-form records plus a synthetic source transcript and a synthetic 4 s
@@ -109,6 +134,9 @@ assert.ok(['PASS', 'WARNING'].includes(by('integrated loudness')?.status), 'audi
 assert.equal(by('cuts that remove')?.status, 'WARNING', 'removed "Don\'t" is flagged');
 assert.equal(by('review clips')?.status, 'PASS');
 assert.equal(bq.status, bRec.technicallyVerified ? 0 : 1);
+assert.deepEqual(bRec.blocking.map(r => r.check), ['delivery review: every scene judged against its approved intent on the latest render'],
+  'the synthetic footage candidate (never rendered or reviewed) is blocked by the missing delivery review only');
+assert.equal(by('intent sheet')?.status, 'PASS', 'intent sheet drawn for a footage plan');
 steps.push({ name: 'Mode B QA on synthetic footage records', exit: bq.status, verdict: bRec.verdict, blocking: bRec.blocking.map(r => r.check) });
 console.log(`ok  Mode B QA (${bRec.verdict})`);
 

@@ -16,7 +16,9 @@ plan is approved and still matches. Projects created before Gate B have no such 
    alternatives, [modes.md](modes.md)). Before approval, show the rough opening in Studio preview or as static
    snapshots (`npx hyperframes snapshot --describe false`), never as a `render-reel` draft. Where it is feasible
    without paid production, also prepare three storyboard keyframes or equivalent static concepts (the hook, the
-   hero beat, one more representative scene) so the person approves pictures, not only prose.
+   hero beat, one more representative scene) so the person approves pictures, not only prose. Make them at the
+   intended production fidelity, not as wireframes: they set the bar the build must meet or beat. Save each as
+   `keyframes/<scene id>.png` (or `.jpg`), so QA's intent sheet shows it beside the encoded frame.
    If the person supplied a reference video, analyse it first (`short-form-edit/references/reference-analysis.md`):
    separate the techniques worth adopting from its distinctive styling, and list which ideas you adopt and why.
    Without a reference, plan normally.

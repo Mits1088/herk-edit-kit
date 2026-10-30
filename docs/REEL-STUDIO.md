@@ -78,6 +78,8 @@ Each Reel lives in `video-projects/<name>/`:
 | `renders/final.mp4` | the candidate you approved; earlier approved finals move to `renders/approved/` |
 | `renders/<render>.qa/QA.md`, `qa.json` | the quality report and record for that one render (hash, results, approval) |
 | `QA.md` | summary of the latest QA run and what is waiting for your approval |
+| `keyframes/` | the creative-preflight keyframes, one per scene id, shown beside the render on the intent sheet |
+| `ENTERTAINMENT-REVIEW.md` | Claude's review of the latest render: each scene against its approved visual |
 
 Video projects and renders stay on your computer; they are not added to Git.
 
@@ -86,7 +88,10 @@ Video projects and renders stay on your computer; they are not added to Git.
 - Live preview while building: in the project folder run `npx hyperframes preview` and open the address it
   prints (usually http://localhost:3002).
 - Watch a render: open the MP4 from `renders/` in any video player.
-- Claude also reads still frames from every draft (contact sheets) before showing it to you.
+- Claude also reads still frames from every draft (contact sheets) before showing it to you. For each scene it
+  compares the rendered frame, at phone size with sound off, with the visual you approved in the creative preflight,
+  writes that delivery review in `ENTERTAINMENT-REVIEW.md`, and rebuilds any scene that falls short before you see a
+  candidate. QA blocks a candidate whose review is missing, out of date, or marks a scene partial or missing.
 
 ## Ask for changes
 
