@@ -80,7 +80,7 @@ test('a complete review of this candidate passes; it parses render, hash, rows a
   const r = parseDeliveryReview(text);
   assert.equal(r.render, cand); assert.equal(r.sha, SHA_C.slice(0, 12));
   assert.deepEqual(Object.keys(r.scenes), ['s01', 's02']); assert.equal(r.scenes.s01.verdict, 'delivered');
-  assert.match(r.notes.silhouettes, /different shape/);
+  assert.match(r.notes.silhouettes, /different shape/); assert.match(r.notes.sequence, /no stretch holds one picture/);
   const out = row(text);
   assert.equal(out[2], 'PASS', out[3]); assert.equal(out[4].required, true);
   assert.match(out[3], /not that its judgement is right/);
@@ -123,7 +123,23 @@ test('box-ticking is refused: one-word descriptions, the intent pasted back, mis
   out = row(deliveryReviewText(plan, { render: cand, sha: SHA_C, seen: { s02: plan.scenes[1].visualIntent } }));
   assert.match(out[3], /s02: the description repeats the approved intent/);
   out = row(deliveryReviewText(plan, { render: cand, sha: SHA_C, notes: false }));
-  assert.match(out[3], /"Modality:" needs a sentence.*"Silhouettes:" needs a sentence.*"Slide test:" needs a sentence/);
+  assert.match(out[3], /"Modality:" needs a sentence.*"Silhouettes:" needs a sentence.*"Slide test:" needs a sentence.*"Sequence:" needs a sentence/);
+  // Every scene can be delivered while the sequence drags: a review without the Sequence line does not pass.
+  out = row(deliveryReviewText(plan, { render: cand, sha: SHA_C }).replace(/^Sequence:.*$/m, ''));
+  assert.equal(out[2], 'NOT TESTED'); assert.match(out[3], /^"Sequence:" needs a sentence/); assert.ok(blocks(out));
+  out = row(deliveryReviewText(plan, { render: cand, sha: SHA_C }).replace(/^Sequence:.*$/m, 'Sequence: fine.'));
+  assert.match(out[3], /"Sequence:" needs a sentence/, 'a one-word sequence note is refused');
+  // An empty Sequence line stays empty wherever it sits; it does not borrow the next line.
+  const complete = deliveryReviewText(plan, { render: cand, sha: SHA_C });
+  const sequenceLine = complete.match(/^Sequence:.*$/m)[0];
+  const moved = complete.replace(`${sequenceLine}\n`, '').replace(/^Modality:/m, `${sequenceLine}\nModality:`);
+  assert.equal(row(moved)[2], 'PASS', 'a complete note may sit before the others');
+  for (const [name, empty] of [['bare', 'Sequence:'], ['spaces', 'Sequence:   '], ['bold', '**Sequence:**'], ['bullet', '- Sequence:']]) {
+    out = row(moved.replace(sequenceLine, empty));
+    assert.equal(out[2], 'NOT TESTED', name); assert.match(out[3], /"Sequence:" needs a sentence/, name);
+    out = row(moved.replace(sequenceLine, empty).replaceAll('\n', '\r\n'));
+    assert.match(out[3], /"Sequence:" needs a sentence/, `${name} with CRLF`);
+  }
   // Motion is judged per scene, from the strip: an empty or pasted motion note is refused, and so is a table without it.
   out = row(deliveryReviewText(plan, { render: cand, sha: SHA_C, motion: { s01: '' } }));
   assert.match(out[3], /s01: describe what moves or changes across its motion strip/);

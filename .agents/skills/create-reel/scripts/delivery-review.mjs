@@ -126,7 +126,7 @@ const norm = s => String(s).toLowerCase().replace(/[`*_]/g, '').replace(/[^a-z0-
 const words = s => norm(s).split(' ').filter(Boolean);
 const cells = line => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
 
-// Returns { found, render, sha, scenes: { id: { seen, motion, verdict, fix } }, notes: { modality, silhouettes, keyframes, slide }, errors }.
+// Returns { found, render, sha, scenes: { id: { seen, motion, verdict, fix } }, notes: { modality, silhouettes, keyframes, slide, sequence }, errors }.
 export function parseDeliveryReview(text) {
   const out = { found: false, render: null, sha: null, scenes: {}, notes: {}, errors: [] };
   const m = String(text || '').match(/^##\s+Delivery review\b[^\n]*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/im);
@@ -136,8 +136,9 @@ export function parseDeliveryReview(text) {
   const r = body.match(/^\s*Reviewed render:\s*`?([^\s`()]+\.mp4)`?[^\n]*?\b([0-9a-f]{12,64})\b/im);
   if (r) { out.render = r[1].replaceAll('\\', '/'); out.sha = r[2].toLowerCase(); }
   else out.errors.push('no "Reviewed render: renders/<file>.mp4 (SHA-256 <12 hex>)" line');
-  const label = name => (body.match(new RegExp(`^\\s*(?:[-*]\\s*)?\\**${name}[^:\\n]*:\\**\\s*(.+)$`, 'im')) || [])[1]?.trim() || '';
-  out.notes = { modality: label('Modality'), silhouettes: label('Silhouettes'), keyframes: label('Keyframes'), slide: label('Slide test') };
+  const label = (name, gap = '\\s*') => (body.match(new RegExp(`^\\s*(?:[-*]\\s*)?\\**${name}[^:\\n]*:\\**${gap}(.+)$`, 'im')) || [])[1]?.trim() || '';
+  // Sequence reads its own line only, so an empty note cannot borrow the next line.
+  out.notes = { modality: label('Modality'), silhouettes: label('Silhouettes'), keyframes: label('Keyframes'), slide: label('Slide test'), sequence: label('Sequence', '[ \\t]*') };
   const rows = body.split(/\r?\n/).filter(l => /^\s*\|/.test(l));
   if (rows.length) {
     const head = cells(rows[0]).map(norm);
@@ -219,6 +220,7 @@ export function deliveryReviewRow({ text, plan, render, sha, renders, candidate 
   short(review.notes.modality, 'Modality');
   short(review.notes.silhouettes, 'Silhouettes');
   short(review.notes.slide, 'Slide test');
+  short(review.notes.sequence, 'Sequence');
   if (Object.keys(keyframes).length) short(review.notes.keyframes, 'Keyframes');
   if (problems.length) return ['Visual', check, missingStatus, problems.slice(0, 6).join('; ') + (problems.length > 6 ? `; and ${problems.length - 6} more` : ''), opts];
   const on = fresh.carried ? `${fresh.reviewed} (same source as this render)` : fresh.reviewed;

@@ -88,5 +88,6 @@ export function deliveryReviewText(plan, { render, sha, verdicts = {}, skip = []
     ...(notes ? ['Modality: intent and motion sheets plus event frames; no full-speed viewing in this test.',
       'Silhouettes (labels ignored): every adjacent pair has a different shape and action.',
       'Keyframes: each encoded frame matches or beats its Gate B keyframe.',
-      'Slide test: no frame would pass as a slide; the second scene is the screenshot frame.'] : []), ''].join('\n');
+      'Slide test: no frame would pass as a slide; the second scene is the screenshot frame.',
+      'Sequence: the two scenes change layout at the cut and each develops, so no stretch holds one picture.'] : []), ''].join('\n');
 }
