@@ -40,6 +40,11 @@ a general editing principle, a technical defect, or a project-specific preferenc
 Promote only the first two, with the evidence, into skills, references or checks.
 Keep preferences in the project's DESIGN.md (or `brand/DESIGN.md` when the person
 wants them for every reel); never turn one project's style into a global rule.
+Example (Claude Code mods, October 2026): principles promoted to `references/visual-principles.md` (§3 layout rhythm
+as judgement, §8 show the benefit, not the interface), the Gate B layout timeline and the delivery review's
+`Sequence:` line (create-reel); defects fixed in `render-reel.mjs` (versions held by renamed files and `.qa`
+folders) and the composition contract (`.clip` styling, late reveals); the light-world preference stays in
+`brand/DESIGN.md` as a default, not a rule.
 
 ## Establish the edit
 

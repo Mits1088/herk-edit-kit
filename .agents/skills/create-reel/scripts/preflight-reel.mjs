@@ -106,11 +106,23 @@ export function storyMechanics(plan) {
   const motifReturns = Object.entries(motifs).filter(([, ids]) => ids.length > 1).map(([motif, ids]) => ({ motif, scenes: ids }));
   const numericScenes = scenes.filter((s) => /\d/.test(`${s.anchor || ''} ${s.visualIntent || ''}`))
     .map((s) => ({ id: s.id, brollMode: s.brollMode || null, layout: s.layout || null }));
+  // Layout timeline: consecutive scenes in one layout merged into a run. Long runs are listed for the reviewer to judge
+  // (is the picture still developing, or has it been one frame too long?), never failed: a held scene with meaningful
+  // action or a performance can be right. In-scene zooms are not visible here; judge those on the rendered motion sheet.
+  const LONG_RUN = 3.5;
+  const timeline = [];
+  for (const s of scenes) {
+    const last = timeline[timeline.length - 1], k = s.layout || '?';
+    if (last && last.layout === k) { last.end = Number(s.end); last.scenes.push(s.id); }
+    else timeline.push({ layout: k, start: Number(s.start), end: Number(s.end), scenes: [s.id] });
+  }
+  for (const r of timeline) r.seconds = round(r.end - r.start);
+  const longRuns = timeline.filter((r) => r.seconds > LONG_RUN);
   const withEvents = new Set(events.map((e) => e.visual));
   const purposes = {};
   for (const s of scenes) purposes[s.visualPurpose || '?'] = (purposes[s.visualPurpose || '?'] || 0) + 1;
   return {
-    layouts, hasSpeaker, longestWithoutSpeaker: longest, purposes, motifReturns, numericScenes,
+    layouts, timeline, longRuns, hasSpeaker, longestWithoutSpeaker: longest, purposes, motifReturns, numericScenes,
     holds: scenes.filter((s) => s.holdReason).map((s) => s.id),
     scenesWithoutEvents: scenes.filter((s) => !withEvents.has(s.id)).map((s) => s.id),
     events: events.length,
@@ -120,6 +132,8 @@ export function storyMechanics(plan) {
 function printMechanics(sm) {
   console.log('\nStory mechanics (information for the reviewer; nothing here is required):');
   console.log(`  Layouts: ${Object.entries(sm.layouts).map(([k, v]) => `${k} ${v.scenes} (${v.seconds} s)`).join(', ') || 'none'}`);
+  console.log(`  Layout timeline: ${sm.timeline.map((r) => `${r.layout} ${r.start.toFixed(1)}-${r.end.toFixed(1)}`).join(' | ') || 'none'}`);
+  if (sm.longRuns.length) console.log(`  One layout held over 3.5 s (judge: is the picture still developing?): ${sm.longRuns.map((r) => `${r.layout} ${r.start.toFixed(1)}-${r.end.toFixed(1)} s (${r.scenes.join(', ')})`).join('; ')}`);
   if (sm.hasSpeaker) console.log(`  Longest stretch without the speaker: ${sm.longestWithoutSpeaker.seconds} s${sm.longestWithoutSpeaker.scenes.length ? ` (${sm.longestWithoutSpeaker.scenes.join(', ')})` : ''}`);
   console.log(`  Purposes: ${Object.entries(sm.purposes).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`);
   console.log(`  Recurring motifs: ${sm.motifReturns.map((r) => `${r.motif} (${r.scenes.join(', ')})`).join('; ') || 'none'}`);

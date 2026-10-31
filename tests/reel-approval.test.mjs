@@ -99,6 +99,19 @@ test('a successful draft render runs only the lightweight checks', () => {
   assert.ok(!existsSync(join(dir, 'qa-called.json')), 'full QA not run for a draft');
 });
 
+test('a render never reuses a version held by a renamed file or a leftover .qa folder', () => {
+  requireFfmpeg();
+  const dir = project();
+  mkdirSync(join(dir, 'renders'), { recursive: true });
+  writeFileSync(join(dir, `renders/${SLUG}-draft-v001-mine.mp4`), 'renamed by the person');
+  mkdirSync(join(dir, `renders/${SLUG}-draft-v002.qa`));
+  writeFileSync(join(dir, `renders/${SLUG}-draft-v002.qa/keep.txt`), 'old review');
+  const r = render(dir, 'draft');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(existsSync(join(dir, `renders/${SLUG}-draft-v003.mp4`)), 'next free version');
+  assert.equal(readFileSync(join(dir, `renders/${SLUG}-draft-v002.qa/keep.txt`), 'utf8'), 'old review', 'old QA folder untouched');
+});
+
 test('a draft with the wrong shape fails its quick checks', () => {
   requireFfmpeg();
   const dir = project();

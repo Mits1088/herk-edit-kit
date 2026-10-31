@@ -9,9 +9,14 @@ The creative brief for a specific reel overrides this file where they disagree. 
 
 ## Style Prompt
 
-A dark graphite security-lab world: terminal windows, cards and counters on a lit charcoal ground, with one warm
-yellow accent spent only where the story lands. It should feel precise, factual and calm, like a well-lit
-workbench. It must never feel like hype, neon "AI" glow, or a slide deck.
+Precise, factual and calm, with one accent spent only where the story lands. It must never feel like hype, neon
+"AI" glow, or a slide deck.
+
+The visual world is chosen per reel, not inherited. Lean towards light, bright, inviting environments (daylight
+paper, cream studio, pastel sets, sunlit desks) over dark terminals and graphite panels, and vary the world between
+projects so consecutive reels do not look alike. Dark is still allowed when the story earns it (a security lab, a
+night scene, a reveal); record why in the project's DESIGN.md. Name the chosen world, its ground and its palette
+there, and check the last two reels' worlds before settling on one.
 
 ## Audience and objectives
 
@@ -29,13 +34,15 @@ statements as current news. Context and source lines are sentence case without l
 ## Colors
 
 The accent comes from the power icon on the creator's LAPTOP CEO shirt (sampled `#af9b29` under room light,
-brightened for screen).
+brightened for screen). Only the accent and the loss red are brand constants (darken the yellow to about `#b8960f`
+when it carries text on a light ground). Ground, surface and text colours belong to each reel's world; the
+values below are the `claude-mythos-reel` dark world, kept as one example, not the default.
 
 | Token | Hex | Role |
 |---|---|---|
-| `--brand-bg` | `#0e0f11` | Primary background (graphite ground) |
-| `--brand-surface` | `#17191c` | Panels, cards, terminal windows, tiers |
-| `--brand-text` | `#f2efe9` | Primary text |
+| `--brand-bg` | `#0e0f11` | Primary background (mythos example: graphite ground) |
+| `--brand-surface` | `#17191c` | Panels, cards, terminal windows, tiers (mythos example) |
+| `--brand-text` | `#f2efe9` | Primary text (mythos example) |
 | `--brand-accent` | `#ebc934` | One accent, used where emphasis is spent |
 | `--brand-neg` | `#ff6b5b` | Losses only: missed, held back, attackers, "doesn't work" |
 

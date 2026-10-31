@@ -11,7 +11,9 @@
 - Prefer `fromTo` with explicit start values. No `Math.random`, `Date`, `performance.now`, timers,
   `requestAnimationFrame` or CSS animations driving what is drawn; seed any noise from the frame time.
 - Timed elements: `class="clip"`, `data-start`, `data-duration`, `data-track-index`; same-track clips never
-  overlap. Videos muted, audio as sibling `<audio>`.
+  overlap. Videos muted, audio as sibling `<audio>`. `clip` is HyperFrames' own class: never style `.clip` in the
+  project's CSS (a `.clip` rule written for a paper clip painted over every timed element of a reel); name it
+  something else.
 - Keep text, logos and key action inside the profile's safe area. New projects get it as CSS variables on the root
   (`--safe-top`, `--safe-bottom`, `--safe-left`, `--safe-right`, in px from `profiles.json`); place captions per
   layout from them (for example `top: calc(100% - var(--safe-bottom) - 40px)` on a full-screen scene) rather than one
@@ -24,6 +26,10 @@ HyperFrames seeks frames; a render worker can start anywhere. Root cause first:
 - When several tweens animate the same property of one element, each starts where the previous ended: explicit
   `fromTo` values that chain, `immediateRender: false` on the later ones. A helper that always starts from a fixed
   value (for example a "look" that always starts from centre) breaks backward seeks.
+- An object that should first appear later (a crate that drops, dust that puffs) must not be revealed by a `fromTo`'s
+  from-state: `fromTo` renders its start values immediately, so a visible start shows the object from time 0. Hide it
+  in the authored state, reveal it with `tl.set(..., { opacity: 1 }, t)` and give the movement `immediateRender: false`
+  (HyperFrames' lint catches only the opposite case, an element that stays hidden).
 - Keep static layout on whole pixels; centring math can leave half-pixel edges that rasterise differently by order.
 - If a layer whose opacity animates changes the anti-aliasing of what it covers after it has animated, promote it
   from the start (`will-change: opacity`).
@@ -119,6 +125,7 @@ Modality: intent, motion and event sheets; no full-speed viewing was available.
 Silhouettes (labels ignored): s01, s02 and s05 are the same rounded panel; s07 is the only full-frame picture.
 Keyframes: s01 and s07 fall short of their Gate B frames; s11 matches.
 Slide test: s05 and s11 would pass as slides; s07 is the screenshot frame.
+Sequence: 5.3-21.9 s reads as two held frames (strip, then two desks); zooms only. Rebuilt with full-frame beats.
 ```
 
 - `Reviewed render` names the file and at least 12 hex of its SHA-256 (`reel.json` `renders` logs both). A review
@@ -133,6 +140,11 @@ Slide test: s05 and s11 would pass as slides; s07 is the screenshot frame.
   more) and the motion note (four or more) must not repeat the approved intent: say what the encoded frame and the
   strip show, not what they were meant to show. The motion note says whether the action the intent names happens
   across the strip or only its end state appears; "holds on the face" is a valid note for a deliberate hold.
+- `Sequence:` judges the scenes together, not one by one: where does the viewer see the same picture for a long
+  stretch with nothing developing? Use the Gate B layout timeline and the motion sheet; a run of one layout over
+  about 3.5 s is a prompt to look, not a failure. Zooms and pans inside one layout count as a weaker change than a
+  layout change or a new picture. A long hold with meaningful action, a building process or a performance is fine;
+  say why. Each scene can be `delivered` while the sequence still drags, which is exactly what this line catches.
 - `Modality:` says how the motion was judged (full-speed viewing, or stills only). A strip is not playback.
 - Any `partial` or `missing` scene blocks a candidate. The fix is to rebuild the scene, render a new draft and review
   that render; it needs no approval because it corrects the build to meet the approved plan.

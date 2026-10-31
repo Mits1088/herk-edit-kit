@@ -19,6 +19,8 @@ plan is approved and still matches. Projects created before Gate B have no such 
    hero beat, one more representative scene) so the person approves pictures, not only prose. Make them at the
    intended production fidelity, not as wireframes: they set the bar the build must meet or beat. Save each as
    `keyframes/<scene id>.png` (or `.jpg`), so QA's intent sheet shows it beside the encoded frame.
+   Build keyframes inside the profile's safe area from the start (organic: text and key action in x 90-930,
+   y 200-1600); text drawn above y 200 sits under the platform's top bar and has to move during the build.
    If the person supplied a reference video, analyse it first (`short-form-edit/references/reference-analysis.md`):
    separate the techniques worth adopting from its distinctive styling, and list which ideas you adopt and why.
    Without a reference, plan normally.
@@ -102,7 +104,10 @@ Present this in the conversation (keep it short) and save the same facts in `DES
    "Story mechanics" block to help; nothing in it is a target):
    - the primary visual mechanism, and what the viewer sees happen rather than simply appear (`visualIntent`, `events`);
    - which objects or concepts return and how they change, if any (`motifs`, `carryIn`/`carryOut`);
-   - how the layouts serve attention (`layout`, `visualPurpose`);
+   - how the layouts serve attention (`layout`, `visualPurpose`), read from the printed layout timeline: for any one
+     layout held over about 3.5 s, say what keeps developing in it, or plan a beat change (a full-frame payoff, a cut
+     to the face); this is a prompt to judge, never a failure (`short-form-edit/references/visual-principles.md` §3);
+   - what benefit or consequence the viewer sees, not only which interface is shown (visual principles §8);
    - which numerical claims deserve a visual demonstration and which are fine as speech;
    - where anticipation, motion and stillness go (`events`, `holdReason`);
    - why each visual beats generic footage or a title card (`asset.whyThis`).

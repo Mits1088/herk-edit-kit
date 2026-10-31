@@ -36,6 +36,17 @@ Avoid one layout on repeat because it is the default.
 
 - When not to: a reel built on the speaker's performance may stay on the face almost throughout; that is a choice.
 
+Layout rhythm, as judgement rather than a quota (learnt on the Claude Code mods reel, October 2026):
+
+- A change of layout (split, full frame, face) reads as a new picture; zooming or panning inside one layout mostly
+  does not. When a stretch feels like one held frame, consider a layout change before adding camera moves.
+- Full frame suits the moment the picture is the explanation (a mechanism, a before and after, a tip's payoff) or
+  the idea is tall (a pipe, a stack, a sorter). Design it for 9:16 height; an enlarged split picture wastes it.
+- The face suits opinions, contrasts ("rather than…"), set-ups for a reveal and the call to action.
+- Full-frame moments usually land in about 2-4 s; longer is fine when something keeps developing on screen.
+- No duration or cut count is a rule. A long scene with meaningful action or a strong performance can hold; judge
+  whether the picture is still developing and whether the viewer has a reason to keep watching.
+
 ## 4. Visualised explanation
 
 When a number, comparison, process or abstract idea is hard to grasp as speech, turn it into something the viewer can
@@ -61,6 +72,16 @@ and the platform's safe area, not one fixed recipe. Emphasis is spent on the wor
 Each one advances the explanation, shows evidence, establishes context or creates a deliberate feeling. If a visual
 only repeats the caption or decorates, replace it with the example, the evidence or the consequence, or cut back to
 the speaker.
+
+## 8. Show the benefit, not the interface
+
+Viewers stay for what changes for them: the time saved, the mess avoided, the result they get. A technically accurate
+UI mock (status lines, chips, settings) asks them to read and infer the point; show the consequence instead (the
+copy-paste grind that stops, the scattered sessions that become one board, the small job that routes itself), and
+keep UI for the moment the exact interface is the takeaway (the prompt to copy). One running example across the tips
+(the same small project each time) is easier to follow than a new example per tip.
+
+- When not to: the real screen recording is the proof, or the audience already knows the interface and wants it.
 
 ## At Gate B
 

@@ -38,6 +38,11 @@ test('story mechanics: works for faceless, footage and brand plans; needs no cha
   // Speaker absence is measured across consecutive full-frame scenes.
   const mixed = { scenes: [{ id: 'a', start: 0, end: 2, layout: 'split' }, { id: 'b', start: 2, end: 4.5, layout: 'paper' }, { id: 'c', start: 4.5, end: 6, layout: 'broll' }, { id: 'd', start: 6, end: 7, layout: 'face' }] };
   assert.deepEqual(storyMechanics(mixed).longestWithoutSpeaker, { seconds: 4, scenes: ['b', 'c'] });
+  // The layout timeline merges consecutive scenes in one layout; long runs are listed, not failed.
+  const runs = { scenes: [{ id: 'a', start: 0, end: 2, layout: 'split' }, { id: 'b', start: 2, end: 6, layout: 'split' }, { id: 'c', start: 6, end: 8, layout: 'paper' }] };
+  const smr = storyMechanics(runs);
+  assert.deepEqual(smr.timeline.map((r) => [r.layout, r.seconds, r.scenes]), [['split', 6, ['a', 'b']], ['paper', 2, ['c']]]);
+  assert.deepEqual(smr.longRuns.map((r) => r.scenes), [['a', 'b']]);
   // Faceless reels have no speaker to be away from.
   assert.equal(storyMechanics(facelessPlan()).longestWithoutSpeaker, null);
 });

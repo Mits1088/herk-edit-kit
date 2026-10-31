@@ -66,7 +66,10 @@ for (const [k, v] of Object.entries(hooks)) if (v) console.warn(`TEST HOOK ACTIV
 
 const rendersDir = join(dir, 'renders');
 mkdirSync(rendersDir, { recursive: true });
-const pattern = new RegExp(`^${reel.slug}-${label}-v(\\d{3})\\.mp4$`);
+// A version is taken by any entry that carries it: the .mp4, its .qa folder, a renamed copy (-mine.mp4) or a render
+// transaction folder. Counting only exact .mp4 names reused a number after a rename and wrote into the old .qa folder.
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const pattern = new RegExp(`^\\.?${esc(reel.slug)}-${label}-v(\\d{3})(?!\\d)`);
 const taken = readdirSync(rendersDir).map(f => (f.match(pattern) || [])[1]).filter(Boolean).map(Number);
 const version = String((taken.length ? Math.max(...taken) : 0) + 1).padStart(3, '0');
 const file = `${reel.slug}-${label}-v${version}.mp4`;
