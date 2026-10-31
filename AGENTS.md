@@ -41,6 +41,10 @@ Before a creative session read `MOTION_PHILOSOPHY.md` and the project's DESIGN.m
 The philosophy's fast sizzle pacing is a style reference. Give educational speech
 room to breathe. The project brief controls pacing, palette, and typography.
 Framework skill contracts override historical code recipes in the style guide.
+The `hyperframes` scene-transition rules (always transition, animate every element
+in, no exits before a transition) are editorial defaults, not render contract.
+Hard cuts, stillness, entrances, exits and footage without added motion are
+editorial choices for the brief and the owner skill. The technical rules still bind.
 
 ## Workspace
 

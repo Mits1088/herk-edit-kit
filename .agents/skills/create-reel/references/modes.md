@@ -3,8 +3,9 @@
 ## Precedence when skills disagree
 
 1. The user's explicit brief.
-2. Technical contract: HyperFrames composition rules (`hyperframes`), the one-clock rule, the profile's size,
-   fps and safe area, and the approval gates of the owner skill.
+2. Technical contract: HyperFrames composition rules (`hyperframes`: composition structure and data attributes,
+   timeline registration, deterministic and seek-safe animation, finite timelines, media owned by the framework),
+   the one-clock rule, the profile's size, fps and safe area, and the approval gates of the owner skill.
 3. motionmaxxing's craft judgment and its "never ship" list, over house-style defaults in
    `MOTION_PHILOSOPHY.md`, `motion-showreel` and the style library (decoratives, ghost text, hairlines, eyebrows,
    progress patterns, persistent HUDs). If the brief asks for one of those, the brief wins; say so in the QA notes.
@@ -23,6 +24,7 @@ Known conflicts, resolved:
 | Scaffold | `make-a-video`: `npx hyperframes init` | Herk: `npm run new-video` | `npm run new-reel` (wraps new-video, converts to vertical) |
 | Ending | `make-a-video`: 4-6 s outro hold | `short-form-edit`, motionmaxxing G3: short hold | Reels end with a hold of about 1.4 s or less unless the brief wants more |
 | HUD, chapter labels | `motion-showreel`: persistent HUD | motionmaxxing: never ship page chrome | No HUD unless the brief asks for it |
+| Transitions, entrances, exits | `hyperframes`: always transition between scenes, animate every element in, no exits before a transition | motionmaxxing, `short-form-edit` visual principles: a hard cut is a decision, stillness with a reason is valid, things may arrive already built | Editorial, not technical: hard cuts, holds, built arrivals, exits and untouched footage are choices recorded in the plan (`events`, `holdReason`); the technical contract in item 2 still binds every frame |
 | Eases | `make-a-video`: 3-4 GSAP eases per beat | motionmaxxing: 12 measured curves | `ReelEases.*`; built-in GSAP eases are fine where a measured curve does not fit |
 | Runtime | motionmaxxing: `Motion.film()` | HyperFrames: paused GSAP timeline | HyperFrames contract only; motionmaxxing's principles applied through GSAP |
 | Openings | `short-form-edit`: three rough openings | render cost | Modes A and B: one rough animated opening plus two written alternatives; Mode C may animate three |

@@ -54,6 +54,35 @@ HyperFrames seeks frames; a render worker can start anywhere. Root cause first:
   fails during a HyperFrames render falls back silently, so QA treats any remote font as a failure.
 - Optional: `window.__events = [{ t, end?, label }]` marks the moments that matter (hero beat, reveal) so QA samples them first.
 
+### Containers that change (only when a beat needs one)
+
+Nothing here is required. Use it when a menu opens, a list grows, a card becomes a smaller card or a control changes
+something on screen (motionmaxxing `references/ui-demo.md` 7.4, 7.7, 7.8, 11). Tested on HyperFrames 0.7.109 and
+GSAP 3.14.2 with `seek-check.mjs`.
+- Keep content out of the layer that changes size. Text inside a container whose `width` or `height` tweens can
+  re-wrap mid-move, and a uniform `scale` on it scales the text.
+- Card morph: put the surface (background, border, radius, shadow, tail) on an empty, absolutely positioned layer
+  and change its `width`, `height` and `borderRadius` in one tween; it has no children to reflow (the caveman-v5
+  bubble does this). The content sits in sibling layers: the old content fades out over the first ~40% of the move,
+  the new over the last ~40%. Use `clip-path: inset(... round R)` only when the surface must also clip content, and
+  only on a surface without a border: the clip cuts the border off the clipped edges.
+- Anchored expand (a dropdown, a task list growing, a panel pushing what is below): author the open layout, clip the
+  body with `clip-path: inset(0 0 Xpx 0)` and move one wrapper holding everything below by `y: -X`, both set from one
+  proxy in one tween so the edge and the pushed content cannot separate. Header, body and the content below share
+  one column (left edge and width), so the panel stays aligned. Nothing leaves its box, so no layout waiver is needed.
+- `data-layout-allow-overflow` (0.7.109 `check` and `inspect`; QA runs `lint` only): it exempts the marked element
+  and every descendant. Put it only on the smallest element that really parks off-canvas, never on a wrapper that
+  contains text.
+- Control and target (a slider and what it moves, a class name and the icon it resizes): drive both from one proxy
+  in one tween, or one step list looked up from the proxy, and set both sides in the same `onUpdate`. Recompute
+  everything from the proxy's value on every update, never from a counter or the previous update, so any seek order
+  gives the same frame. Readouts use `font-variant-numeric: tabular-nums` and a fixed `min-width`; stepped values
+  (ui-demo 11.2) are a step list.
+- Sizes are constants or one measurement at build time, never per-frame layout reads.
+
+Adapted from the retired HyperFrames `hyperframes-animation` rules card-morph-anchor, anchored-layout-expand and
+control-target-sync (Apache-2.0, see `THIRD_PARTY_NOTICES.md`).
+
 ## Two render levels
 
 | Command | Output | Checks |
