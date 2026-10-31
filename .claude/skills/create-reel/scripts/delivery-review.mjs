@@ -136,9 +136,9 @@ export function parseDeliveryReview(text) {
   const r = body.match(/^\s*Reviewed render:\s*`?([^\s`()]+\.mp4)`?[^\n]*?\b([0-9a-f]{12,64})\b/im);
   if (r) { out.render = r[1].replaceAll('\\', '/'); out.sha = r[2].toLowerCase(); }
   else out.errors.push('no "Reviewed render: renders/<file>.mp4 (SHA-256 <12 hex>)" line');
-  const label = (name, gap = '\\s*') => (body.match(new RegExp(`^\\s*(?:[-*]\\s*)?\\**${name}[^:\\n]*:\\**${gap}(.+)$`, 'im')) || [])[1]?.trim() || '';
-  // Sequence reads its own line only, so an empty note cannot borrow the next line.
-  out.notes = { modality: label('Modality'), silhouettes: label('Silhouettes'), keyframes: label('Keyframes'), slide: label('Slide test'), sequence: label('Sequence', '[ \\t]*') };
+  // A note reads its own line only, so an empty one cannot borrow the next line.
+  const label = name => (body.match(new RegExp(`^\\s*(?:[-*]\\s*)?\\**${name}[^:\\n]*:\\**[ \\t]*(.+)$`, 'im')) || [])[1]?.trim() || '';
+  out.notes = { modality: label('Modality'), silhouettes: label('Silhouettes'), keyframes: label('Keyframes'), slide: label('Slide test'), sequence: label('Sequence') };
   const rows = body.split(/\r?\n/).filter(l => /^\s*\|/.test(l));
   if (rows.length) {
     const head = cells(rows[0]).map(norm);

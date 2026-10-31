@@ -116,6 +116,46 @@ test('a partial or missing scene FAILs the candidate and names the rebuild', () 
   assert.equal(d[2], 'WARNING'); assert.equal(d[4].required, false);
 });
 
+test('each note reads only its own line, in any position, Markdown form and line ending', () => {
+  const complete = deliveryReviewText(facelessPlan(), { render: cand, sha: SHA_C });
+  const notes = complete.match(/^(?:Modality|Silhouettes|Keyframes|Slide test|Sequence).*$/gm);
+  assert.equal(notes.length, 5);
+  const [before, after] = complete.split(notes.join('\n'));
+  const forms = [
+    ['plain', (l, t) => `${l}: ${t}`], ['bold label', (l, t) => `**${l}:** ${t}`], ['bold before colon', (l, t) => `**${l}**: ${t}`],
+    ['dash bullet', (l, t) => `- ${l}: ${t}`], ['star bullet', (l, t) => `* ${l}: ${t}`], ['bold bullet', (l, t) => `- **${l}:** ${t}`],
+  ];
+  const keyframes = { s01: 'keyframes/s01.png' };
+  for (const line of notes) {
+    const colon = line.indexOf(':'), lbl = line.slice(0, colon), text = line.slice(colon + 2), name = lbl.replace(/ \(.*/, '');
+    const others = notes.filter(n => n !== line);
+    for (let at = 0; at <= others.length; at++) {
+      const review = (note, eol) => (before + others.slice(0, at).concat(note === null ? [] : [note], others.slice(at)).join('\n') + after).replaceAll('\n', eol);
+      for (const eol of ['\n', '\r\n']) {
+        const where = `${name} at ${at}, ${JSON.stringify(eol)}`;
+        assert.equal(row(review(null, eol), { keyframes })[2], 'NOT TESTED', `${where}: missing`);
+        for (const [form, write] of forms) {
+          let out = row(review(write(lbl, text), eol), { keyframes });
+          assert.equal(out[2], 'PASS', `${where}, ${form}: valid (${out[3]})`);
+          for (const blank of [write(lbl, '').trimEnd(), `${write(lbl, '').trimEnd()}   `]) {
+            out = row(review(blank, eol), { keyframes });
+            assert.equal(out[2], 'NOT TESTED', `${where}, ${form}: empty (${JSON.stringify(blank)})`);
+            assert.match(out[3], new RegExp(`"${name}:" needs a sentence`), `${where}, ${form}`);
+            assert.ok(blocks(out));
+          }
+        }
+      }
+    }
+  }
+  // Keyframes stays conditional: without keyframes on disk, its note can be empty or absent in any position.
+  const line = notes.find(n => n.startsWith('Keyframes')), others = notes.filter(n => n !== line);
+  for (let at = 0; at <= others.length; at++) for (const note of ['Keyframes:', null]) {
+    const text = before + others.slice(0, at).concat(note === null ? [] : [note], others.slice(at)).join('\n') + after;
+    const out = row(text);
+    assert.equal(out[2], 'PASS', out[3]); assert.doesNotMatch(out[3], /Keyframes/);
+  }
+});
+
 test('box-ticking is refused: one-word descriptions, the intent pasted back, missing silhouette or slide notes', () => {
   const plan = facelessPlan();
   let out = row(deliveryReviewText(plan, { render: cand, sha: SHA_C, seen: { s01: 'looks good' } }));
