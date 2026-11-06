@@ -86,6 +86,34 @@ keep UI for the moment the exact interface is the takeaway (the prompt to copy).
 
 - When not to: the real screen recording is the proof, or the audience already knows the interface and wants it.
 
+## 9. Open on what is at stake for the viewer
+
+By second three the viewer should see a clear problem, benefit, result or consequence that matters to them, and the
+reel should pay it off later. A demonstration can open on the problem it fixes (a reply that is 69 tokens long, a
+usage gauge falling towards empty); news can open on what changes for the viewer; an opinion can open on the
+consequence the speaker warns about, or on the speaker's face when conviction carries it. Movement is not the point:
+a still frame that already shows the stake works, and its development can land a moment later. Do not invent a
+measurable problem or a transformation the content does not have. What tends to delay the reason to watch is a crowd
+of other people's advice, a wall of cards or a catalogue multiplying: they show quantity before the viewer cares.
+
+Learnt by comparing four reels (November 2026, n = 4, an observation, not proof): Caveman and Claude Code add-ons
+opened on a stake and were the two strongest; five skills and plugins opened on a crowd and a catalogue. Their spoken
+hooks differed in the same direction, so the words may explain part of it.
+
+The execution worth carrying forward from those two reels is not a style and applies in any world, including the
+light editorial ones the brand defaults to:
+
+- The demonstration acts out the claim (the caveman visibly smashes the words down; the car visibly runs on the
+  gauge) instead of labelling it.
+- Each designed sequence is visually cohesive: its ground, light and scale belong together. Cutting deliberately
+  between illustration, real footage, UI and the speaker stays open; the cut should read as a choice, not a mismatch.
+- A character, when the story has a reason for one, causes the change (§1) rather than decorating the frame.
+- A transformation, when the content has one, is complete and legible: the before, the action and the after are seen.
+- The finish is polished: expressive, purposeful animation at the level of those reels, not a simplified version.
+
+Use their mechanisms, never their cave, car, desert or pixel style. The brand's rules on worlds (vary them; illustrated
+or mascot worlds need a story reason and never run twice in a row) still apply.
+
 ## At Gate B
 
 Answer these from the plan's existing fields (create-reel `references/preflight.md`); there is no separate schema:

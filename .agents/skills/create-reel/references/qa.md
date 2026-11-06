@@ -178,6 +178,8 @@ Sequence: 5.3-21.9 s reads as two held frames (strip, then two desks); zooms onl
   about 3.5 s is a prompt to look, not a failure. Zooms and pans inside one layout count as a weaker change than a
   layout change or a new picture. A long hold with meaningful action, a building process or a performance is fine;
   say why. Each scene can be `delivered` while the sequence still drags, which is exactly what this line catches.
+  Say too whether what the opening shows at stake by second three is paid off later, and where; an opening the reel
+  never returns to is a finding to act on, not a failure.
 - `Modality:` says how the motion was judged (full-speed viewing, or stills only). A strip is not playback.
 - Any `partial` or `missing` scene blocks a candidate. The fix is to rebuild the scene, render a new draft and review
   that render; it needs no approval because it corrects the build to meet the approved plan.

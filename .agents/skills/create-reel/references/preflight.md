@@ -95,7 +95,9 @@ a plate, never B-roll. Never invent evidence; a reconstructed or simulated visua
 Present this in the conversation (keep it short) and save the same facts in `DESIGN.md`:
 
 1. **Mode, profile, length** and the one-line idea.
-2. **Hook**: the chosen opening and the two alternatives, one line each; why the chosen one.
+2. **Hook**: the chosen opening and the two alternatives, one line each; why the chosen one. For the chosen one, say
+   what the viewer sees by second three (the problem, benefit, result or consequence shown, still or moving) and which
+   scene pays it off (`short-form-edit/references/visual-principles.md` §9).
 3. **World**: ground, light, type, and the recurring motif if there is one. With a reference: the techniques adopted
    and why, and what was deliberately not borrowed.
 4. **Scene by scene, what the viewer sees** (`preflight-reel` prints the table): purpose, mode, evidence, intent, and
