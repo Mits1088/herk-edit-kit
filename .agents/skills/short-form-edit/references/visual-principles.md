@@ -27,6 +27,9 @@ broken becomes fixed, full becomes empty. No object count is required, and many 
 - A number planted early that the payoff resolves.
 - When not to: a hard cut to new evidence is clearer than forcing an object to travel; a callback that does not change
   meaning is decoration.
+- When a revision upgrades a recurring element, apply it from that element's first appearance, usually the hook. The
+  creator asked for this on the Claude plugins reel (November 2026): the costumed mascot first reached only the later
+  cards, so the strongest idea was missing from the opening seconds.
 
 ## 3. Attention-led layout
 

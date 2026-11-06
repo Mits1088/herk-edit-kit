@@ -31,6 +31,10 @@ HyperFrames seeks frames; a render worker can start anywhere. Root cause first:
   in the authored state, reveal it with `tl.set(..., { opacity: 1 }, t)` and give the movement `immediateRender: false`
   (HyperFrames' lint catches only the opposite case, an element that stays hidden).
 - Keep static layout on whole pixels; centring math can leave half-pixel edges that rasterise differently by order.
+- Put clip and camera cut times on (or a hair before) a frame, never rounded up past it. karpathy-rules wrote
+  `data-start="23.7667"` for frame 713 (23.76667 s): that frame showed the old scene hidden and the new one not yet
+  started, a one-frame flash at three cuts that every automated check missed. Use `frame/fps - 0.0002` and inspect the
+  encoded frames either side of each fractional cut.
 - If a layer whose opacity animates changes the anti-aliasing of what it covers after it has animated, promote it
   from the start (`will-change: opacity`).
 - Timeline settling is allowed: `tl.progress(1).progress(0)` after building, before registering, makes a freshly

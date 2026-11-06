@@ -18,6 +18,11 @@ projects so consecutive reels do not look alike. Dark is still allowed when the 
 night scene, a reveal); record why in the project's DESIGN.md. Name the chosen world, its ground and its palette
 there, and check the last two reels' worlds before settling on one.
 
+Light does not mean cartoon. Aim for an editorial, product-grade finish: clean UI windows, diagrams with thin
+connectors, real captures, restrained type with a few serif emphasis words. Illustrated, toy, pixel-art or mascot
+worlds need a story reason and never run twice in a row. Before Gate B, read every `raw-media/Inspiration/REF-*.md`
+and match the references' level of polish, not only their mechanics.
+
 ## Audience and objectives
 
 - Who: tech-curious Instagram viewers who follow AI news.

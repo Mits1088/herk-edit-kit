@@ -313,6 +313,11 @@ human reactions where they support the story.
    Duck the effects under speech as well as the bed: a long whoosh or a hit stacked
    over a hero beat can mask the line it illustrates (find-skills: hits +13.7 dB over
    the voice at 19 s drowned the speaker; fixed by a 5 dB speech duck and halved hits).
+   A continuous effect under speech (chalk, typing, rain) reads louder than its RMS: the
+   karpathy-rules chalk at about -15 dB under the voice for 3.5 s was "quite loud" to the
+   creator, as were taps at 0 to +4 dB. Fixed with broadband hiss removed, the chalk about
+   27 dB under, and a guard holding every effect 16 dB under the voice's speech level
+   (14 dB in pauses). Measure effects per 100 ms window against the voice, not only integrated.
    Score anticipation, contact, and release separately. A brief bed dip can make
    the next contact more distinct without raising its volume. Let some cuts pass
    without a whoosh. Record cue purpose and audition transitions when supported.
