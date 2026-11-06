@@ -33,8 +33,9 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "hyperframes": "0.7.109",
+    "docx": "^9.15.1",
     "gsap": "3.14.2",
+    "hyperframes": "0.7.109",
     "playwright": "^1.59.1"
   }
 }

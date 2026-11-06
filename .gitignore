@@ -53,3 +53,8 @@ brand/assets/fonts/*
 !examples/showcase/curiosity-reel-2.mp4
 !examples/showcase/curiosity-reel-1.mp4
 !examples/showcase/ais-live-ad.mp4
+
+# Instagram script workflow: personal transcripts, scripts, guides and working data.
+Instagram_transcript/
+instagram_scripts_output/
+reels-data/

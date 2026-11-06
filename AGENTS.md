@@ -36,6 +36,8 @@ For one stage, load the matching local skill:
 | Preview, lint, and rendering | `hyperframes-cli` |
 | Timeline animation | `gsap` |
 | Install HyperFrames catalog blocks | `hyperframes-registry` |
+| Rewrite Reel transcripts into scripts and captions (drop files in `Instagram_transcript/`) | `rewrite-reels` |
+| Approve a finished script and build its comment-keyword guide | `approve-reel` |
 
 Before a creative session read `MOTION_PHILOSOPHY.md` and the project's DESIGN.md.
 The philosophy's fast sizzle pacing is a style reference. Give educational speech
