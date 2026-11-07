@@ -206,20 +206,78 @@ function voiceLevel(samples, sr, words, events = [], keepClear = 0) {
 function hits(samples, sr, events) {
   return events.map((t) => ({ t, db: Math.max(rmsDb(samples, sr, t, 0.15), rmsDb(samples, sr, t + 0.05, 0.15)) })).filter((h) => Number.isFinite(h.db)).sort((a, b) => b.db - a.db);
 }
+// ---------- perceived effects level (the gate). The ear hears short bright hits louder than plain RMS says, and an
+// effect in a pause is heard against silence, not against the voice. So: both stems K-weighted (ITU-R BS.1770, the
+// curve LUFS uses), 100 ms windows every 50 ms over the whole reel (not only at planned events), each effects window
+// against the median speaking level of the voice. A window where the voice itself is quiet (more than 12 dB under its
+// speaking level: a pause or a word tail) is "exposed" and has a stricter limit.
+// Calibration (Nov 2026): the three reels that save the as-mixed effects stem all drew "effects too loud / overpowering"
+// feedback and read here: karpathy-rules -11.9 speech / -12.1 pauses, claude-animated-reels -12.8 / -12.6, claude-arena
+// v001 -11.0 / -9.4 (it passed the old check at "-16 dB" plain RMS). The limits sit clear of all three. Limits are dB
+// relative to the voice's speaking level (negative = under). A mix aiming at the limit has no margin: aim 3 dB lower.
+export const SFX_PERCEIVED_DEFAULTS = { sfxSpeechMaxDb: -16, sfxExposedMaxDb: -18, sfxIntegratedMaxLU: -20 };
+function biquad(x, b0, b1, b2, a1, a2) {
+  const y = new Float32Array(x.length); let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < x.length; i++) { const v = b0 * x[i] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v; }
+  return y;
+}
+export function kWeight(x, sr) {
+  // Stage 1: high shelf about +4 dB above 1.7 kHz. Stage 2: high-pass at 38 Hz. RBJ forms of the BS.1770 filters.
+  let w = 2 * Math.PI * 1681.974 / sr, A = Math.pow(10, 3.99984 / 40), al = Math.sin(w) / (2 * 0.7071752), c = Math.cos(w), r = 2 * Math.sqrt(A) * al;
+  let a0 = (A + 1) - (A - 1) * c + r;
+  const s1 = biquad(x, A * ((A + 1) + (A - 1) * c + r) / a0, -2 * A * ((A - 1) + (A + 1) * c) / a0, A * ((A + 1) + (A - 1) * c - r) / a0,
+    2 * ((A - 1) - (A + 1) * c) / a0, ((A + 1) - (A - 1) * c - r) / a0);
+  w = 2 * Math.PI * 38.13547 / sr; al = Math.sin(w) / (2 * 0.5003270); c = Math.cos(w); a0 = 1 + al;
+  return biquad(s1, (1 + c) / 2 / a0, -(1 + c) / a0, (1 + c) / 2 / a0, -2 * c / a0, (1 - al) / a0);
+}
+function windowLevels(x, sr, gainDb, win = 0.1, hop = 0.05) {
+  const n = Math.floor(win * sr), h = Math.floor(hop * sr), out = [];
+  for (let a = 0; a + n <= x.length; a += h) { let s = 0; for (let i = a; i < a + n; i++) s += x[i] * x[i]; out.push(10 * Math.log10(s / n + 1e-20) + gainDb); }
+  return out;
+}
+export function sfxPerceived({ voice, sfx, sr = 16000, gains, words = [], lufs = null, limits = {} }) {
+  const L = { ...SFX_PERCEIVED_DEFAULTS, ...limits }, hop = 0.05;
+  const gv = db(Number(gains.voice)), gs = db(Number(gains.sfx));
+  const vw = windowLevels(kWeight(voice, sr), sr, gv), sw = windowLevels(kWeight(sfx, sr), sr, gs);
+  const n = Math.min(vw.length, sw.length), centre = (i) => i * hop + 0.05;
+  const spoken = []; let k = 0;
+  const ws = [...words].map((x) => [Number(x.start), Number(x.end)]).filter(([s, e]) => e > s).sort((p, q) => p[0] - q[0]);
+  for (let i = 0; i < n; i++) { const t = centre(i); while (k < ws.length && ws[k][1] < t) k++; if (k < ws.length && ws[k][0] <= t) spoken.push(vw[i]); }
+  const ref = median(spoken);
+  if (ref === null) return { ref: null };
+  const speech = [], exposed = [];
+  for (let i = 0; i < n; i++) {
+    if (!(sw[i] > ref - 60)) continue;
+    (vw[i] < ref - 12 ? exposed : speech).push({ t: centre(i), db: sw[i] - ref });
+  }
+  const peaks = (hs) => { const top = []; for (const h of [...hs].sort((p, q) => q.db - p.db)) { if (top.every((x) => Math.abs(x.t - h.t) >= 0.3)) top.push(h); if (top.length === 3) break; } return top; };
+  const integrated = lufs && Number.isFinite(lufs.voice) && Number.isFinite(lufs.sfx) ? (lufs.sfx + gs) - (lufs.voice + gv) : null;
+  const sp = peaks(speech), ex = peaks(exposed);
+  const fails = [];
+  if (sp.length && sp[0].db > L.sfxSpeechMaxDb) fails.push(`over speech ${sp[0].db.toFixed(1)} dB > ${L.sfxSpeechMaxDb}`);
+  if (ex.length && ex[0].db > L.sfxExposedMaxDb) fails.push(`exposed (pause) ${ex[0].db.toFixed(1)} dB > ${L.sfxExposedMaxDb}`);
+  if (integrated !== null && integrated > L.sfxIntegratedMaxLU) fails.push(`integrated ${integrated.toFixed(1)} LU > ${L.sfxIntegratedMaxLU}`);
+  return { ref, speech: sp, exposed: ex, integrated, fails, limits: L };
+}
+
 export function audioBalance({ mix = null, sr = 16000, events = [], words = [], stems = null, gains = null, limits = {} } = {}) {
   const L = { ...AUDIO_BALANCE_DEFAULTS, ...limits }, out = [];
-  const fmt = (h, ref) => `${h.t.toFixed(2)} s +${(h.db - ref).toFixed(1)} dB`;
-  if (stems?.voice && stems?.sfx && gains && Number(gains.voice) > 0 && Number(gains.sfx) > 0) {
-    const gv = db(Number(gains.voice)), gs = db(Number(gains.sfx));
-    const v = voiceLevel(stems.voice, sr, words);
-    const hs = hits(stems.sfx, sr, events.length ? events : []).map((h) => ({ ...h, db: h.db + gs }));
-    const ref = v === null ? null : v + gv;
-    const integrated = stems.lufs && Number.isFinite(stems.lufs.voice) && Number.isFinite(stems.lufs.sfx) ? (stems.lufs.sfx + gs) - (stems.lufs.voice + gv) : null;
-    const over = ref === null || !hs.length ? null : hs[0].db - ref;
-    const loud = (over !== null && over > L.sfxHitMaxOverVoiceDb) || (integrated !== null && integrated > L.sfxMaxOverVoiceLU);
-    out.push(['Audio', 'sound effects against the voice (stems with mix gains)', ref === null ? 'NOT TESTED' : loud ? 'WARNING' : 'PASS',
-      ref === null ? 'no spoken words long enough to measure the voice stem' :
-        `${integrated !== null ? `effects ${integrated >= 0 ? '+' : ''}${integrated.toFixed(1)} LU vs voice (integrated); ` : ''}loudest hits ${hs.slice(0, 3).map((h) => fmt(h, ref)).join(', ') || 'none at planned events'}; starting points: hits <= +${L.sfxHitMaxOverVoiceDb} dB, integrated <= +${L.sfxMaxOverVoiceLU} LU (reel.json "audio")`, { kind: 'technical' }]);
+  const fmt = (h, ref) => `${h.t.toFixed(2)} s ${h.db - ref >= 0 ? '+' : ''}${(h.db - ref).toFixed(1)} dB`;
+  if (stems?.voice && stems?.sfx && gains && Number(gains.voice) > 0 && Number(gains.sfx) > 0 && !/^applied/i.test(String(gains.sfx_stem || ''))) {
+    out.push(['Audio', 'sound effects not overpowering the voice (perceived: K-weighted 100 ms windows, stems with mix gains)', 'NOT TESTED',
+      'legacy mix: stem-sfx.wav is not the as-mixed effects (mix-levels.json has no "sfx_stem": "applied"), so it cannot be measured honestly. New reels mix through scripts/audio/reelmix.py, which writes cues.json and is checked per cue',
+      { kind: 'info' }]);
+  } else if (stems?.voice && stems?.sfx && gains && Number(gains.voice) > 0 && Number(gains.sfx) > 0) {
+    const p = sfxPerceived({ voice: stems.voice, sfx: stems.sfx, sr, gains, words, lufs: stems.lufs, limits });
+    const list = (hs) => hs.map((h) => `${h.t.toFixed(2)} s ${h.db.toFixed(1)} dB`).join(', ') || 'none';
+    out.push(['Audio', 'sound effects not overpowering the voice (perceived: K-weighted 100 ms windows, stems with mix gains)',
+      p.ref === null ? 'NOT TESTED' : p.fails.length ? 'FAIL' : 'PASS',
+      p.ref === null ? 'no spoken words to measure the voice stem against' :
+        `${p.fails.length ? `TOO LOUD: ${p.fails.join('; ')}. Lower the effects gain or the guard limits in the mix and re-render. ` : ''}` +
+        `loudest over speech ${list(p.speech)}; loudest in pauses ${list(p.exposed)}` +
+        `${p.integrated !== null ? `; integrated ${p.integrated.toFixed(1)} LU` : ''} (relative to the voice's speaking level). ` +
+        `Limits: speech <= ${p.limits.sfxSpeechMaxDb} dB, pauses <= ${p.limits.sfxExposedMaxDb} dB, integrated <= ${p.limits.sfxIntegratedMaxLU} LU (reel.json "audio"; loosen only with the owner's say-so)`,
+      { required: true, kind: 'technical' }]);
   } else if (stems?.voice && stems?.sfx) {
     out.push(['Audio', 'sound effects against the voice (stems with mix gains)', 'NOT TESTED', 'stems found but not the gains the mix applied: add assets/audio/mix-levels.json {"voice": g, "sfx": g}', { kind: 'info' }]);
   }
@@ -231,6 +289,152 @@ export function audioBalance({ mix = null, sr = 16000, events = [], words = [], 
       const over = hs[0].db - voice;
       out.push(['Audio', 'effects hits against the voice in the encoded mix (diagnostic)', over > L.mixHitMaxOverVoiceDb ? 'WARNING' : 'PASS',
         `loudest event windows ${hs.slice(0, 3).map((h) => fmt(h, voice)).join(', ')} over voice-only RMS (voice and effects overlap here: an estimate, not proof; starting point <= +${L.mixHitMaxOverVoiceDb} dB; listen)`, { kind: 'info' }]);
+    }
+  }
+  return out;
+}
+
+// ---------- per-cue audio QA for reels mixed by scripts/audio/reelmix.py (house profile: audio-library/house-profile.json)
+// Same basis as the mixer: each cue's K-weighted 100 ms level as mixed (cues-applied.wav), in dB against the voice's
+// median speaking level; a frame is "speech" where the voice is within profile.speechWindowDb of that level.
+export const CUE_HOP = 0.01;
+export function loadAudioProfile(root, reel = null) {
+  const merge = (a, b) => { const o = { ...a }; for (const [k, v] of Object.entries(b || {})) o[k] = v && typeof v === 'object' && !Array.isArray(v) && o[k] && typeof o[k] === 'object' ? merge(o[k], v) : v; return o; };
+  return merge(JSON.parse(readFileSync(join(root, 'audio-library', 'house-profile.json'), 'utf8')), reel?.audio?.profileOverrides);
+}
+// 100 ms level (K-weighted by default) centred on each frame k*CUE_HOP, for a segment that starts at t0 seconds.
+export function levelFrames(x, sr, frames, t0 = 0, { weight = true, win = 0.1 } = {}) {
+  const y = weight ? kWeight(x, sr) : x, c = new Float64Array(y.length + 1);
+  for (let i = 0; i < y.length; i++) c[i + 1] = c[i] + y[i] * y[i];
+  const n = Math.floor(win * sr), out = new Float64Array(frames).fill(-Infinity);
+  for (let k = 0; k < frames; k++) {
+    const centre = Math.round((k * CUE_HOP - t0) * sr), a = Math.max(0, centre - (n >> 1)), b = Math.min(y.length, a + n);
+    if (centre < 0 || centre >= y.length || b <= a) continue;
+    out[k] = 10 * Math.log10((c[b] - c[a]) / (b - a) + 1e-20);
+  }
+  return out;
+}
+function butter2(x, sr, f, type) { // RBJ 2nd-order Butterworth high- or low-pass
+  const w = 2 * Math.PI * f / sr, al = Math.sin(w) / (2 * Math.SQRT1_2), c = Math.cos(w), a0 = 1 + al, a1 = -2 * c / a0, a2 = (1 - al) / a0;
+  const b = (type === 'hp' ? [(1 + c) / 2, -(1 + c), (1 + c) / 2] : [(1 - c) / 2, 1 - c, (1 - c) / 2]).map((v) => v / a0);
+  const y = new Float32Array(x.length); let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < x.length; i++) { const v = b[0] * x[i] + b[1] * x1 + b[2] * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v; }
+  return y;
+}
+export const highpass = (x, sr, f) => butter2(butter2(x, sr, f, 'hp'), sr, f, 'hp');
+export const bandpass = (x, sr, lo, hi) => butter2(butter2(x, sr, lo, 'hp'), sr, hi, 'lp');
+export function lufsOf(x, sr) { // integrated loudness; for a dual-mono file folded down by ffmpeg -ac 1 this reads as the stereo file
+  const y = kWeight(x, sr), n = Math.floor(0.4 * sr), h = Math.floor(0.1 * sr), z = [];
+  const c = new Float64Array(y.length + 1); for (let i = 0; i < y.length; i++) c[i + 1] = c[i] + y[i] * y[i];
+  for (let a = 0; a + n <= y.length; a += h) z.push((c[a + n] - c[a]) / n);
+  const L = (v) => -0.691 + 10 * Math.log10(v + 1e-20), mean = (v) => v.reduce((p, q) => p + q, 0) / (v.length || 1);
+  let g = z.filter((v) => L(v) > -70); if (!g.length) return -70;
+  const rel = L(mean(g)) - 10; g = g.filter((v) => L(v) > rel);
+  return L(mean(g));
+}
+function onsetSec(seg, sr, belowPeakDb = 24) { // first point within belowPeakDb of the cue's own 5 ms peak
+  const n = Math.max(1, Math.floor(0.005 * sr)), e = new Float64Array(seg.length); let s = 0, peak = 0;
+  for (let i = 0; i < seg.length; i++) { s += seg[i] * seg[i]; if (i >= n) s -= seg[i - n] * seg[i - n]; e[i] = Math.sqrt(Math.max(0, s) / n); if (e[i] > peak) peak = e[i]; }
+  const th = peak * 10 ** (-belowPeakDb / 20);
+  for (let i = 0; i < e.length; i++) if (peak > 0 && e[i] >= th) return Math.max(0, i - (n >> 1)) / sr;
+  return 0;
+}
+// Length (s) of the pause in speech at time t: 0 inside a word.
+export function pauseAround(words, t) {
+  const ws = words.map((w) => [Number(w.start), Number(w.end)]).sort((a, b) => a[0] - b[0]);
+  for (let i = 0; i < ws.length; i++) {
+    if (ws[i][0] <= t && ws[i][1] >= t) return 0;
+    if (ws[i][0] > t) return ws[i][0] - (i ? ws[i - 1][1] : 0);
+  }
+  return Infinity;
+}
+export function cueChecks({ cues, applied, voice, bed = null, sfx = null, sr = 16000, words = [], events = [], profile, report = null, mix = null, encoded = null, fps = 30 }) {
+  const P = profile, out = [], F = Math.ceil(voice.length / sr / CUE_HOP) + 1, tag = { kind: 'technical' };
+  const vdb = levelFrames(voice, sr, F), wordFrames = (curve) => { const r = []; for (const w of words) for (let k = Math.floor(Number(w.start) / CUE_HOP); k < Math.ceil(Number(w.end) / CUE_HOP) && k < F; k++) r.push(curve[k]); return r; };
+  const ref = median(wordFrames(vdb));
+  if (ref === null) return [['Audio', 'effects by role (house profile)', 'NOT TESTED', 'no spoken words to measure the voice against', tag]];
+  const speech = (k) => vdb[k] >= ref + P.speechWindowDb, scale = sr / (cues.sr || sr), f1 = (x) => (Number.isFinite(x) ? x.toFixed(1) : 'none');
+  const rows = (cues.cues || []).map((c) => {
+    const seg = applied.subarray(Math.round(c.offset * scale), Math.min(applied.length, Math.round((c.offset + c.length) * scale)));
+    const lev = levelFrames(seg, sr, F, c.start);
+    let sp = -Infinity, gp = -Infinity, pk = -Infinity, pt = c.start;
+    for (let k = 0; k < F; k++) { if (!Number.isFinite(lev[k])) continue; const r = lev[k] - ref; if (speech(k)) sp = Math.max(sp, r); else gp = Math.max(gp, r); if (r > pk) { pk = r; pt = k * CUE_HOP; } }
+    return { ...c, sp, gp, pk, pt, onset: c.start + onsetSec(seg, sr) };
+  });
+  const role = (c) => P.roles[c.role] || P.roles.foley;
+  // 1. overpowering: each cue against its role's ceiling, over speech and in pauses
+  const loud = rows.filter((c) => c.sp > role(c).max.speech || c.gp > role(c).max.gap);
+  out.push(['Audio', 'effects not overpowering the voice, by role (house profile, per cue as mixed)', loud.length ? 'FAIL' : rows.length ? 'PASS' : 'NOT APPLICABLE',
+    loud.length ? `${loud.length} cue(s) over their role ceiling: ${loud.slice(0, 5).map((c) => `${c.name} (${c.role}) ${c.pt.toFixed(2)} s: speech ${f1(c.sp)} / pause ${f1(c.gp)} dB, ceiling ${role(c).max.speech} / ${role(c).max.gap}`).join('; ')}`
+      : `${rows.length} cue(s) within their ceilings (dB vs the voice's speaking level; profile ${P.name} v${P.version})`, { required: true, kind: 'technical' }]);
+  // 2. heroes: one for every planned hero event, with impact, peaking in a pause, and rare
+  const H = P.roles.hero, heroes = rows.filter((c) => c.role === 'hero');
+  const planned = events.filter((e) => (e.sfx?.role || e.sfx) === 'hero');
+  const missing = planned.filter((e) => !heroes.some((c) => Math.abs(c.at - Number(e.time)) <= 0.3 || (c.event === e.type && Math.abs(c.at - Number(e.time)) <= 1)));
+  const quiet = heroes.filter((c) => !(c.pk >= H.floor)), tight = heroes.filter((c) => pauseAround(words, c.pt) < H.minGapSeconds);
+  const parts = [
+    missing.length && `planned hero event(s) with no hero cue: ${missing.map((e) => `${e.type} ${Number(e.time).toFixed(2)} s`).join(', ')}`,
+    quiet.length && `too quiet (floor ${H.floor} dB): ${quiet.map((c) => `${c.name} ${f1(c.pk)} dB at ${c.pt.toFixed(2)} s${pauseAround(words, c.pt) < H.minGapSeconds ? ' (no pause there: protect one in the cut with cut-silences --protect)' : ''}`).join(', ')}`,
+    tight.length && `peaking with under ${H.minGapSeconds} s of pause: ${tight.map((c) => `${c.name} ${c.pt.toFixed(2)} s`).join(', ')}`,
+    heroes.length > H.maxPerReel && `${heroes.length} heroes (house maximum ${H.maxPerReel}: contrast needs them rare)`,
+    heroes.length && `heroes: ${heroes.map((c) => `${c.name} ${f1(c.pk)} dB at ${c.pt.toFixed(2)} s`).join(', ')}`].filter(Boolean);
+  out.push(['Audio', 'hero sounds present and with impact (not too quiet, peaking in a pause)', missing.length || quiet.length ? 'FAIL' : tight.length || heroes.length > H.maxPerReel ? 'WARNING' : heroes.length ? 'PASS' : 'NOT APPLICABLE',
+    parts.join('; ') || 'no hero cues planned or placed', { required: true, kind: 'technical' }]);
+  // 3. accents audible on a phone
+  if (rows.some((c) => c.role === 'accent') && P.roles.accent.floor !== null) {
+    const faint = rows.filter((c) => c.role === 'accent' && !(c.pk >= P.roles.accent.floor));
+    out.push(['Audio', 'accents audible (above the accent floor)', faint.length ? 'WARNING' : 'PASS',
+      faint.length ? `under ${P.roles.accent.floor} dB, likely lost on a phone: ${faint.slice(0, 6).map((c) => `${c.name} ${f1(c.pk)} dB at ${c.pt.toFixed(2)} s`).join(', ')}` : 'every accent above its floor', tag]);
+  }
+  // 4. timing: the audible onset against the plan event the cue names
+  const timed = rows.filter((x) => x.event), off = [];
+  for (const c of timed) {
+    const ev = events.filter((e) => e.type === c.event).sort((p, q) => Math.abs(p.time - c.at) - Math.abs(q.time - c.at))[0];
+    if (!ev) { off.push(`${c.name}: no plan event "${c.event}"`); continue; }
+    const d = (c.onset - Number(ev.time)) * 1000;
+    if (d < -P.timing.earlyMs || d > P.timing.lateMs) off.push(`${c.name} ${d > 0 ? '+' : ''}${d.toFixed(0)} ms vs ${c.event} ${Number(ev.time).toFixed(2)} s`);
+  }
+  if (timed.length) out.push(['Audio', 'effects land on their planned events (audible onset)', off.length ? 'WARNING' : 'PASS',
+    off.length ? `off by more than -${P.timing.earlyMs} / +${P.timing.lateMs} ms: ${off.slice(0, 6).join('; ')}` : `${timed.length} cue(s) on time`, tag]);
+  // 5. masking: music and effects in the speech band during each word (a proxy for intelligibility)
+  if (bed || sfx) {
+    const [lo, hi] = P.masking.bandHz, other = new Float32Array(voice.length);
+    for (let i = 0; i < other.length; i++) other[i] = (bed?.[i] || 0) + (sfx?.[i] || 0);
+    const vb = bandpass(voice, sr, lo, hi), ob = bandpass(other, sr, lo, hi);
+    const en = (x, a, b) => { let s = 0; for (let i = a; i < b; i++) s += x[i] * x[i]; return 10 * Math.log10(s / Math.max(1, b - a) + 1e-20); };
+    const hit = [];
+    for (const w of words) {
+      const a = Math.floor(Number(w.start) * sr), b = Math.min(voice.length, Math.floor(Number(w.end) * sr));
+      if (b - a < sr * 0.05) continue;
+      const m = en(vb, a, b) - en(ob, a, b); if (m < P.masking.minMarginDb) hit.push({ w: w.text, t: Number(w.start), m });
+    }
+    hit.sort((p, q) => p.m - q.m);
+    out.push(['Audio', `music and effects leave the words clear (${lo}-${hi} Hz speech band; a proxy, listen)`, hit.length ? 'WARNING' : 'PASS',
+      hit.length ? `${hit.length} word(s) under ${P.masking.minMarginDb} dB margin: ${hit.slice(0, 6).map((h) => `"${h.w}" ${h.t.toFixed(2)} s ${h.m.toFixed(1)} dB`).join(', ')}` : `every word at least ${P.masking.minMarginDb} dB above music and effects in the speech band`, tag]);
+  }
+  // 6. limiter load, from the mixer's report
+  if (report?.limiter) {
+    const L = P.master.limiter, l = report.limiter, bad = l.max_reduction_db > L.maxReductionDb || l.share_touched > L.maxShareTouched;
+    out.push(['Audio', 'master limiter working gently (not squashing the mix)', bad ? 'WARNING' : 'PASS',
+      `max ${l.max_reduction_db} dB reduction, ${(l.share_touched * 100).toFixed(1)}% of the reel touched by more than 1 dB (limits ${L.maxReductionDb} dB, ${(L.maxShareTouched * 100).toFixed(0)}%)${report.voice_peaks ? `; voice peak control before the mix: max ${report.voice_peaks.max_reduction_db} dB, ${(report.voice_peaks.share_touched * 100).toFixed(1)}% of the reel` : ''}`, tag]);
+  }
+  // 7. the encoded MP4 against the mix it came from (loudness, sync, hero levels), and a phone-speaker view
+  if (mix && encoded) {
+    const E = P.encoded, li = lufsOf(mix, sr), le = lufsOf(encoded, sr);
+    const em = levelFrames(mix, sr, F, 0, { weight: false, win: 0.02 }), ee = levelFrames(encoded, sr, F, 0, { weight: false, win: 0.02 });
+    let lag = 0, best = -Infinity;
+    for (let l = -20; l <= 20; l++) { let s = 0; for (let k = 25; k < F - 25; k++) if (Number.isFinite(em[k]) && Number.isFinite(ee[k + l])) s -= Math.abs(em[k] - ee[k + l]); if (s > best) { best = s; lag = l; } }
+    const mf = levelFrames(mix, sr, F), ef = levelFrames(encoded, sr, F);
+    const hd = heroes.map((c) => { const k = Math.round(c.pt / CUE_HOP); return { c, d: ef[k] - mf[k] }; }).filter((x) => Number.isFinite(x.d) && Math.abs(x.d) > E.maxLevelDiffDb);
+    const bad = Math.abs(le - li) > E.maxIntegratedDiffLu || Math.abs(lag * CUE_HOP) > E.maxOffsetFrames / fps || hd.length;
+    out.push(['Audio', 'encoded MP4 audio matches the mix (loudness, sync, hero levels)', bad ? 'WARNING' : 'PASS',
+      `integrated ${li.toFixed(1)} -> ${le.toFixed(1)} LUFS; offset ${(lag * CUE_HOP * 1000).toFixed(0)} ms${hd.length ? `; hero level changed: ${hd.map((x) => `${x.c.name} ${x.d.toFixed(1)} dB`).join(', ')}` : ''}`, tag]);
+    if (heroes.length) {
+      const hf = levelFrames(highpass(encoded, sr, P.phone.highpassHz), sr, F), vhp = levelFrames(highpass(voice, sr, P.phone.highpassHz), sr, F);
+      const vloss = ref - median(wordFrames(vhp));
+      const lost = heroes.map((c) => { const k = Math.round(c.pt / CUE_HOP); return { c, x: (ef[k] - hf[k]) - vloss }; }).filter((h) => h.x > P.phone.maxExtraLossDb);
+      out.push(['Audio', `hero sounds survive a phone speaker (high-pass ${P.phone.highpassHz} Hz)`, lost.length ? 'WARNING' : 'PASS',
+        lost.length ? `bass-heavy, loses its impact on a phone: ${lost.map((h) => `${h.c.name} ${h.x.toFixed(1)} dB more than the voice`).join(', ')}` : 'every hero keeps its level relative to the voice', tag]);
     }
   }
   return out;

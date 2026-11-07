@@ -1,0 +1,57 @@
+{
+  "name": "high-energy",
+  "version": 1,
+  "status": "calibrated: high-energy v1, confirmed by Mits approving claude-arena v003 on 2026-11-07 (phone listen). Change this file only with Mits's approval; one-off changes go in a reel's reel.json audio.profileOverrides.",
+  "basis": "Every level is the loudest K-weighted (ITU-R BS.1770) 100 ms window of a sound as mixed, in dB relative to the voice's median speaking level (100 ms windows inside spoken words). A window is 'speech' when the voice there is within 12 dB of that level, otherwise 'gap'. The mixer (scripts/audio/reelmix.py) and QA (create-reel qa-core) both use this basis.",
+  "speechWindowDb": -12,
+  "roles": {
+    "foley": {
+      "about": "typing, ticks, taps, paper, small UI clicks: controlled texture",
+      "target": { "speech": -21, "gap": -19 },
+      "max": { "speech": -16, "gap": -15 },
+      "floor": null
+    },
+    "accent": {
+      "about": "impacts, whooshes on real moves, success tones, transitions: noticeable presence",
+      "target": { "speech": -17, "gap": -14 },
+      "max": { "speech": -13, "gap": -11 },
+      "floor": -24
+    },
+    "hero": {
+      "about": "crowd reactions, big reveals, dramatic payoffs: 1-3 per reel, each peaking in a protected pause",
+      "target": { "speech": -13, "gap": -3 },
+      "max": { "speech": -10, "gap": 0 },
+      "floor": -9,
+      "minGapSeconds": 0.4,
+      "maxPerReel": 3
+    }
+  },
+  "duck": {
+    "about": "speech-aware gain for effects and music: starts before a word, recovers after it, smooth in dB",
+    "leadSeconds": 0.15,
+    "tailSeconds": 0.1,
+    "smoothSeconds": 0.2
+  },
+  "bed": {
+    "about": "music sits behind speech, lifts in gaps, dips briefly so a hero sound reads",
+    "target": { "speech": -18, "gap": -11 },
+    "max": { "speech": -14 },
+    "heroDipDb": -4,
+    "preHeroLiftDb": 2,
+    "preHeroLiftSeconds": 0.8
+  },
+  "timing": { "earlyMs": 60, "lateMs": 100 },
+  "masking": { "bandHz": [1000, 4000], "minMarginDb": 10 },
+  "voicePeaks": {
+    "about": "gentle peak control on the voice alone before mixing, so the master limiter only catches strays",
+    "maxPeakToLoudnessDb": 12,
+    "releaseSeconds": 0.08
+  },
+  "master": {
+    "integratedLufs": -14,
+    "truePeakDbtp": -1.5,
+    "limiter": { "maxReductionDb": 3, "maxShareTouched": 0.05 }
+  },
+  "encoded": { "maxLevelDiffDb": 1.5, "maxIntegratedDiffLu": 1, "maxOffsetFrames": 1 },
+  "phone": { "highpassHz": 250, "maxExtraLossDb": 6 }
+}

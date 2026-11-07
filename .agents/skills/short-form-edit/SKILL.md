@@ -317,7 +317,36 @@ human reactions where they support the story.
    karpathy-rules chalk at about -15 dB under the voice for 3.5 s was "quite loud" to the
    creator, as were taps at 0 to +4 dB. Fixed with broadband hiss removed, the chalk about
    27 dB under, and a guard holding every effect 16 dB under the voice's speech level
-   (14 dB in pauses). Measure effects per 100 ms window against the voice, not only integrated.
+   (14 dB in pauses). That guard was still too loud: it measured plain RMS, and bright
+   taps and ticks sound louder than their RMS, and an effect in a pause is heard
+   against silence. karpathy-rules, claude-animated-reels and claude-arena all drew
+   "overpowering" feedback at about -12 dB perceived.
+   **House sound (high energy, owner's default since 2026-11-07).** Don't hand-roll
+   levels, ducking or guards. Mix every new reel through the shared mixer
+   `scripts/audio/reelmix.py` (see the top of that file) with the house profile
+   `audio-library/house-profile.json`. Tag each cue with a role: `foley` (typing,
+   ticks, taps: controlled), `accent` (impacts, whooshes, success tones: noticeable),
+   or `hero` (crowd reactions, reveals, payoffs: 1-3 a reel, each peaking in a pause).
+   The mixer sets every level from the role, ducks effects and music smoothly around
+   speech, lifts the music before a hero and dips it under one, eases the voice's own
+   peaks, and masters to about -14 LUFS / -1.5 dBTP. It writes `cues.json`, which
+   `create-reel` QA checks per cue: too loud for the role, a hero too quiet or missing
+   or without a pause, mistimed onsets, words masked in the speech band, limiter load,
+   and the encoded MP4 against the mix.
+   - **Hero beats come before the cut.** Mark the payoff and reveal moments in the
+     plan, then run `cut-silences --protect <t>:0.6` on each so a hero has a pause
+     (house cuts otherwise leave none). Planned hero events carry
+     `"sfx": {"role": "hero", "why": "..."}` and QA fails if the cue is missing.
+   - **Sounds:** search the house library first (`node scripts/audio/library.mjs
+     search <words>`). Only if nothing fits, source from Openverse (`library.mjs
+     openverse "<query>"`, CC0 / public domain only, licence checked on the source
+     page) and `add` the chosen take with its role and tags. Real recordings for
+     heroes; synthesized sounds are fine for foley. earshot (`rank`, `find`) helps
+     choose between candidates. Use it only then, not on every reel.
+   - **One-off vs house rules:** a correction for one reel goes in that reel.json
+     `audio.profileOverrides`. Change `house-profile.json` only when the owner
+     approves a change for all future reels.
+   Legacy reels (no `cues.json`) keep the older whole-reel effects check.
    Score anticipation, contact, and release separately. A brief bed dip can make
    the next contact more distinct without raising its volume. Let some cuts pass
    without a whoosh. Record cue purpose and audition transitions when supported.

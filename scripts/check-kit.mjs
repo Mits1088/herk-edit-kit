@@ -6,7 +6,9 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 let errors = 0;
 const fail = message => { console.error(message); errors++; };
-const ignore = new Set(['node_modules', '.git', 'video-projects', 'raw-media', 'tmp', 'archives', 'renders']);
+const ignore = new Set(['node_modules', '.git', 'video-projects', 'raw-media', 'tmp', 'archives', 'renders', '__pycache__']);
+// House sound library audio is CC0 but stays local (gitignored); `node scripts/audio/library.mjs restore` rebuilds it.
+const localMedia = /^audio-library\/(sounds|candidates)\//;
 function walk(dir) { return readdirSync(dir, { withFileTypes: true }).flatMap(e => ignore.has(e.name) || e.name === '.env' ? [] : e.isDirectory() ? walk(join(dir,e.name)) : [join(dir,e.name)]); }
 const files = walk(root);
 // Explicitly approved public exports; other media remains excluded.
@@ -43,7 +45,7 @@ for (const style of registry.styles) for (const card of style.cards) {
 if (cards !== registry.cardCount) fail('Registry count is stale');
 for (const p of files) {
   const rel = relative(root,p).replaceAll('\\','/');
-  if (/\.(mp4|mov|wav|mp3|m4a|zip|pyc|pem|key)$/i.test(p) && !publicMedia.has(rel)) fail(`Private/binary material in distribution: ${rel}`);
+  if (/\.(mp4|mov|wav|mp3|m4a|zip|pyc|pem|key)$/i.test(p) && !publicMedia.has(rel) && !localMedia.test(rel)) fail(`Private/binary material in distribution: ${rel}`);
   const bytes=readFileSync(p); if(bytes.includes(0)) continue;
   const text=bytes.toString('utf8');
   // Report locations, never the value of a suspected credential.

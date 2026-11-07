@@ -50,6 +50,7 @@ node .claude/skills/cut-silences/scripts/cut-silences.mjs <transcript.json> \
 | `--out-dir <dir>` | next to transcript | Where outputs are written |
 | `--output <path>` | `<video-stem>.silenced.mp4` | Cut-video path |
 | `--gap <s>` | `0.55` | Minimum pause treated as trimmable silence |
+| `--protect <t[:keep]>` | none | Protect a dramatic pause at source time `t`, keeping at least `keep` s (default 0.6) so a hero sound has room. Repeat or comma-separate. The decisions file lists each one and says when the speech had less room than asked |
 | `--head-pad <s>` | `0.22` | Silence kept before the first word |
 | `--tail-pad <s>` | `0.34` | Silence kept after the last word |
 | `--apply` | off | Actually run ffmpeg to render the cut |

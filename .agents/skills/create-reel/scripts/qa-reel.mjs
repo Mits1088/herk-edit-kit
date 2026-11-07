@@ -34,7 +34,7 @@ import {
   makeCollector, evaluate, sha256File, isCandidateFile, qaDirFor, humanApprovalRequired, interpretLook, interpretLint,
   probeChecks, decodeCheck, AUDIO_FILTER, parseAudioAnalysis, audioChecks, speechIntegrity, planChecks, tailText, writeJson,
   reportMarkdown, writeProjectSummary, NETWORK_FONT, networkFontRefs, fontChecks, missingDirection,
-  preflightStatus, readPreflightInputs, visualPlanRow, audioBalance, overlayLeakRow, footageColourRow,
+  preflightStatus, readPreflightInputs, visualPlanRow, audioBalance, cueChecks, loadAudioProfile, overlayLeakRow, footageColourRow,
 } from './qa-core.mjs';
 import { overlayLeakAt, footageReference, bandCompare } from './frames.mjs';
 import { validateVisualPlan } from '../../short-form-edit/scripts/validate-plan.mjs';
@@ -344,8 +344,8 @@ if (!render) {
     // encoded mix at the planned events. Measurements only; a person still listens.
     try {
       const SR = 16000;
-      const pcm = (file) => {
-        const d = run('ffmpeg', ['-v', 'error', '-i', file, '-vn', '-ac', '1', '-ar', String(SR), '-f', 'f32le', '-'], { encoding: 'buffer' });
+      const pcm = (file, rate = SR) => {
+        const d = run('ffmpeg', ['-v', 'error', '-i', file, '-vn', '-ac', '1', '-ar', String(rate), '-f', 'f32le', '-'], { encoding: 'buffer', maxBuffer: 1 << 30 });
         if (d.status !== 0 || !d.stdout?.length) return null;
         const b = Buffer.from(d.stdout); return new Float32Array(b.buffer, b.byteOffset, Math.floor(b.length / 4));
       };
@@ -354,13 +354,27 @@ if (!render) {
       let words = [];
       try { words = JSON.parse(readFileSync(join(dir, 'assets/transcript.json'), 'utf8')).words || []; } catch {}
       const stemFile = (k) => join(dir, 'assets/audio', `stem-${k}.wav`);
+      const cuesFile = join(dir, 'assets/audio/cues.json');
+      if (existsSync(cuesFile)) {
+        // Mixed by scripts/audio/reelmix.py: per-cue checks against the house profile (plus the reel's own overrides),
+        // at the mixer's own 48 kHz so both measure on the same basis (16 kHz drops a crowd's high end, ~3 dB).
+        const HR = 48000, pcmH = (f) => pcm(f, HR);
+        let report = null; try { report = JSON.parse(readFileSync(join(dir, 'assets/audio/mix-report.json'), 'utf8')); } catch {}
+        for (const row of cueChecks({
+          cues: JSON.parse(readFileSync(cuesFile, 'utf8')), applied: pcmH(join(dir, 'assets/audio/cues-applied.wav')),
+          voice: pcmH(stemFile('voice')), bed: existsSync(stemFile('bed')) ? pcmH(stemFile('bed')) : null, sfx: pcmH(stemFile('sfx')),
+          sr: HR, words, events: preInputs.plan?.events || [], profile: loadAudioProfile(kitRoot, reel), report,
+          mix: pcmH(join(dir, 'assets/audio/mix.wav')), encoded: pcmH(render), fps,
+        })) add(...row);
+        throw Object.assign(new Error('done'), { done: true });
+      }
       let gains = reel?.audio?.stemGains || null;
       try { gains ||= JSON.parse(readFileSync(join(dir, 'assets/audio/mix-levels.json'), 'utf8')); } catch {}
       const stems = existsSync(stemFile('voice')) && existsSync(stemFile('sfx'))
         ? { voice: pcm(stemFile('voice')), sfx: pcm(stemFile('sfx')), lufs: gains ? { voice: lufsOf(stemFile('voice')), sfx: lufsOf(stemFile('sfx')) } : null } : null;
       for (const row of audioBalance({ mix: pcm(render), sr: SR, events, words, stems, gains, limits: reel?.audio || {} })) add(...row);
     } catch (e) {
-      add('Audio', 'sound effects against the voice', 'FAIL', `checker error: ${e.message.split('\n')[0]}`, { kind: 'checker' });
+      if (!e.done) add('Audio', 'sound effects against the voice', 'FAIL', `checker error: ${e.message.split('\n')[0]}`, { kind: 'checker' });
     }
   } else if (footage) add('Audio', 'ffmpeg audio analysis', 'NOT TESTED', 'no audio stream to measure', req);
 

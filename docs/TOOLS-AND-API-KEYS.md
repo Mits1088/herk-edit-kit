@@ -127,6 +127,27 @@ These are workflow options, not a claim that every example used them:
 A skill's mention of an MCP tool does not install that integration. Ask the
 assistant to check which connectors or API clients are available first.
 
+## Sound sources and listening tools (optional, local, no key)
+
+- **House sound library**: `audio-library/library.json` indexes approved CC0 / public-domain sounds with role, tags,
+  measurements and provenance. The audio files stay local; like all media they are gitignored.
+  `node scripts/audio/library.mjs search|list|openverse|add|restore`. On a fresh clone or another machine, run
+  `node scripts/audio/library.mjs restore`: it downloads each original from its recorded `file_url`, checks it against
+  `original_sha256`, re-applies the recorded trim and compares the result with `sha256`. If a source has changed or gone,
+  it says so; re-verify the licence and re-add from the `source_url`.
+- **Openverse** (`api.openverse.org`): used only when the library has nothing suitable. Anonymous access allows
+  20 requests a minute and 200 a day, and no key is needed. The script asks for CC0 and PDM only and re-checks the
+  licence on each sound's original page (usually Freesound), refusing anything else.
+- **earshot** (https://github.com/Leonxlnx/earshot, MIT; CLAP Apache-2.0 / AST BSD-3 models, about 1.1 GB): ears for
+  the agent. It is installed for Claude Code as the `earshot` MCP server (user scope; venv at `~/.earshot-venv`) with
+  `GEMINI_API_KEY` and `GOOGLE_API_KEY` blanked, so its `llm` command (which uploads audio to Gemini) cannot run. Use
+  `rank` / `find` when choosing new sounds and `timeline` / `sheet` for a hard audio problem, not on every reel. Its
+  bundled bank is code-synthesized (`forge`), not recordings. Routine mixing and QA never need it.
+- **CompanyEnrich logos** (`https://api.companyenrich.com/logo/{domain}`, free, no key, 200x200 JPEG): a possible
+  source for the logos of tools named in a reel (used on claude-plugins-roles, provenance in its
+  `assets/brand/logos/`). It is separate from the audio work. Check that the endpoint answers and read its terms
+  before using it, and prefer official media kits for anything shown large.
+
 ## Configure only what you use
 
 `npm run setup` creates `.env` from [`.env.example`](../.env.example) if absent.

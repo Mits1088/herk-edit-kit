@@ -153,4 +153,4 @@ Three-act structure, rule of threes at every layer. Cuts hide in whips; beats fo
 
 ## Next Step
 
-Invoke `superpowers:writing-plans` to produce the step-by-step implementation plan (project scaffold → asset acquisition → composition authoring order → per-beat timelines → integration → verification).
+Write the step-by-step implementation plan (`2026-04-17-linear-promo-implementation.md`) (project scaffold → asset acquisition → composition authoring order → per-beat timelines → integration → verification).

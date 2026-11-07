@@ -58,3 +58,6 @@ brand/assets/fonts/*
 Instagram_transcript/
 instagram_scripts_output/
 reels-data/
+
+# House sound library: the index is shared; candidate downloads are working data.
+audio-library/candidates/

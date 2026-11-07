@@ -1,0 +1,66 @@
+{
+ "version": 1,
+ "sounds": [
+  {
+   "id": "crowd-roar-erupt",
+   "role": "hero",
+   "tags": [
+    "crowd",
+    "cheer",
+    "roar",
+    "stadium",
+    "applause",
+    "payoff",
+    "celebration"
+   ],
+   "about": "crowd erupts into a cheer with a natural tail (eruption at 0.15 s); payoffs and wins",
+   "file": "sounds/hero/crowd-roar-erupt.wav",
+   "sha256": "2cc6e997a1336016e375071a8803dab548ff545adc6f73dc873e3198cffba345",
+   "duration_s": 4.2,
+   "integrated_lufs": -15.4,
+   "true_peak_dbfs": -3.1,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "BerlinGameScene.com Crowd Cheer 2",
+   "creator": "BerlinGameScene",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/BerlinGameScene/sounds/267248",
+   "file_url": "https://cdn.freesound.org/previews/267/267248_5052946-hq.mp3",
+   "original_sha256": "f2f7a2c06d031ae4a2a7c0de375d5d1322946dabb638fc31429b6dd018406a6f",
+   "trim": "0.2:4.4",
+   "verified_at": "2026-11-07",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": ["claude-arena v003"]
+  },
+  {
+   "id": "crowd-boo",
+   "role": "hero",
+   "tags": [
+    "crowd",
+    "boo",
+    "booing",
+    "disapproval",
+    "jeer",
+    "arena"
+   ],
+   "about": "large crowd booing; a bad result, the villain, the wrong answer",
+   "file": "sounds/hero/crowd-boo.wav",
+   "sha256": "9672c63982b7dcc07faebf028c8b722edadd42987e48d715dacaf70c5f7324cb",
+   "duration_s": 2.71,
+   "integrated_lufs": -19.4,
+   "true_peak_dbfs": -6.2,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Crowd Booing 3.mp3",
+   "creator": "mrrap4food",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/mrrap4food/sounds/619047",
+   "file_url": "https://cdn.freesound.org/previews/619/619047_781461-hq.mp3",
+   "original_sha256": "b2d4622f273f59c300a080ae4ae782ef034b29d5e2c6a2589f50bc3cc71c1861",
+   "trim": "4.06:6.77",
+   "verified_at": "2026-11-07",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": ["claude-arena v003"]
+  }
+ ]
+}

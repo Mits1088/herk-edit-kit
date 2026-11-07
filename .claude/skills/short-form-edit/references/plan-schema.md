@@ -20,6 +20,9 @@ Layouts are `face`, `split`, `paper`, `broll`, and `broll-split`. For this schem
 B-roll scene `kind` names `assets/<kind>.mp4`. `events` are actual meaningful
 visual actions, never filler entries inserted only to satisfy cadence. Longer
 holds can carry `holdReason` on their scene and must be justified editorially.
+An event that deserves a hero sound (a crowd roar on the payoff, a big reveal) can carry
+`"sfx": {"role": "hero", "why": "..."}`. Mark it before cutting and protect a pause there
+(`cut-silences --protect`); `create-reel` QA fails if the mix has no hero cue for it.
 
 `assets/transcript.json` contains `words` with the same text/start/end/sourceStart/
 sourceEnd fields and `text`. `assets/edit-decisions.json` contains `duration`, `fps`,

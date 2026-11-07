@@ -1,6 +1,6 @@
 # Linear.app 30s Promo Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Historical plan from the original kit release. Work through it task by task in one session; steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a 30s × 1920×1080 × 30fps Linear.app promo in HyperFrames — an Infinite-Global-Payments twin across 18 beats — and render the final MP4.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** HyperFrames CLI, GSAP 3.14.2, Google Fonts CDN (Space Grotesk, Instrument Serif, Azeret Mono, Cormorant Garamond, Geist, JetBrains Mono, Inter Display), Playwright for asset capture, ffmpeg for poster frames + audio normalization.
 
-**Spec reference:** `docs/superpowers/specs/2026-04-17-linear-promo-design.md`
+**Spec reference:** `docs/plans/2026-04-17-linear-promo-design.md`
 **Philosophy reference:** `MOTION_PHILOSOPHY.md` (re-read before authoring any beat)
 
 ---
@@ -2661,15 +2661,3 @@ All 11 Laws from MOTION_PHILOSOPHY.md are applied:
 - Law 9 (hold the hero): 5s outro + 2s brand reveal ✓
 - Law 10 (unifying texture): grid + crosshairs + vignette + grain on all 8 comps ✓
 - Law 11 (timelines fill slots): explicit `tl.to({}, { duration: SLOT }, 0)` on every comp + diagnostic in Task 14 ✓
-
----
-
-## Execution Handoff
-
-**Plan complete and saved to `docs/superpowers/plans/2026-04-17-linear-promo-implementation.md`. Two execution options:**
-
-**1. Subagent-Driven (recommended)** — A fresh subagent per task, review between tasks, fast iteration. Best for this plan: each composition is self-contained, subagents can parallelize asset acquisition (Tasks 2, 3, 4), and the mandatory preview + verification gates give natural human-in-the-loop checkpoints.
-
-**2. Inline Execution** — Execute tasks in this session using executing-plans, batch execution with checkpoints for review.
-
-**Which approach?**

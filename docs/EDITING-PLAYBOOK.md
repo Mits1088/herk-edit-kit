@@ -36,7 +36,7 @@ Real examples of notes that became rules:
 | "Captions should never blink out." | On shots full of text to read, captions move to a clear zone instead of disappearing. |
 | "You cut out my natural pause after 'first', it feels too quick." Then, after a fix that added silence there: "You muted out the word first." | Speech is cut between phrases at real silence, never inside one. A filler that runs straight into the next word stays, because cutting it clips the words around it. |
 | "When the avatar is full screen the top half is a shade of yellow." | A texture layer (an SVG noise filter with a blend mode) kept painting while its scene was hidden. Grain is now a baked image, and QA compares encoded talking-head frames with a footage-only reference and tests every sample time for layers that paint while hidden. |
-| "The sound effects are slightly too loud, they can be overpowering." | QA measures the effects against the voice from the stems and the mix gains (and estimates it from the encoded mix), and warns above starting points calibrated on that reel. The fix lowered the effects about 4 dB. |
+| "The sound effects are slightly too loud, they can be overpowering." (said more than once) | QA measures how loud the effects *sound* against the voice (K-weighted, 100 ms windows, pauses judged stricter) and fails the render above -16 dB over speech or -18 dB in pauses. Mixes aim at -19 / -21. The old check passed reels that sat about 12 dB under and still sounded too loud. |
 | "The caption covers my mouth in the first second." | A caption that runs across a cut moves with the cut, and the first 2.5 s are checked frame by frame for anything over the mouth. |
 
 The editing knowledge lives in the skill files, so you can read it, edit it, and share it.
@@ -65,7 +65,7 @@ Measured on Nate's 27 top Instagram Reels (March to September 2026). Use them as
 - Each item in a spoken list gets its own shot.
 
 **Layouts** (1080x1920; every change is a hard cut)
-- **Split:** B-roll on top (y 0 to 880), speaker below. 30 to 42% of the reel.
+- **Split:** B-roll on top (y 0 to 880), speaker below. 30 to 42% of the reel. Frame the speaker at the widest scale that still fills the panel: for 1920x1080 footage that is the panel height / 1080 (about 0.96 to 1.0), never zoomed in further in the split. The tight shot belongs to the punch-in. The owner finds split speakers "quite close up"; claude-arena's 1.2 split was the outlier (fixed in its v002). At 1.0 the panel shows the full height of the source, so footage framed head-and-chest still reads close. To sit the speaker further back, record wider (more room above the head and at the sides) or give the speaker panel more height; don't shrink the footage into bars.
 - **Full B-roll:** footage fills the frame. 50 to 55%.
 - **Punch-in:** a tight shot of the speaker for pivots, emphasis, and the CTA. 5 to 15%.
 - The speaker is on screen about 45% of the time and never gone for more than about 3.5 s.
@@ -117,7 +117,8 @@ Rules that came from mistakes:
 - Vary the actual sound files for repeated items (click, tap, ceramic touch) so a list doesn't sound like a percussion loop.
 - Master near -14 LUFS with true peak at or below -1.5 dBTP. **Measure the final encoded file,** not just the WAV.
 - Never fade the last spoken word.
-- **Measure the effects against the voice, not the master.** Keep `stem-voice` and `stem-sfx` and write the gains the mix applied to `assets/audio/mix-levels.json`; QA then reports the effects in LU against the voice and the loudest hits in dB. Compare RMS, never peaks: the limiter flattens every hit to the same ceiling. Defaults that warn (stem hits +15 dB, integrated +3 LU) are starting points; set your own in `reel.json` `audio`.
+- **House sound: high energy with contrast** (owner's default, 2026-11-07). Small sounds stay controlled, accents have presence, and 1-3 hero moments (a crowd roar on the payoff) swell in a protected pause, then duck under the next word. Every new reel mixes through `scripts/audio/reelmix.py` with `audio-library/house-profile.json`; see `short-form-edit` step 5. claude-arena v003 is the first reel mixed this way, and the profile is calibrated from the owner's verdict on it.
+- **Measure the effects against the voice, not the master.** Keep `stem-voice` and `stem-sfx` and write the gains the mix applied to `assets/audio/mix-levels.json`; save `stem-sfx` as the effects exactly as mixed (`"sfx_stem": "applied"`). QA K-weights both stems and compares every 100 ms window to the voice's speaking level. Compare loudness, never peaks: the limiter flattens every hit to the same ceiling. It fails above -16 dB over speech, -18 dB in pauses (an effect in a gap is heard against silence), or -20 LU integrated; aim the mix guard at -19 / -21. Loosen in `reel.json` `audio` only when the owner asks.
 
 ## Other formats
 

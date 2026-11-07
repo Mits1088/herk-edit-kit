@@ -23,6 +23,8 @@
 //   --gap <seconds>       min pause treated as trimmable silence (default 0.55)
 //   --head-pad <seconds>  silence kept before the first word (default 0.22)
 //   --tail-pad <seconds>  silence kept after the last word (default 0.34)
+//   --protect <t[:keep]>  protect a dramatic pause: the pause at source time t keeps at least `keep`
+//                         seconds (default 0.6) so a hero sound has room. Repeat or comma-separate.
 //   --apply               actually run ffmpeg to render the cut video
 //   --help
 
@@ -41,7 +43,7 @@ const args = argv.slice(2);
 if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
   console.log(
     "Usage: node cut-silences.mjs <transcript.json> [--video path] [--out-dir dir]\n" +
-      "       [--output path] [--gap 0.55] [--head-pad 0.22] [--tail-pad 0.34] [--apply]",
+      "       [--output path] [--gap 0.55] [--head-pad 0.22] [--tail-pad 0.34] [--protect t[:keep]] [--apply]",
   );
   exit(args.length === 0 ? 1 : 0);
 }
@@ -55,6 +57,7 @@ const opts = {
   headPad: 0.22,
   tailPad: 0.34,
   apply: false,
+  protect: [],
 };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
@@ -65,6 +68,13 @@ for (let i = 0; i < args.length; i++) {
   else if (a === "--head-pad") opts.headPad = Number(args[++i]);
   else if (a === "--tail-pad") opts.tailPad = Number(args[++i]);
   else if (a === "--apply") opts.apply = true;
+  else if (a === "--protect") {
+    for (const part of String(args[++i] ?? "").split(",").filter(Boolean)) {
+      const [t, keep = "0.6"] = part.split(":");
+      if (!Number.isFinite(Number(t)) || !(Number(keep) > 0)) die(`--protect needs t[:keep] in seconds, got ${part}`);
+      opts.protect.push({ t: Number(t), keep: Number(keep) });
+    }
+  }
   else if (a.startsWith("--")) die(`unknown option: ${a}`);
   else if (!opts.transcript) opts.transcript = a;
   else die(`unexpected argument: ${a}`);
@@ -122,6 +132,7 @@ function mergeRanges(ranges) {
 }
 
 const deleteRanges = [];
+const protectedPauses = [];
 
 // head + tail dead air
 const headEnd = words[0].start - opts.headPad;
@@ -134,11 +145,14 @@ for (let i = 1; i < words.length; i++) {
   const prev = words[i - 1];
   const next = words[i];
   const gap = next.start - prev.end;
-  if (gap < opts.gap) continue;
+  const guard = opts.protect.filter((p) => p.t >= prev.end - 0.1 && p.t <= next.start + 0.1);
+  const note = (kept) => guard.forEach((p) => protectedPauses.push({ t: p.t, requested: p.keep, natural: Number(gap.toFixed(3)), kept: Number(kept.toFixed(3)), short: gap < p.keep }));
+  if (gap < opts.gap) { note(gap); continue; }
 
-  // Keep a natural breath: longer for big pauses and sentence boundaries.
+  // Keep a natural breath: longer for big pauses and sentence boundaries; a protected pause keeps its room.
   const sentenceBreak = /[.!?]$/.test(prev.text ?? "");
-  const keep = gap >= 2 ? 0.24 : sentenceBreak ? 0.2 : 0.14;
+  const keep = Math.min(gap, Math.max(gap >= 2 ? 0.24 : sentenceBreak ? 0.2 : 0.14, ...guard.map((p) => p.keep)));
+  note(keep);
   // Bias the kept breath slightly toward the end of the previous phrase.
   const delStart = prev.end + keep * 0.55;
   const delEnd = next.start - keep * 0.45;
@@ -206,7 +220,7 @@ const stem = basename(transcriptPath, extname(transcriptPath)).replace(/[-.]?tra
 const outDir = opts.outDir ? resolve(opts.outDir) : dirname(transcriptPath);
 mkdirSync(outDir, { recursive: true });
 
-const params = { gap: opts.gap, headPad: opts.headPad, tailPad: opts.tailPad };
+const params = { gap: opts.gap, headPad: opts.headPad, tailPad: opts.tailPad, protect: opts.protect };
 const edl = {
   agent: "cut-silences",
   params,
@@ -215,6 +229,7 @@ const edl = {
   removed: Number(removedTotal.toFixed(3)),
   delete_ranges: mergedDeletes,
   keep_ranges: usableKeepRanges,
+  protected_pauses: protectedPauses,
 };
 const transcriptOut = {
   language_code: transcript.language_code,
@@ -244,6 +259,12 @@ const decisions = [
     .sort((a, b) => b.len - a.len)
     .slice(0, 15)
     .map((d) => `- ${fmt(d.start)}-${fmt(d.end)} removed ${d.len.toFixed(2)}s`),
+  ...(opts.protect.length ? ["", "## Protected pauses (room for hero sounds)", "",
+    ...opts.protect.map((p) => {
+      const hit = protectedPauses.find((x) => x.t === p.t);
+      return hit ? `- ${fmt(p.t)}: kept ${hit.kept.toFixed(2)}s of a ${hit.natural.toFixed(2)}s pause${hit.short ? ` (shorter than the ${p.keep}s asked: the speech has no more room here)` : ""}`
+        : `- ${fmt(p.t)}: no pause at this time (inside a word?); nothing protected`;
+    })] : []),
 ].join("\n");
 
 const edlPath = join(outDir, `${stem}.silence-edl.json`);
@@ -260,6 +281,7 @@ const summary = {
   removedPct: Number(((removedTotal / duration) * 100).toFixed(1)),
   deleteRanges: mergedDeletes.length,
   keepRanges: usableKeepRanges.length,
+  protectedPauses,
   editedWords: editedWords.length,
   outputs: { edl: edlPath, transcript: tPath, decisions: decPath },
 };

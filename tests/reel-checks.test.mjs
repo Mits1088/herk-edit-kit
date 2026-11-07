@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { storyMechanics } from '../.claude/skills/create-reel/scripts/preflight-reel.mjs';
-import { audioBalance, overlayLeakRow, footageColourRow, preflightStatus } from '../.claude/skills/create-reel/scripts/qa-core.mjs';
+import { audioBalance, kWeight, overlayLeakRow, footageColourRow, preflightStatus } from '../.claude/skills/create-reel/scripts/qa-core.mjs';
 import { overlayLeakAt, footageReference, bandCompare } from '../.claude/skills/create-reel/scripts/frames.mjs';
 import { kitRoot, chromePath } from '../.claude/skills/create-reel/scripts/lib.mjs';
 import { validateVisualPlan } from '../.claude/skills/short-form-edit/scripts/validate-plan.mjs';
@@ -63,18 +63,24 @@ const voice = signal(6, (t) => 0.1 * Math.sin(2 * Math.PI * 220 * t));
 const words = Array.from({ length: 10 }, (_, i) => ({ text: 'w', start: 0.2 + i * 0.55, end: 0.6 + i * 0.55 }));
 const sfxAt = (amp) => signal(6, (t) => (t >= 2 && t < 2.2 ? amp * Math.sin(2 * Math.PI * 1500 * t) : 0));
 
-test('audio balance: loud effects warn, quiet effects pass, missing gains are reported, the mix diagnostic is labelled', () => {
-  const loud = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(1.0), lufs: { voice: -23, sfx: -19 } }, gains: { voice: 1, sfx: 1 } });
-  assert.equal(loud[0][2], 'WARNING', loud[0][3]);
-  assert.match(loud[0][3], /\+4\.0 LU vs voice/);
-  const quiet = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(0.2), lufs: { voice: -23, sfx: -30 } }, gains: { voice: 1, sfx: 1 } });
+test('audio balance: perceived effects level fails loud hits and exposed pause hits, passes quiet ones', () => {
+  const applied = { voice: 1, sfx: 1, sfx_stem: 'applied' };
+  // A hit at 2.0-2.2 s, over a word, at the voice's own level: far too loud.
+  const loud = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(0.1), lufs: { voice: -23, sfx: -30 } }, gains: applied });
+  assert.equal(loud[0][2], 'FAIL', loud[0][3]); assert.equal(loud[0][4].required, true);
+  assert.match(loud[0][3], /TOO LOUD/);
+  // 30 dB lower passes.
+  const quiet = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(0.1 * 10 ** (-30 / 20)), lufs: { voice: -23, sfx: -55 } }, gains: applied });
   assert.equal(quiet[0][2], 'PASS', quiet[0][3]);
-  // The same stems with a lower effects gain pass: the gain is part of the measurement.
-  const lowered = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(1.0), lufs: { voice: -23, sfx: -19 } }, gains: { voice: 1, sfx: 0.25 } });
+  // The mix gain is part of the measurement.
+  const lowered = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(0.1), lufs: { voice: -23, sfx: -55 } }, gains: { ...applied, sfx: 10 ** (-30 / 20) } });
   assert.equal(lowered[0][2], 'PASS', lowered[0][3]);
-  // Thresholds are per reel.
-  const strict = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(0.2), lufs: { voice: -23, sfx: -30 } }, gains: { voice: 1, sfx: 1 }, limits: { sfxHitMaxOverVoiceDb: 0 } });
-  assert.equal(strict[0][2], 'WARNING');
+  // Limits are per reel.
+  const strict = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(0.1 * 10 ** (-30 / 20)), lufs: { voice: -23, sfx: -55 } }, gains: applied, limits: { sfxSpeechMaxDb: -40 } });
+  assert.equal(strict[0][2], 'FAIL');
+  // A pre-ducking effects stem cannot be measured honestly; legacy reels report it without failing.
+  const raw = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(0.001) }, gains: { voice: 1, sfx: 1 } });
+  assert.equal(raw[0][2], 'NOT TESTED'); assert.match(raw[0][3], /as-mixed/); // legacy reels are not failed retroactively
   const noGains = audioBalance({ sr: SR, events: [2], words, stems: { voice, sfx: sfxAt(1.0) }, gains: null });
   assert.equal(noGains[0][2], 'NOT TESTED');
   const mix = new Float32Array(voice.length); const hit = sfxAt(1.0);
@@ -83,6 +89,13 @@ test('audio balance: loud effects warn, quiet effects pass, missing gains are re
   assert.equal(diag[0][1], 'effects hits against the voice in the encoded mix (diagnostic)');
   assert.equal(diag[0][2], 'WARNING'); assert.match(diag[0][3], /estimate, not proof/);
   assert.equal(diag[0][4].kind, 'info');
+});
+
+test('K-weighting: flat near 1 kHz, +4 dB treble shelf, low end cut', () => {
+  const lvl = (f) => { const x = signal(1, (t) => Math.sin(2 * Math.PI * f * t)); const y = kWeight(x, SR); let s = 0; for (let i = 4000; i < y.length; i++) s += y[i] * y[i]; return 10 * Math.log10(s / (y.length - 4000) / 0.5); };
+  assert.ok(Math.abs(lvl(1000)) < 1, `1 kHz ${lvl(1000)}`);
+  assert.ok(lvl(5000) > 3 && lvl(5000) < 5, `5 kHz ${lvl(5000)}`);
+  assert.ok(lvl(20) < -5, `20 Hz ${lvl(20)}`);
 });
 
 // ---------- rows: overlay leaks and footage colour

@@ -20,6 +20,25 @@ test('silence edit preserves speech and produces shorter, ordered timestamps', (
   assert.ok(doc.words.every((w, i) => w.end > w.start && (!i || w.start >= doc.words[i-1].end)));
 });
 
+test('a protected pause keeps room for a hero sound; an unprotected one is trimmed', () => {
+  const out = scratch(), t = join(out, 'pause.json');
+  writeFileSync(t, JSON.stringify({ audio_duration_secs: 5.5, words: [
+    { text: 'So', start: 0.3, end: 0.6 }, { text: 'fight.', start: 0.7, end: 1.1 }, { text: 'Next', start: 2.6, end: 2.9 },
+    { text: 'word', start: 3.0, end: 3.3 }, { text: 'end.', start: 4.5, end: 4.8 }] }));
+  const gapAfterFight = (flags) => {
+    const r = run('.agents/skills/cut-silences/scripts/cut-silences.mjs', [t, '--out-dir', out, ...flags]);
+    assert.equal(r.status, 0, r.stderr);
+    const w = JSON.parse(readFileSync(join(out, 'pause.silence-transcript.json'))).words;
+    return { gap: w[2].start - w[1].end, summary: JSON.parse(r.stdout) };
+  };
+  assert.ok(gapAfterFight([]).gap < 0.3);
+  const p = gapAfterFight(['--protect', '1.5:0.7']);
+  assert.ok(Math.abs(p.gap - 0.7) < 0.01, p.gap);
+  assert.deepEqual(p.summary.protectedPauses.map((x) => [x.t, x.kept, x.short]), [[1.5, 0.7, false]]);
+  // asking for more room than the speech has keeps the whole pause and says so
+  assert.equal(gapAfterFight(['--protect', '3.6:2']).summary.protectedPauses[0].short, true);
+});
+
 test('reviewed stutter cut drops only the first word and retimes the next word', () => {
   const out = scratch();
   const result = run(apply, [fixture, '--cuts', join(root, 'examples/editing/approved-cuts.json'), '--out-dir', out]);
