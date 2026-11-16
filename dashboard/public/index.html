@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Content Command Centre</title>
+<style>
+:root{
+  --bg:#f2f4f8; --surface:#ffffff; --sunk:#e9edf3; --ink:#131a2a; --muted:#5a6579; --line:#d9dfe8;
+  --accent:#2f4bd8; --accent-ink:#ffffff;
+  --you:#8a4b00; --you-bg:#ffedc7; --ok:#0b6b45; --ok-bg:#d8f3e5; --bad:#a8271b; --bad-bg:#fde2de;
+  --wait:#4b5870; --wait-bg:#e6eaf1; --run:#2f4bd8; --run-bg:#e2e7ff;
+  --display:"Space Grotesk","Segoe UI",system-ui,sans-serif; --body:"Inter","Segoe UI",system-ui,sans-serif; --mono:"JetBrains Mono",Consolas,ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#0e121b; --surface:#171d2a; --sunk:#1f2636; --ink:#e8ecf5; --muted:#98a3b8; --line:#2a3246;
+  --accent:#8fa3ff; --accent-ink:#0e121b;
+  --you:#ffc766; --you-bg:#3a2c0c; --ok:#6fdcaa; --ok-bg:#0f2e22; --bad:#ff9c92; --bad-bg:#3a1512;
+  --wait:#aab5c9; --wait-bg:#232b3c; --run:#aab8ff; --run-bg:#1d2550; color-scheme:dark } }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+[hidden]{display:none!important}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 48px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:22px;font-weight:700} h2{font-size:19px;font-weight:600} h3{font-size:15px;font-weight:600}
+p{margin:0}
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.nav,.tabs{display:flex;flex-wrap:wrap;gap:6px}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nav button,.tabs button{border:1px solid var(--line);background:var(--surface);padding:7px 13px;border-radius:999px;font-weight:500}
+.nav button[aria-current="true"],.tabs button[aria-current="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.count{display:inline-block;min-width:20px;text-align:center;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--you-bg);color:var(--you);font-size:12px;font-weight:600}
+.note{margin-top:8px;color:var(--muted);font-size:13px}
+main{margin-top:20px;display:grid;gap:20px}
+.sec-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;justify-content:space-between}
+.sub{color:var(--muted);font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.you{background:var(--you-bg);color:var(--you)} .ok{background:var(--ok-bg);color:var(--ok)} .bad{background:var(--bad-bg);color:var(--bad)}
+.wait{background:var(--wait-bg);color:var(--wait)} .run{background:var(--run-bg);color:var(--run)}
+.unkp{border:1px dashed var(--muted);color:var(--muted)}
+.mono{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.group{display:grid;gap:8px;align-content:start}
+.group>h3{color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-size:12px;font-family:var(--body)}
+.task{display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:center;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.task:hover,.prow:hover{border-color:var(--accent)}
+.task strong{font-weight:600} .task .go{color:var(--accent);font-weight:600;font-size:13px}
+.task .sub{grid-column:1/-1}
+summary{cursor:pointer;padding:6px 0} .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px;align-items:start}
+.rows{display:grid;gap:8px}
+.prow{display:grid;grid-template-columns:minmax(170px,1fr) minmax(0,3fr);gap:8px 18px;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;align-items:start}
+.prow.dim{opacity:.62}
+.pipeline-item{display:grid;gap:6px}
+.pipeline-item>.row{justify-content:flex-end}
+.prow .pt{display:grid;gap:3px} .prow .pt strong{font-weight:600;line-height:1.3}
+.prow .pr{display:grid;gap:7px;min-width:0}
+.pn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+@media (max-width:720px){.prow{grid-template-columns:1fr}}
+.chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.track{display:flex;flex-wrap:wrap;gap:3px}
+.track span{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sunk);color:var(--muted)}
+.track .past{background:var(--ok-bg);color:var(--ok)} .track .now{background:var(--run-bg);color:var(--run);font-weight:600}
+.track .need{background:var(--you-bg);color:var(--you);font-weight:600;outline:1.5px solid var(--you)} .track .fail{background:var(--bad-bg);color:var(--bad);font-weight:600;outline:1.5px solid var(--bad)}
+.track .nr,.track .unk{background:none;border:1px dashed var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:5px 11px;font-size:13px;font-weight:500} .seg button[aria-current="true"]{background:var(--ink);color:var(--bg)}
+.back{background:none;border:0;padding:0;color:var(--accent);font-weight:600}
+.tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--you);margin-left:6px;vertical-align:middle}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px;min-width:0}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:start}
+.script{background:var(--sunk);border-radius:8px;padding:12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:8px;font-weight:600}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{padding:4px 10px;font-size:13px}
+a.btn{text-decoration:none;display:inline-block}
+.inp{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;max-width:340px}
+.inp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.form{display:grid;gap:6px}
+select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;max-width:100%}
+.kv{display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:5px 14px;font-size:14px;margin:0}
+.kv dt{color:var(--muted)} .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.cap{background:var(--sunk);border-radius:8px;padding:10px 12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.block{background:var(--bad-bg);color:var(--bad);border-radius:8px;padding:9px 12px;font-size:14px}
+.info{background:var(--run-bg);color:var(--run);border-radius:8px;padding:9px 12px;font-size:14px}
+.unknown{border:1px dashed var(--muted);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--muted)}
+.unknown ul{margin:4px 0 0;padding-left:18px}
+video{width:220px;max-width:100%;aspect-ratio:9/16;background:#000;border-radius:10px}
+.media{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}
+@media (max-width:560px){.media{grid-template-columns:1fr}}
+table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;padding:4px 10px 4px 0;border-bottom:1px dashed var(--line)}
+.scroll{overflow-x:auto}
+.day{display:grid;grid-template-columns:170px 1fr;gap:6px 16px;padding:12px 0;border-top:1px solid var(--line)}
+@media (max-width:560px){.day{grid-template-columns:1fr}}
+.ev{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:none;border:0;padding:3px 0;text-align:left}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,520px);z-index:20}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>Content Command Centre</h1><nav class="nav" id="nav" aria-label="Views"></nav></div>
+  <p class="note" id="status">Loading…</p>
+  <main id="app"></main>
+</div>
+<div id="toast" role="status" hidden></div>
+<script>
+let S = null, view = 'attention', cur = null, tab = 'scripts', detail = null, showAll = false, pubOpen = null, liveOpen = false;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = d => d ? new Date(d).toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:S&&S.dueTimeZone||undefined}) : '';
+const dueTxt = d => fmt(d)+(S.dueProvisional?' (provisional)':'');
+const tzNote = () => `${String(S.dueHour).padStart(2,'0')}:00 ${S.dueTimeZone}`;
+const NAME = {source:'Source received',rewrite:'Rewriting',choose:'Choose script',record:'Record voiceover',avatar:'HeyGen avatar',hook:'Hook review',build:'Building',render:'Rendering candidate',qa:'QA',candidate:'Approve candidate',instagram:'Instagram',distribute:'Shorts and TikTok',done:'Done'};
+const TR = [['source','Source'],['rewrite','Rewrite'],['choose','Script'],['record','Voice'],['avatar','Avatar'],['hook','Hook'],['build','Build'],['render','Render'],['qa','QA'],['candidate','Approve candidate'],['instagram','Instagram'],['yt','Shorts'],['tt','TikTok']];
+const MARK = {past:'✓ ',need:'● ',now:'… ',fail:'✕ ',unk:'? '};
+const RES = {'not-required':['','PDF not required'],pending:['wait','PDF decided at approval'],unknown:['unkp','PDF unknown'],'not-built':['you','PDF not built'],draft:['run','PDF built, not live'],live:['ok','PDF live']};
+const idx = it => S.stages.indexOf(it.stage);
+const visible = () => S.items.filter(i => showAll==='hidden' ? i.hidden : showAll ? !i.hidden : i.active);
+const left = d => { const h = Math.round((new Date(d) - Date.now())/3600e3); if (h <= 0) { const a = -h; return a < 24 ? `due ${a} h ago` : `overdue by ${Math.floor(a/24)} d`; } return h < 24 ? `in ${h} h` : `in ${Math.floor(h/24)} d ${h%24} h`; };
+
+// navigator.clipboard needs https or localhost, so a phone on the home network uses the older copy command.
+function copyText(t){ if(navigator.clipboard&&window.isSecureContext) return navigator.clipboard.writeText(t);
+  return new Promise((ok,no)=>{ const a=document.createElement('textarea'); a.value=t; a.setAttribute('readonly',''); a.style.cssText='position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(a); a.select(); a.setSelectionRange(0,t.length); let r=false; try{ r=document.execCommand('copy'); }catch(_){} a.remove(); r?ok():no(); }); }
+const nowLocal = () => new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+function toast(m){ const t=$('#toast'); t.textContent=m; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,m.length>80?12000:3500); }
+async function load(quiet){ try{ const r=await fetch('/api/state'); S=await r.json(); if(cur){ cur=S.items.find(i=>i.id===cur.id)||null; if(!cur) view='attention'; }
+    const q=S.queue; $('#status').textContent=`Read from your files at ${new Date(S.generatedAt).toLocaleTimeString('en-GB')}. ${q.available&&q.running?'Job queue: '+q.missions.length+' jobs':'Job status unavailable ('+q.reason+')'}. It reads your workflow files and changes one only when a button says so.${S.remote?' Phone view: copy captions, download the video and record what you published. Everything else stays on the PC.':''}${S.warnings.length?' Warnings: '+S.warnings.join('; '):''}`;
+    render(); }catch(e){ if(!quiet) $('#status').textContent='Could not read state: '+e.message; } }
+async function act(a,msg){ const r=await fetch('/api/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(a)}); const j=await r.json(); if(!r.ok){ toast(j.error||'That did not work'); return; } toast(j.message&&j.message!=='Saved'?j.message:(msg||'Saved')); await load(); }
+async function open(id,t){ cur=S.items.find(i=>i.id===id); if(!cur) return; tab=t||(cur.needs[0]||{}).tab||'scripts'; detail=null; pubOpen=null; liveOpen=false; fbOpen=false; studio={}; render(); window.scrollTo(0,0);
+  try{ const r=await fetch('/api/item?id='+encodeURIComponent(id)); detail=await r.json(); if(cur&&cur.id===id) render(); }catch(_){} }
+
+function track(it){ const i=idx(it); const need=it.needs.some(n=>n.group==='Production'||n.group==='Publishing');
+  return `<span class="track">${TR.map(([k,l])=>{ let c='';
+    if(k==='yt'||k==='tt'){ const st=it.platforms[k].state; c=st==='published'?'past':st==='due'?'need':st==='not-recorded'?'unk':''; }
+    else if(k==='instagram'){ const st=it.platforms.ig.state; c=st==='published'?'past':st==='blocked'?'fail':st==='ready'?'need':(st==='unconfirmed'||st==='unknown')?'unk':''; }
+    else { const j=S.stages.indexOf(k); c=j<i?(it.videoOnly&&j<=2?'unk':'past'):j===i?(it.fail?'fail':need?'need':it.dormant?'unk':'now'):''; }
+    return `<span class="${c}">${MARK[c]||''}${l}</span>`; }).join('')}</span>`; }
+function nextAct(it){ const n=it.needs.filter(x=>x.group==='Production'||x.group==='Publishing');
+  if(it.setAside) return ['Idle','Set aside: not currently working on this'];
+  if(it.fail) return ['You','Recover: '+it.fail];
+  if(n.length) return ['You',n.map(x=>x.label).join(' + ')];
+  if(it.needs.length) return ['Link',it.needs.map(x=>x.label).join(' + ')];
+  if(it.dormant) return ['Idle',it.note||'Set aside'];
+  if(it.stage==='done') return ['Done','Published on Instagram, Shorts and TikTok'];
+  if(it.stage==='distribute'&&['yt','tt'].some(k=>it.platforms[k].state==='not-recorded')) return ['Unknown','Shorts and TikTok: posted before the dashboard recorded them'];
+  if(it.stage==='distribute') return ['Wait',`Shorts and TikTok fall due ${dueTxt(it.due)}`];
+  return ['System',it.note||NAME[it.stage]]; }
+const WHO = {You:['you','Next: You'],Link:['you','Needs linking'],Idle:['wait','Idle'],Unknown:['unkp','Not recorded'],Wait:['wait','Waiting for the date'],Done:['ok','Complete'],System:['run','Next: System']};
+function resPill(it){ const g=it.resource.gate; if(it.resource.state!=='live'&&(g==='awaiting'||g==='changed')) return `<span class="pill you">PDF awaiting your approval · ${esc(it.resource.keyword)}</span>`;
+  if(it.resource.state!=='live'&&g==='approved') return `<span class="pill run">PDF approved, not live · ${esc(it.resource.keyword)}</span>`;
+  const r=RES[it.resource.state]||['unkp','PDF unknown']; return r[0]?`<span class="pill ${r[0]}">${r[1]}${it.resource.keyword?' · '+esc(it.resource.keyword):''}</span>`:`<span class="track"><span class="nr">${r[1]}</span></span>`; }
+
+function renderNav(){ const n=S.items.filter(i=>i.active).reduce((a,i)=>a+i.needs.filter(x=>x.group!=='Unlinked video').length,0);
+  $('#nav').innerHTML=[['attention',`Needs me <span class="count">${n}</span>`],['pipeline','Pipeline'],['schedule','Schedule']].map(([k,l])=>`<button data-view="${k}" aria-current="${view===k&&!cur}">${l}</button>`).join(''); }
+
+function vAttention(){ const all=S.items.filter(i=>i.active).flatMap(i=>i.needs.map(n=>({...n,it:i})));
+  const list=g=>{ const a=all.filter(x=>x.group===g); return a.length?a.map(x=>`<button class="task" data-open="${x.it.id}" data-tab="${x.tab}"><strong>${esc(x.label)}</strong><span class="go">${esc(x.go)}</span><span class="sub">${esc(x.it.title)} · ${esc(x.why)}</span></button>`).join(''):'<p class="sub">Nothing waiting here.</p>'; };
+  const running=S.items.filter(i=>i.active&&!i.needs.length&&idx(i)<S.stages.indexOf('instagram'));
+  return `<div class="sec-head"><h2>Needs me</h2><span class="sub">${all.filter(x=>x.group!=='Unlinked video').length} items. Each opens the project at the step you need.</span></div>
+  <div class="two"><section class="group"><h3>Production</h3>${list('Production')}</section>
+  <section class="group"><h3>Publishing</h3>${list('Publishing')}<h3 style="margin-top:10px">Needs linking</h3>${list('Needs linking')}</section></div>
+  ${all.some(x=>x.group==='Unlinked video')?`<details class="group"><summary><strong>${all.filter(x=>x.group==='Unlinked video').length} video projects have no linked script</strong> <span class="sub">Older experiments and test renders. Link each to its script, or remove it from the dashboard. Not counted above.</span></summary><div class="group" style="margin-top:8px">${list('Unlinked video')}</div></details>`:''}
+  <section class="group"><h3>Running without you</h3>${running.map(i=>`<button class="task" data-open="${i.id}"><strong>${esc(i.title)}</strong><span class="pill run">${NAME[i.stage]}</span><span class="sub">${esc(i.note||'')}</span></button>`).join('')||'<p class="sub">Nothing is shown as in progress.</p>'}${S.queue.running?'':'<p class="sub">Job status is unavailable, so this list comes from files only. Files show outputs, not whether an agent is running right now.</p>'}</section>`; }
+
+function vPipeline(){ const items=visible(); const gone=S.items.filter(i=>i.hidden).length, shown=S.items.length-gone, more=shown-S.items.filter(i=>i.active).length;
+  return `<div class="sec-head"><h2>Pipeline</h2><span class="seg"><button data-all="0" aria-current="${!showAll}">Active</button><button data-all="1" aria-current="${showAll===true}">All (${shown})</button><button data-all="2" aria-current="${showAll==='hidden'}">Removed (${gone})</button></span></div>
+  <p class="sub">${items.length} projects shown. ${showAll==='hidden'?'These are removed from every list. Open one to put it back. No file was deleted.':showAll?'All includes projects you are not interested in or not currently working on. Use Move to Active to pick one up again.':more+' more are set aside, finished or older; choose All to see them. Use Move to All to set a project aside.'}</p>
+  <div class="legend"><span>Key:</span><span class="track"><span class="past">✓ Done</span><span class="need">● Waiting on you</span><span class="now">… Running</span><span class="fail">✕ Failed or blocked</span><span class="unk">? Not recorded</span><span>Not started</span><span class="nr">Not required</span></span></div>
+  <div class="rows">${items.map(it=>{ const [who,txt]=nextAct(it); const w=WHO[who];
+    return `<div class="pipeline-item"><button class="prow ${it.active?'':'dim'}" data-open="${it.id}"><span class="pt"><strong>${esc(it.title)}</strong><span class="mono">${esc(it.batch?it.batch.replace(/^batch-/,''):it.videoOnly?'video project':'not batched')}${it.reel?' · reel '+it.reel:''}${it.version?' · version '+it.version:''}</span></span>
+    <span class="pr">${track(it)}<span class="pn"><span class="pill ${w[0]}">${w[1]}</span><span>${esc(txt)}</span></span>
+    <span class="chips">${resPill(it)}${it.platforms.ig.state==='blocked'?'<span class="pill bad">Blocks Instagram</span>':''}${it.project&&it.project.finalExists?'<span class="pill ok">Final ready</span>':''}${it.unknowns.length?`<span class="pill unkp">${it.unknowns.length} not recorded</span>`:''}${it.setAside?'<span class="pill wait">Set aside</span>':''}${it.hidden?'<span class="pill wait">Hidden</span>':''}</span></span></button>${!S.remote&&!it.hidden?`<div class="row"><button class="btn small" data-activity="${it.active?'set-aside':'active'}" data-id="${it.id}">${it.active?'Move to All':'Move to Active'}</button></div>`:''}</div>`; }).join('')||'<p class="sub">Nothing to show.</p>'}</div>`; }
+
+function vSchedule(){ const act=S.items.filter(i=>!i.hidden&&!i.videoOnly);
+  const ready=act.filter(i=>i.platforms.ig.state==='ready'), blocked=act.filter(i=>i.platforms.ig.state==='blocked'), unc=act.filter(i=>i.platforms.ig.state==='unconfirmed');
+  const pub=act.filter(i=>i.platforms.ig.state==='published').sort((a,b)=>new Date(b.platforms.ig.at)-new Date(a.platforms.ig.at));
+  const row=(i,pill,extra)=>`<button class="ev" data-open="${i.id}" data-tab="publish">${pill}<strong>${esc(i.title)}</strong><span class="sub">${extra||''}</span></button>`;
+  const sec=(t,a,f)=>`<div class="day"><h3>${t}</h3><div>${a.map(f).join('')||'<span class="sub">Nothing</span>'}</div></div>`;
+  const openP=i=>['yt','tt'].some(k=>i.platforms[k].state!=='published'); const byDue=(a,b)=>new Date(a.due)-new Date(b.due);
+  const openK=i=>i.platforms[i.platforms.yt.state!=='published'?'yt':'tt']; const tracked=i=>i.active&&openP(i)&&openK(i).state!=='not-recorded';
+  const bucket=k=>pub.filter(i=>tracked(i)&&openK(i).bucket===k).sort(byDue);
+  const older=pub.filter(i=>openP(i)&&!tracked(i)), done=pub.filter(i=>!openP(i));
+  const chips=i=>['yt','tt'].map(k=>{ const st=i.platforms[k].state; return `<span class="pill ${st==='published'?'ok':st==='due'?'you':st==='not-recorded'?'unkp':'wait'}">${k==='yt'?'Shorts':'TikTok'} ${st==='published'?'posted':st==='due'?'due':st==='not-recorded'?'not recorded':'waiting'}</span>`; }).join('');
+  const drow=i=>`<button class="ev" data-open="${i.id}" data-tab="publish">${chips(i)}<strong>${esc(i.title)}</strong><span class="sub">${!i.due?'file still in the Uploads root':tracked(i)?`due ${dueTxt(i.due)} · ${left(i.due)}`:'Instagram '+fmt(i.platforms.ig.at)}</span></button>`;
+  return `<div class="sec-head"><h2>Publishing schedule</h2><span class="sub">All times shown in ${S.dueTimeZone}.</span></div>
+  ${S.dueProvisional?`<div class="unknown"><strong>Due dates are provisional.</strong> They assume the second calendar day after the confirmed Instagram post, at ${tzNote()}. You have not confirmed that time or timezone yet. Set DASH_DUE_HOUR and DASH_TZ, then DASH_DUE_CONFIRMED=1.</div>`:`<p class="sub">Shorts and TikTok fall due at ${tzNote()} on the second calendar day after the confirmed Instagram post.</p>`}
+  <div class="panel">${sec('Ready for Instagram',ready,i=>row(i,'<span class="pill you">Ready to post</span>'))}
+  ${sec('Blocked',blocked,i=>row(i,'<span class="pill bad">Resource not live</span>','keyword '+esc(i.resource.keyword)))}
+  ${sec('Possible posts to confirm',unc,i=>row(i,'<span class="pill unkp">Unconfirmed</span>',fmt(i.platforms.ig.at)))}</div>
+  <div class="sec-head"><h2>Shorts and TikTok</h2><span class="sub">Each platform is recorded on its own. "Due" means no post is recorded here.</span></div>
+  <div class="panel">${sec('Overdue',bucket('overdue'),drow)}${sec('Due today',bucket('today'),drow)}${sec('Upcoming',bucket('upcoming'),drow)}
+  ${sec('Published everywhere',done,i=>row(i,'<span class="pill ok">Complete</span>',i.platforms.ig.at?'Instagram '+fmt(i.platforms.ig.at):'per the Uploads folder'))}</div>
+  ${older.length?`<details class="group"><summary><strong>${older.length} earlier Instagram posts have no Shorts or TikTok record</strong> <span class="sub">Posted before the dashboard recorded these platforms, or more than 14 days ago. The files cannot show whether they went out. Record them if they did, or leave them.</span></summary><div class="panel" style="margin-top:8px">${older.sort(byDue).map(drow).join('')}</div></details>`:''}`; }
+
+/* ---- project page ---- */
+const cmd = t => `<div class="row"><code class="mono">${esc(t)}</code><button class="btn small" data-copy="${esc(t)}">Copy</button></div>`;
+const fileSel = (kind,list,curV,ph) => `<select data-link="${kind}"><option value="">${ph}</option>${list.map(f=>`<option ${f===curV?'selected':''}>${esc(f)}</option>`).join('')}</select>`;
+function tScripts(it){ const d=detail;
+  if(it.videoOnly) return `<div class="panel"><span class="pill unkp">Not recorded</span><p>No script is linked to this video project. If it belongs to a script in the pipeline, open that script and link this project from its Video tab.</p></div>`;
+  if(!d) return `<div class="panel"><p class="sub">Loading scripts…</p></div>`;
+  const src=d.source?`<div><h3>Source transcript</h3><p class="mono">${esc(d.source.file)}${d.source.match?' · matched '+esc(d.source.match):''}</p><div class="script">${esc(d.source.text)}</div></div>`:'';
+  const g=d.generated; const canApprove=it.stage==='choose'&&it.batch&&it.reel;
+  const col=(v,t)=>t?`<div><div class="row"><h3>Version ${v}</h3>${it.version===v?'<span class="pill ok">Approved</span>':''}${canApprove&&!it.decision?`<button class="btn small primary" data-decide="${v}">Approve Version ${v}</button>`:''}${it.decision&&it.decision.version===v?'<span class="pill you">Your choice</span>':''}</div><div class="script">${esc(t)}</div></div>`:'';
+  return `<div class="panel"><div class="row"><h3>Scripts</h3><span class="pill ${it.review==='READY TO RECORD'?'ok':it.review==='REVIEW REQUIRED'?'you':'unkp'}">${esc(it.review||'Status unknown')}</span></div>
+  ${g?`<p class="mono">${esc(g.file)}</p>`:'<p class="sub">No exported scripts for this item.</p>'}
+  <div class="grid3">${src}${g?col('A',g.versionA)+col('B',g.versionB):''}</div>
+  ${d.approved?`<dl class="kv"><dt>Approved file</dt><dd class="mono">${esc(d.approved.file)}</dd></dl>`:canApprove?(it.decision?decisionBox(it):`<p class="sub">Approving records your choice and hands the work to the approve-reel skill, which saves the approved file and builds any PDF guide. Nothing is uploaded.${it.review==='REVIEW REQUIRED'?' This reel is marked REVIEW REQUIRED, so the skill will show what needs checking and stop unless you tell it to approve anyway.':''}</p>`):''}
+  ${it.stage==='source'?`<p class="sub">Start the rewrite in Claude Code:</p>${cmd('/rewrite-reels')}`:''}</div>`; }
+function tResource(it){ const r=it.resource; const p=RES[r.state]||['unkp','Unknown'];
+  return `<div class="panel"><div class="row"><h3>Resource${r.keyword?' for keyword '+esc(r.keyword):''}</h3>${p[0]?`<span class="pill ${p[0]}">${p[1]}</span>`:`<span class="track"><span class="nr">${p[1]}</span></span>`}</div>
+  ${r.note?`<p>${esc(r.note)}</p>`:''}
+  ${r.keyword?`<dl class="kv"><dt>What viewers get</dt><dd>${esc(r.description||'Not recorded')}</dd><dt>Delivery</dt><dd>${esc(r.delivery||'Not recorded')}</dd><dt>PDF</dt><dd>${r.pdf?`<a href="/file?p=${encodeURIComponent(r.pdf)}" target="_blank" rel="noopener">Open PDF</a> <span class="mono">${esc(r.pdf)}</span>`:r.pdfMissing?'Listed in resources.md but the file was not found':'Not built'}</dd><dt>Version</dt><dd class="mono">${r.sha?'sha256 '+esc(r.sha.slice(0,12)):'no file'}</dd><dt>Approval</dt><dd>${esc(gateText(r))}</dd><dt>Gumroad</dt><dd>${esc(r.upload?(UPLOAD[r.upload.state]||['',r.upload.state])[1]:r.gumroad||'not recorded')}</dd><dt>Status in resources.md</dt><dd>${r.state==='live'?'live':r.state==='draft'?'draft':'no line yet'}</dd></dl>
+  ${r.state==='draft'?liveBox(it):''}${r.state==='live'&&!S.remote?`<div class="row"><button class="btn small" data-resstatus="draft">Set back to draft</button><span class="sub">Use this if viewers cannot receive it after all. It changes that one line in reels-data/resources.md.</span></div>`:''}${pdfGate(it)}`:''}</div>`; }
+function liveBox(it){ const r=it.resource, kw=esc(r.keyword);
+  if(r.pdf&&r.gate!=='approved'&&r.gate!=='legacy') return `<div class="unknown">Marked draft. Keyword ${kw} can go live once you have approved the PDF below.</div>`;
+  if(S.remote) return `<div class="unknown">Marked draft. Mark keyword ${kw} live from the PC once it is set up and tested.</div>`;
+  if(!liveOpen) return `<div class="unknown">Marked draft. Before posting: set up keyword ${kw} in your delivery tool and test it.</div><div class="row"><button class="btn" data-liveopen="1">Mark keyword ${kw} set up and live</button></div>`;
+  return `<div class="info">This changes one line in reels-data/resources.md: ${kw} goes from draft to live. Nothing else in that file is touched.</div>
+  <label class="row"><input type="checkbox" id="livetick"><span>I set up ${kw} in my delivery tool and tested that a viewer receives the guide</span></label>
+  <div class="row"><button class="btn small primary" data-resstatus="live">Mark as live</button><button class="btn small" data-liveopen="0">Cancel</button></div>`; }
+function tRecording(it){ const m=it.manual; const d=detail; const audio=S.files.rawMedia.filter(f=>/\.(wav|mp3|m4a|aac|flac)$/i.test(f)); const vids=S.files.rawMedia.filter(f=>/\.(mp4|mov|m4v|webm)$/i.test(f));
+  if(it.videoOnly||!it.files.approved) return `<div class="panel"><span class="pill wait">Not yet</span><p>${it.videoOnly?'No script is linked, so recording is not tracked for this video project.':'Recording starts once a script is approved.'}</p></div>`;
+  const st=t=>t.implied?['unkp','Not recorded; project already has renders']:t.done?['ok','Done'+(t.at?' · '+fmt(t.at):'')]:['you','Your turn'];
+  const card=(k,title,sub,kind,list,ph)=>{ const t=m[k], s=st(t); return `<div class="panel"><div class="row"><h3>${title}</h3><span class="pill ${s[0]}">${s[1]}</span></div><p class="sub">${sub}</p>
+    <dl class="kv"><dt>Linked file</dt><dd>${fileSel(kind,list,t.file,ph)}</dd></dl>
+    ${t.file?(k==='voiceover'?`<audio controls preload="none" style="width:100%" src="/file?p=${encodeURIComponent('raw-media/'+t.file)}"></audio>`:`<video controls preload="metadata" src="/file?p=${encodeURIComponent('raw-media/'+t.file)}"></video>`):''}
+    <div class="row">${t.implied?'':`<button class="btn ${t.done?'':'primary'}" data-task="${k}" data-done="${t.done?0:1}">${t.done?'Mark as not done':'Mark as done'}</button>`}</div></div>`; };
+  return `<div class="grid3">${d&&d.approved&&d.approved.script?`<div class="panel"><div class="row"><h3>Approved script</h3><button class="btn small" data-copy="${esc(d.approved.script)}">Copy</button></div><div class="script">${esc(d.approved.script)}</div></div>`:''}
+  ${card('voiceover','Record voiceover','Manual, in Audacity. The dashboard only tracks it.','voiceover',audio,audio.length?'No audio file linked':'No audio files found in raw-media')}
+  ${card('avatar','Create HeyGen avatar','Manual, in HeyGen. Reel creation waits for the video file.','footage',vids,'No avatar video linked')}</div>
+  <p class="sub">Linking a file only records the association. Nothing in raw-media is moved or renamed.</p>`; }
+function reviewBox(it,asset,version,approveBtn,placeholder){ const fb=it.feedback.filter(x=>x.asset===asset); const pending=fb.some(x=>x.current&&!x.started); const out=fb.some(x=>x.current&&x.started);
+  if(S.remote) return '<p class="sub">Approvals stay on the PC.</p>';
+  return `${version&&!pending&&fbOpen!==asset?`<div class="row">${approveBtn}<button class="btn" data-fbopen="${asset}">Request changes</button></div>${out?'<p class="sub">A revision is out. You can still approve this version if you change your mind.</p>':''}`:''}
+  ${version&&fbOpen===asset?`<div class="form"><label class="sub" for="fbtext">What should change?</label><textarea id="fbtext" rows="3" class="inp" style="max-width:560px" placeholder="${placeholder}"></textarea><div class="row"><button class="btn small primary" data-fbsave="1">Record feedback</button><button class="btn small" data-fbopen="">Cancel</button></div></div>`:''}
+  ${fb.map(x=>`<div class="${x.current?'info':'unknown'}">Feedback on version ${esc(String(x.version).slice(0,12))}${x.current?'':' (an earlier version)'}: "${esc(x.text)}". ${x.started?'Revision started '+fmt(x.started)+'.':'No work has started.'}</div>
+    ${x.current&&!x.started?`<div class="row"><button class="btn small primary" data-startrev="${x.index}">Start revision</button><button class="btn small" data-withdraw="${x.index}">Withdraw feedback</button><span class="sub">Starting is a separate step, so nothing runs until you say so.</span></div>`:''}
+    ${x.current&&x.started?`<p class="sub">Not done yet: no new version has appeared. Video work runs in Claude Code, so paste this there if you have not already:</p>${cmd(x.command)}`:''}`).join('')}`; }
+function hookBox(it){ const p=it.project, h=p.hook; if(!h) return '';
+  if(h.error) return `<div class="block">The Gate B report could not be read: ${esc(h.error)}</div>`;
+  if(!h.valid) return `<div class="unknown"><strong>The creative plan is not ready to approve.</strong><ul>${h.errors.map(e=>`<li>${esc(e)}</li>`).join('')}</ul></div>`;
+  if(!h.openingOk) return `<div class="unknown">The plan is valid, but the opening preview has not been recorded, so there is nothing to watch yet.</div>`;
+  return `${h.previewChanged?'<div class="block">The composition file changed after the preview was recorded. Watch it again before approving.</div>':''}
+  ${h.planAfterPreview?'<div class="block">The plan was edited after this preview was recorded, so the preview may not show the plan below. It cannot be approved until the opening is recorded again.</div>':''}
+  ${(()=>{ const u=p.opening&&p.opening.url, st=u?studio[u]:null; if(!u) return '<div class="unknown"><strong>Preview unavailable.</strong> No Studio link was recorded for this opening, so it cannot be played from here.</div>';
+    return st==='up'?`<div class="row"><span class="pill ok">Preview available</span><a class="btn small" href="${esc(u)}" target="_blank" rel="noopener">Open the preview in Studio</a></div>`
+      :st==='down'?`<div class="unknown"><strong>Preview unavailable.</strong> HyperFrames Studio is not answering at <span class="mono">${esc(u)}</span>. Start it, then reopen this tab.</div>`
+      :'<p class="sub">Checking whether Studio is running…</p>'; })()}
+  ${p.opening&&p.opening.url&&studio[p.opening.url]==='up'?'':`<p class="sub">To start Studio for this project, in a terminal:</p>${cmd(`cd video-projects/${p.slug}; npx hyperframes preview`)}`}
+  ${h.scenes.length?`<details><summary class="sub">The plan you are approving (${h.scenes.length} scenes)</summary><div class="scroll"><table><tr><th>Scene</th><th>Seconds</th><th>What the viewer sees</th></tr>${h.scenes.map(x=>`<tr><td class="mono">${esc(x.id)}</td><td>${esc(Number(x.start).toFixed(1))}-${esc(Number(x.end).toFixed(1))}</td><td>${esc(x.intent||x.purpose||'')}</td></tr>`).join('')}</table></div></details>`:''}
+  ${h.paidAssets.length?`<div class="unknown">This plan includes paid assets (${esc(h.paidAssets.join(', '))}). Approving here does not approve paid generation; that needs a provider and a spending limit, set in Claude Code.</div>`:''}
+  ${S.remote||h.planAfterPreview?'':'<label class="row"><input type="checkbox" id="hooktick"><span>I have watched this opening</span></label>'}
+  ${reviewBox(it,'hook',h.planAfterPreview?null:h.fingerprint,`<button class="btn primary" data-approvehook="${esc(h.fingerprint)}">Approve this hook</button>`,'For example: the first line lands too late')}
+  <p class="sub">Approval applies to this exact plan (fingerprint ${esc(h.fingerprint.slice(0,12))}). If the plan changes, it asks again.</p>`; }
+function candBox(it){ const c=it.candidate; const fb=it.feedback.some(x=>x.asset==='candidate'); if(!c) return fb?reviewBox(it,'candidate',null,'',''):'';
+  return `${reviewBox(it,'candidate',c.sha,`<button class="btn primary" data-approvecand="${esc(c.sha)}">Approve as the final video</button>`,'For example: the caption at 0:12 covers the face')}
+  <p class="sub">Approval applies to this exact file, the one QA verified (sha256 ${esc(c.sha.slice(0,12))}). It becomes renders/final.mp4 as it is, with no new render.</p>`; }
+function tVideo(it){ const p=it.project; const free=S.projects.filter(x=>!x.linked||(p&&x.slug===p.slug)).map(x=>x.slug);
+  const sg=it.suggestions.filter(s=>s.slug&&!p);
+  const link=it.videoOnly?'':`<div class="panel"><div class="row"><h3>Video project</h3>${p?`<span class="pill ok">${esc(it.linkSource||'Linked')}</span>`:'<span class="pill you">Not linked</span>'}</div>
+    ${sg.map(s=>`<div class="info">ig-insights proposes <strong>${esc(s.slug)}</strong> for this script. It is not attached until you confirm.</div><div class="row"><button class="btn primary" data-linkval="project" data-val="${esc(s.slug)}">Yes, link ${esc(s.slug)}</button></div>`).join('')}
+    <dl class="kv"><dt>Linked project</dt><dd>${fileSel('project',free,it.links.project||(p?p.slug:''),'None')}</dd></dl>${!p?`<p class="sub">No project yet? Start one in Claude Code with /create-reel, then link it here.</p>`:''}</div>`;
+  if(!p) return link;
+  const pf=p.preflight, pfOk=pf&&pf.status==='approved'; const last=[...p.renders].reverse().find(r=>r.kind==='candidate'&&r.exists)||[...p.renders].reverse().find(r=>r.exists);
+  const play=it.candidate?`video-projects/${p.slug}/${it.candidate.file}`:p.finalExists?p.finalFile:last?`video-projects/${p.slug}/${last.file}`:null;
+  return link+`<div class="panel"><div class="row"><h3>Hook preview</h3><span class="pill ${pfOk?'ok':p.preflightRequired?(p.opening?'you':'run'):'unkp'}">${pfOk?'Approved':p.preflightRequired?(p.hook&&p.hook.valid&&p.hook.openingOk?'Awaiting your approval':'Not ready to review'):'No hook gate on this project'}</span></div>
+    <dl class="kv">${pfOk?`<dt>Approved</dt><dd>${esc(pf.approvedBy||'')} · ${fmt(pf.approvedAt)}</dd><dt>Fingerprint</dt><dd class="mono">${esc(pf.fingerprint||'')}</dd>`:''}${p.opening?`<dt>Opening preview</dt><dd>first ${p.opening.end}s, recorded ${fmt(p.opening.recordedAt)}</dd>`:'<dt>Opening preview</dt><dd>Not recorded</dd>'}</dl>${pfOk?'':hookBox(it)}</div>
+  <div class="panel"><div class="row"><h3>Renders</h3>${it.candidate?'<span class="pill you">Candidate awaiting your approval</span>':p.approval&&p.finalExists?'<span class="pill ok">Final ready</span>':it.fail?'<span class="pill bad">QA failed</span>':''}</div>
+    ${it.fail?`<div class="block">${esc(it.fail)}</div><p class="sub">To recover: fix the cause, render again and re-run QA. Approval stays unavailable until QA passes.</p>`:''}
+    <div class="media">${play?`<video controls preload="metadata" src="/file?p=${encodeURIComponent(play)}"></video>`:'<span class="sub">No video file yet</span>'}<div style="display:grid;gap:10px;min-width:0">
+    ${play?`<p class="mono">Playing: ${esc(play)}</p>`:''}${candBox(it)}
+    <div class="scroll"><table><tr><th>File</th><th>QA</th><th>SHA</th><th>Rendered</th></tr>${p.renders.map(r=>`<tr><td class="mono">${esc(r.file.replace('renders/',''))}${r.exists?'':' (missing)'}</td><td>${r.qa?`<span class="pill ${r.qa.state==='passed'?'ok':r.qa.state==='failed'?'bad':'unkp'}">${esc(r.qa.verdict||r.qa.state)}</span>`:''}</td><td class="mono">${esc((r.sha||'').slice(0,12))}</td><td>${fmt(r.at)}</td></tr>`).join('')||'<tr><td colspan="4">No renders yet</td></tr>'}</table></div>
+    ${p.approval?`<dl class="kv"><dt>Approved file</dt><dd class="mono">${esc(p.approval.candidate)} · ${esc((p.approval.sha||'').slice(0,12))}</dd><dt>Approved</dt><dd>${esc(p.approval.by||'')} · ${fmt(p.approval.at)}</dd></dl>`:''}</div></div></div>`; }
+function copyBox(label,text){ return text?`<div style="display:grid;gap:6px"><div class="row" style="justify-content:space-between"><span class="sub">${label}</span><button class="btn small" data-copy="${esc(text)}">Copy</button></div><div class="cap">${esc(text)}</div></div>`:`<p class="sub">${label}: not in the approved file</p>`; }
+const PL = {ig:['instagram','Instagram','https://www.instagram.com/reel/...'],yt:['youtube','YouTube Shorts','https://youtube.com/shorts/...'],tt:['tiktok','TikTok','https://www.tiktok.com/@you/video/...']};
+function pubForm(k){ const [,name,ph]=PL[k];
+  return pubOpen===k?`<div class="form"><label class="sub" for="pubat">When it went live (this device's clock)</label><input class="inp" type="datetime-local" id="pubat" value="${nowLocal()}">
+    <label class="sub" for="puburl">Link to the post (optional)</label><input class="inp" type="url" id="puburl" inputmode="url" placeholder="${ph}">
+    <div class="row"><button class="btn small primary" data-pubsave="${k}">Record as published</button><button class="btn small" data-pubopen="">Cancel</button></div></div>`
+  :`<div class="row"><button class="btn primary" data-pubopen="${k}">Mark as published on ${name}</button></div>`; }
+const postLink = u => u?`<dt>Post</dt><dd><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a></dd>`:'';
+const withdraw = k => `<div class="row"><button class="btn small" data-unpub="${PL[k][0]}">Withdraw this record</button><span class="sub">Removes the dashboard's note only. It does not touch the post.</span></div>`;
+function tPublish(it){ const d=detail, a=d&&d.approved, pl=it.platforms, p=it.project; const IG={published:['ok',pl.ig.at?'Published '+fmt(pl.ig.at):'Posted, per the Uploads folder'],ready:['you','Ready to post'],blocked:['bad','Blocked'],unconfirmed:['unkp','Possible post, unconfirmed'],unknown:['unkp','Not recorded'],'not-yet':['wait','Not ready']}[pl.ig.state];
+  const sg=it.suggestions.filter(s=>s.publishedAt);
+  const dl=p&&p.finalExists?`<div class="row"><a class="btn small" href="/file?p=${encodeURIComponent(p.finalFile)}&dl=1">Download the final video</a><span class="mono">${esc(p.finalFile)}</span></div>`:'';
+  const ig=`<div class="panel"><div class="row"><h3>Instagram</h3><span class="pill ${IG[0]}">${IG[1]}</span></div>
+    ${pl.ig.state==='blocked'?`<div class="block">Keyword ${esc(it.resource.keyword)} is not live, so this reel cannot be recorded as posted. See the Resource tab.</div>`:''}
+    ${sg.map(s=>`<div class="unknown">ig-insights found a possible post from ${fmt(s.publishedAt)}: <span class="mono">${esc(s.url||'')}</span>. It counts as published only after you confirm it.</div>${s.key?`<div class="row"><button class="btn primary" data-confirmpost="${esc(s.key)}">Yes, this is the post</button><span class="sub">Confirms it in ig-insights${(p?p.slug:s.slug)?', as video project '+esc(p?p.slug:s.slug):''}.</span></div>`:''}`).join('')}
+    ${dl||'<p class="sub">Final video: not ready</p>'}
+    <dl class="kv">${pl.ig.state==='published'?postLink(pl.ig.url):''}
+    <dt>File in Uploads</dt><dd>${S.files.uploadsFound?fileSel('uploadsFile',S.files.uploads,it.links.uploadsFile,'None linked'):'Uploads folder not found'}</dd></dl>
+    <p class="sub">A linked file in the Uploads root reads as "on Instagram only". In "${esc(S.files.uploadsAllDir)}" it reads as "on every platform". Moving the file updates this page.</p>
+    ${pl.ig.state==='ready'?pubForm('ig'):''}
+    ${pl.ig.state==='published'&&pl.ig.manual?`<p class="sub">Entered by you. ig-insights has not matched this post yet; when it does, you confirm it here and its time takes over.</p>${withdraw('ig')}`:''}
+    ${a?copyBox('Instagram caption',a.instagram):'<p class="sub">Captions appear once a script is approved and linked.</p>'}</div>`;
+  const ST={published:k=>['ok',pl[k].at?'Published '+fmt(pl[k].at):'Posted, per the Uploads folder'],due:()=>['you','Due: no post recorded'],'not-recorded':()=>['unkp','Not recorded'],waiting:()=>['wait','Waiting for the date'],'not-yet':()=>['wait','After Instagram']};
+  const later=(k,n,body)=>{ const st=pl[k].state, s=ST[st](k); return `<div class="panel"><div class="row"><h3>${n}</h3><span class="pill ${s[0]}">${s[1]}</span></div>
+    ${it.due?`<dl class="kv"><dt>Due</dt><dd>${dueTxt(it.due)}${st==='due'||st==='waiting'?' · '+left(it.due):''} · ${S.dueTimeZone}</dd>${st==='published'?postLink(pl[k].url):''}</dl>`:st==='not-yet'?'<p class="sub">The date is set when Instagram is confirmed.</p>':''}
+    ${st==='not-recorded'?'<p class="sub">This reel went on Instagram before the dashboard recorded this platform. If you posted it here too, record it.</p>':''}${st!=='published'&&st!=='not-yet'?dl+pubForm(k):''}${st==='published'?(pl[k].source==='folder'?`<p class="sub">Read from the Uploads folder: the linked file is in "${esc(S.files.uploadsAllDir)}". No time or link is recorded.</p>`:withdraw(k)):''}${a?body:''}</div>`; };
+  const y=a?a.youtubeParts:null;
+  return `<div class="grid3">${ig}${later('yt','YouTube Shorts',y?(y.title||y.description?copyBox('Title',y.title)+copyBox('Description',y.description)+copyBox('Tags',y.tags):copyBox('YouTube Shorts text',a.youtube)):'')}${later('tt','TikTok',a?copyBox('TikTok caption',a.tiktok):'')}</div>`; }
+
+/* ---- approvals (phase 2) ---- */
+let fbOpen = false, studio = {};
+// Is HyperFrames Studio answering at the recorded preview address? The page cannot know whether you watched it, only whether it can be watched now.
+function probeStudio(){ const u=cur&&cur.project&&cur.project.hook&&cur.project.opening&&cur.project.opening.url; if(!u||tab!=='video'||studio[u]) return; studio[u]='checking';
+  fetch(u,{mode:'no-cors',cache:'no-store'}).then(()=>{studio[u]='up';},()=>{studio[u]='down';}).then(()=>{ if(cur&&tab==='video'&&!document.querySelector('textarea:focus')) render(); }); }
+const UPLOAD = {uploading:['run','Uploading to Gumroad…'],processing:['run','Uploaded; Gumroad is still processing'],'needs-check':['unkp','On Gumroad; needs checking'],uploaded:['ok','Uploaded to Gumroad'],'already-there':['ok','Already on Gumroad with the same size'],'not-applicable':['wait','Not Claude-related, so not uploaded'],'nothing-uploaded':['unkp','Nothing was uploaded; see the log'],'login-needed':['bad','Gumroad is not logged in'],held:['bad','Held: the approval did not match the file'],failed:['bad','Upload failed']};
+function decisionBox(it){ const d=it.decision; const j=it.jobs.filter(x=>x.kind==='approve').pop();
+  return `<div class="info">You chose Version ${esc(d.version)} on ${fmt(d.at)}. ${j?`Job ${esc(j.id)}: ${esc(j.status)}.`:'No job is running for it, so the approved file has not been written yet.'}</div>
+  ${j?'':`<p class="sub">Paste this into Claude Code to finish the approval:</p>${cmd(d.command)}`}
+  <div class="row"><button class="btn small" data-decide="">Change my choice</button></div>`; }
+function pdfGate(it){ const r=it.resource; if(!r.pdf) return '';
+  const fb=it.feedback.filter(x=>x.asset==='pdf'); const pending=fb.some(x=>x.current&&!x.started); const can=!S.remote&&(r.gate==='awaiting'||r.gate==='changed'||r.gate==='legacy'); const canUp=!S.remote&&r.gate==='approved'&&!(r.upload&&['uploading','processing','needs-check','uploaded','already-there','not-applicable'].includes(r.upload.state));
+  const up=r.upload, U=up?UPLOAD[up.state]||['unkp',up.state]:null; const revJob=it.jobs.filter(x=>x.kind==='revise-pdf').pop();
+  return `<iframe title="PDF preview" src="/file?p=${encodeURIComponent(r.pdf)}" style="width:100%;height:560px;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>
+  ${can&&!pending&&fbOpen!=='pdf'?`<div class="row"><button class="btn primary" data-approvepdf="${esc(r.sha)}">${r.gate==='legacy'?'Record approval of this file':'Approve this file'}</button><button class="btn" data-fbopen="pdf">Request changes</button></div><p class="sub">Approval applies to this exact file (sha256 ${esc(r.sha.slice(0,12))}) and uploads nothing. If the guide is rebuilt, it asks again.${r.gate==='legacy'?' This guide was built before the approval step, so no approval is on record yet.':''}</p>`:''}
+  ${canUp&&!(up&&['login-needed','failed','held','nothing-uploaded'].includes(up.state))?`<div class="row"><button class="btn" data-uploadpdf="${esc(r.sha)}">Upload to Gumroad</button><span class="sub">A separate step. It sends this approved file to your Gumroad product; a file already there with the same size is skipped.</span></div>`:''}
+  ${can&&fbOpen==='pdf'?`<label class="sub" for="fbtext">What should change in this version?</label><textarea id="fbtext" rows="3" style="width:100%;max-width:560px;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px" placeholder="For example: step 3 needs the exact menu name"></textarea><div class="row"><button class="btn small primary" data-fbsave="1">Record feedback</button><button class="btn small" data-fbopen="">Cancel</button></div>`:''}
+  ${fb.map(x=>`<div class="${x.current?'info':'unknown'}">Feedback on version ${esc(x.version.slice(0,12))}${x.current?'':' (an earlier build)'}: "${esc(x.text)}". ${x.started?'Revision started '+fmt(x.started)+'.':'No work has started.'}</div>
+    ${x.current&&!x.started?`<div class="row"><button class="btn small primary" data-startrev="${x.index}">Start revision</button><button class="btn small" data-withdraw="${x.index}">Withdraw feedback</button><span class="sub">Starting is a separate step, so nothing runs until you say so.</span></div>`:''}
+    ${x.current&&x.started?(revJob?`<p class="sub">Job ${esc(revJob.id)}: ${esc(revJob.status)}. The rebuilt PDF will ask for approval again.</p>`:`<p class="sub">No job was queued. Paste this into Claude Code to do the revision:</p>${cmd(x.command)}`):''}`).join('')}
+  ${up?`<div class="row"><strong>Gumroad</strong><span class="pill ${U[0]}">${U[1]}</span>${up.at?`<span class="sub">${fmt(up.at)}</span>`:''}${!S.remote&&r.gate==='approved'&&['processing','needs-check'].includes(up.state)?`<button class="btn small" data-checkupload="${esc(r.sha)}">Check upload status</button>`:''}${!S.remote&&['login-needed','failed','held','nothing-uploaded'].includes(up.state)?'<button class="btn small" data-retryupload="1">Try the upload again</button>':''}</div>
+    ${up.state==='login-needed'?'<p class="sub">In a terminal, run: gumroad auth login. Approve it in the browser, then try again.</p>':''}
+    ${up.log?`<details><summary class="sub">Upload log</summary><div class="script">${esc(up.log)}</div></details>`:''}`:''}`; }
+function gateText(r){ if(!r.pdf) return 'No PDF yet'; return {approved:'Approved '+fmt(r.approvedAt),changed:'Rebuilt since it was approved; needs a new approval',awaiting:'Awaiting your approval',legacy:'Not recorded (built before the approval step)'}[r.gate]||'Unknown'; }
+
+function vProject(){ const it=cur; const i=idx(it); const dots=new Set(it.needs.map(n=>n.tab));
+  const tabs=[['scripts','Scripts'],['resource','Resource'],['recording','Recording'],['video','Video'],['publish','Publish']];
+  const body={scripts:tScripts,resource:tResource,recording:tRecording,video:tVideo,publish:tPublish}[tab](it); const [who,txt]=nextAct(it); const w=WHO[who];
+  return `<div class="row" style="justify-content:space-between"><button class="back" data-view="${view}">Back to ${view==='attention'?'Needs me':view==='pipeline'?'Pipeline':'Schedule'}</button><button class="btn small" data-hide="${it.hidden?0:1}" title="Only the dashboard's own note changes. No file is deleted.">${it.hidden?'Put back in the dashboard':'Remove from the dashboard'}</button></div>
+  <div class="sec-head"><div><h2>${esc(it.title)}</h2><div class="mono">${esc(it.id)}${it.batch?' · '+esc(it.batch):''}${it.version?' · version '+it.version:''}${it.project?' · video-projects/'+esc(it.project.slug):''}</div></div></div>
+  ${track(it)}<div class="pn"><span class="pill ${w[0]}">${w[1]}</span><span>${esc(txt)}</span></div>
+  ${it.unknowns.length?`<div class="unknown"><strong>Not recorded</strong><ul>${it.unknowns.map(u=>`<li>${esc(u)}</li>`).join('')}</ul></div>`:''}
+  <div class="tabs">${tabs.map(([k,l])=>`<button data-tab-go="${k}" aria-current="${tab===k}">${l}${dots.has(k)?'<span class="dot" title="Needs you"></span>':''}</button>`).join('')}</div>${body}`; }
+
+function render(){ if(!S) return; renderNav(); const tick=document.getElementById('hooktick'), was=tick&&tick.checked; $('#app').innerHTML = cur ? vProject() : view==='pipeline' ? vPipeline() : view==='schedule' ? vSchedule() : vAttention();
+  const t2=document.getElementById('hooktick'); if(t2&&was) t2.checked=true; probeStudio(); }
+
+document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset;
+  if(d.view){ view=d.view; cur=null; pubOpen=null; liveOpen=false; render(); }
+  else if(d.open){ open(d.open,d.tab); }
+  else if(d.tabGo){ tab=d.tabGo; render(); }
+  else if(d.all!==undefined){ showAll=d.all==='2'?'hidden':d.all==='1'; render(); }
+  else if(d.activity){ act({id:d.id,type:'activity',activity:d.activity},d.activity==='set-aside'?'Moved to All. You can move it back to Active anytime.':'Moved to Active'); }
+  else if(d.copy!==undefined){ copyText(d.copy).then(()=>toast('Copied'),()=>toast('Copy was blocked; select the text instead')); }
+  else if(d.task){ act({id:cur.id,type:'task',task:d.task,done:d.done==='1'},d.done==='1'?'Marked as done':'Marked as not done'); }
+  else if(d.linkval){ act({id:cur.id,type:'link',kind:d.linkval,value:d.val},'Linked'); }
+  else if(d.decide!==undefined){ act({id:cur.id,type:'decide',version:d.decide||null}); }
+  else if(d.approvepdf){ act({id:cur.id,type:'approve-pdf',sha:d.approvepdf}); }
+  else if(d.checkupload){ act({id:cur.id,type:'check-upload',sha:d.checkupload}); }
+  else if(d.fbopen!==undefined){ fbOpen=d.fbopen||false; render(); const t=document.getElementById('fbtext'); if(t) t.focus(); }
+  else if(d.fbsave){ const t=document.getElementById('fbtext'), asset=fbOpen; fbOpen=false; act({id:cur.id,type:'feedback',asset,text:t?t.value:''}); }
+  else if(d.approvehook){ const t=document.getElementById('hooktick'); if(!(t&&t.checked)){ toast('Tick "I have watched this opening" first'); return; } act({id:cur.id,type:'approve-hook',fingerprint:d.approvehook,watched:true}); }
+  else if(d.approvecand){ act({id:cur.id,type:'approve-candidate',sha:d.approvecand}); }
+  else if(d.startrev!==undefined){ act({id:cur.id,type:'start-revision',index:Number(d.startrev)}); }
+  else if(d.withdraw!==undefined){ act({id:cur.id,type:'withdraw-feedback',index:Number(d.withdraw)}); }
+  else if(d.retryupload){ act({id:cur.id,type:'retry-upload'}); }
+  else if(d.uploadpdf){ act({id:cur.id,type:'upload-pdf',sha:d.uploadpdf}); }
+  else if(d.pubopen!==undefined){ pubOpen=d.pubopen||null; render(); const t=document.getElementById('puburl'); if(t) t.focus(); }
+  else if(d.pubsave){ const at=document.getElementById('pubat').value, url=document.getElementById('puburl').value; if(!at){ toast('Enter the time it was published'); return; } pubOpen=null; act({id:cur.id,type:'publish',platform:PL[d.pubsave][0],at:new Date(at).toISOString(),url}); }
+  else if(d.unpub){ act({id:cur.id,type:'unpublish',platform:d.unpub}); }
+  else if(d.confirmpost){ act({id:cur.id,type:'confirm-post',key:d.confirmpost}); }
+  else if(d.liveopen!==undefined){ liveOpen=d.liveopen==='1'; render(); }
+  else if(d.resstatus){ const t=document.getElementById('livetick'); if(d.resstatus==='live'&&!(t&&t.checked)){ toast('Tick the box first'); return; } liveOpen=false; act({id:cur.id,type:'resource-status',keyword:cur.resource.keyword,to:d.resstatus,confirmed:d.resstatus==='live'}); }
+  else if(d.hide!==undefined){ act({id:cur.id,type:'hide',hidden:d.hide==='1'},d.hide==='1'?'Removed from every list. No file was deleted. Find it under Pipeline, Removed.':'Back in the dashboard'); } });
+document.addEventListener('change',e=>{ const s=e.target.closest('select[data-link]'); if(s&&cur) act({id:cur.id,type:'link',kind:s.dataset.link,value:s.value||null},s.value?'Linked':'Link removed'); });
+setInterval(()=>{ if(cur&&cur.resource.upload&&cur.resource.upload.state==='uploading') load(true); },3000);
+load(); setInterval(()=>{ const v=[...document.querySelectorAll('video,audio')].find(x=>!x.paused)||(fbOpen||pubOpen||liveOpen?1:null)||(cur&&tab==='resource'&&cur.resource.pdf&&!(cur.resource.upload&&cur.resource.upload.state==='uploading')?1:null); if(!document.hidden&&!document.querySelector('select:focus,input:focus,textarea:focus')&&!(v&&!v.paused)) load(true); },30000);
+</script>
+</body>
+</html>

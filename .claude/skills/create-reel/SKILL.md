@@ -45,7 +45,10 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
 2. Identify audience, objective and profile: `organic` (default), `organic-60`, `ad`, `ad-disclaimer`
    (`.claude/skills/create-reel/profiles.json`).
 3. Create the project first (local and free):
-   `npm run new-reel -- <slug> --profile <p> --duration <s> --mode <faceless|footage|brand> --title "<title>" [--style <s>]`.
+   `npm run new-reel -- <slug> --profile <p> --duration <s> --mode <faceless|footage|brand> --title "<title>" [--style <s>] --script <id>`.
+   When the reel comes from an approved script, always pass `--script` with its dashboard id: batch date, batch number and
+   reel number, e.g. `2026-11-15-003-01` for reel 1 of `batch-2026-11-15-003`. Without it the content dashboard shows
+   the project as a second, unlinked card.
    It runs Herk's generator and converts the project to native 1080x1920. Never use `hyperframes init` or
    render a landscape design and crop it. `--style` (default `brand`, whose OFL fonts ship with the kit;
    `npm run reel-fonts -- --list`) copies that style's font files into `assets/fonts/`; a missing font file stops
@@ -59,12 +62,21 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
    Decide what the visuals do with `short-form-edit/references/visual-principles.md` (decisions, not required
    effects). If the person supplied a reference video, analyse it first and adopt its techniques, not its styling
    (`short-form-edit/references/reference-analysis.md`); without one, plan normally.
+   Named templates: when the brief says "trail" (or "trail template"), read `style-templates/trail/README.md` before
+   planning and follow its layout, layouts, scene recipes, look and traps, starting from `trail/example/`. When the
+   reel is about a tool, site or product with a visible result and names no style, offer trail as one option at
+   Gate B; the person chooses. A template sets the starting point, never the script or Gate B.
    Record the chosen direction in `reel.json` `"direction"`: `hook`, `coreClaim`, `heroBeat`, `motif`, `style`.
    Write `DESIGN.md` and `assets/plan.json` with `"schemaVersion": 2`: each scene's purpose, B-roll mode, evidence
    type, a specific visual intent and an asset plan, plus any motifs and planned callbacks
    ([preflight.md](references/preflight.md)).
 5. **Gate B, the creative preflight. Always stop here for a new reel**, even when the brief authorizes building it
-   end to end. Run `npm run preflight-reel -- video-projects/<slug>`, fix what it lists, present the report from
+   end to end. First build the **opening preview**: the reel's first ~5 s (the hook through its first beat) at final
+   fidelity in the real `index.html`, with the real footage and voice (Mode B), captions and representative sound,
+   checked at phone size, and served in HyperFrames Studio (`npx hyperframes preview`) for the person to play. Record
+   it with `npm run preflight-reel -- video-projects/<slug> --record-opening --end <s> --url <studio url>`; `--approve`
+   refuses until it exists. Then run `npm run preflight-reel -- video-projects/<slug>`, fix what it lists, present the
+   Studio link and the report from
    [preflight.md](references/preflight.md) (what the viewer sees, why each visual is meaningful, what recurs, what is
    simulated, planned paid calls) and wait. Only after the person approves it in a later message, record it with
    `--approve --fingerprint <12 hex> --approved-by "<name>"`; never on your own judgement. That command is a workflow

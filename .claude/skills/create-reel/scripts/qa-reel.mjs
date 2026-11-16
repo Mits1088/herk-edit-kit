@@ -257,6 +257,10 @@ const domSheets = []; // review folders made during the DOM pass, listed with th
       // Overlay leaks: at every sample time (even and event-targeted, including scene boundaries), does anything paint
       // while its clip is hidden the way the runtime hides it? Real pixels, not the DOM's word for it.
       const leakResults = [];
+      // Warm-up sample, discarded: on a freshly loaded page the <video> can present its first frame between the two
+      // screenshots of the first comparison, which reads as a full-footage "leak" (prompt-master v006: 1116405 px at
+      // 0.00 s on the first sample, 0 px when the same time was sampled again). One throwaway pass settles the paint.
+      if (times.length) await overlayLeakAt(page, comp.id, times[0].t);
       for (const { t } of times) leakResults.push(await overlayLeakAt(page, comp.id, t));
       add(...overlayLeakRow(leakResults));
 

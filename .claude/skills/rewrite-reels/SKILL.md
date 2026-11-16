@@ -11,6 +11,8 @@ Input: pasted transcripts, `.md` or `.txt` files, or a folder. On Telegram the s
 
 Ask no setup questions. Mits drops new transcripts in `D:/herk-edit-kit/Instagram_transcript/`. If no transcripts were given, use the files sitting directly in that folder, not in its `processed/` subfolder, plus any sitting directly in `D:/herk-edit-kit/reels-data/inputs/`, not in its batch subfolders. If there are none, ask for transcripts in one line.
 
+**Real duration.** Every transcript file should carry a `Duration: Ns` line near the top, because script length is judged against the source's real seconds at Mits's pace, not its word count. When you pull a transcript from Signal Room, write its `durationSeconds` there. When a file has an Instagram URL but no `Duration:` line and the Signal Room tools are available, look it up and add it before queueing. Keep any other metadata (views, likes, reach) to one `Stats:` line so it is not mistaken for spoken words.
+
 Run `pwd` to choose the route.
 
 ## Route 1: inside ClaudeClaw (the path contains `.claudeclaw/agents/main`)

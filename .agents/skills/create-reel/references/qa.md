@@ -37,6 +37,30 @@ HyperFrames seeks frames; a render worker can start anywhere. Root cause first:
   encoded frames either side of each fractional cut.
 - If a layer whose opacity animates changes the anti-aliasing of what it covers after it has animated, promote it
   from the start (`will-change: opacity`).
+- The same holds for `transform` and `clip-path`: hallmark-websites (November 2026) failed with 1-7/255 diffs on the
+  rounded corners of a fixed browser frame because panes and address-bar rows only became compositor layers after
+  their first wipe or roll. `will-change: transform, clip-path` on those classes from the start fixed it.
+- A `filter` (blur) animated on a child of a rounded `overflow: hidden` container leaves that layer composited after
+  it has run, which shifts the container's corner anti-aliasing on later frames. Prefer a dim overlay; if blur is
+  essential, keep a filter on that layer from frame 0.
+- A talking-head `<video>` visible at time 0 differs between seek orders in `seek-check` (it never seeks media, so the
+  first visit can catch an undecoded frame). Give the video `poster` = its own first frame and `preload="auto"`;
+  HyperFrames injects real frames at render, so the poster never reaches the MP4.
+- Locate a pixel diff before guessing: screenshot one time, seek through the checker's sample times, screenshot again,
+  diff, then repeat with one candidate layer hidden at a time (hallmark-websites `scripts/diag-seek.mjs`).
+- `seek-check` drives the GSAP timeline without the HyperFrames runtime, so clip visibility does not apply there: every
+  scene's layers stay on screen and a scene's leftover state shows through later ones. chatgpt-privacy-settings
+  (November 2026) failed this way at 84.9 s (an earlier scene's envelope grid under a split). Hide each scene's layers on
+  the clock outside its own window (`tl.set(children, { visibility: 'hidden' }, end)`, and the same before its start).
+- Never put a `tl.set` at exactly time 0 for something that must be visible on frame 0: a seek that lands back on 0
+  reverts zero-time sets, and the same reel's hook vanished from frame 0 in the encoded draft. Leave the authored
+  state visible instead.
+- One counter, one tween: two `fromTo` tweens on the same proxy object with `onUpdate` text redraw each other's value
+  when frames are reached out of order. Use one tween with `keyframes`.
+- A card that fades in from opacity 0 at its scene's cut shows an empty panel for a few frames (it reads as a flash
+  in the motion sheet). Let the scene's main picture be present from the cut and move it into place instead.
+- `npx hyperframes preview` (Studio) writes `data-hf-id` attributes into `index.html` while it runs, and
+  `seek-check` then reads the wrong root id. Stop Studio and strip `data-hf-id` before lint, seek-check or a render.
 - Timeline settling is allowed: `tl.progress(1).progress(0)` after building, before registering, makes a freshly
   loaded page start from the same state a backward seek reaches. Use it when it demonstrably improves initialisation
   or seek consistency, and say why in a comment. It does not fix conflicting tweens; it hides them at time 0 only.

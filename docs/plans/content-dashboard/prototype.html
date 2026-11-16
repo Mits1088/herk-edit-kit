@@ -1,0 +1,388 @@
+<title>Content Command Centre</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one working surface. Top bar switches three views; a project opens as its own page with five tabs. */
+:root{
+  --bg:#f2f4f8; --surface:#ffffff; --sunk:#e9edf3; --ink:#131a2a; --muted:#5a6579; --line:#d9dfe8;
+  --accent:#2f4bd8; --accent-ink:#ffffff;
+  --you:#8a4b00; --you-bg:#ffedc7; --ok:#0b6b45; --ok-bg:#d8f3e5; --bad:#a8271b; --bad-bg:#fde2de;
+  --wait:#4b5870; --wait-bg:#e6eaf1; --run:#2f4bd8; --run-bg:#e2e7ff;
+  --display:"Space Grotesk",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e121b; --surface:#171d2a; --sunk:#1f2636; --ink:#e8ecf5; --muted:#98a3b8; --line:#2a3246;
+  --accent:#8fa3ff; --accent-ink:#0e121b;
+  --you:#ffc766; --you-bg:#3a2c0c; --ok:#6fdcaa; --ok-bg:#0f2e22; --bad:#ff9c92; --bad-bg:#3a1512;
+  --wait:#aab5c9; --wait-bg:#232b3c; --run:#aab8ff; --run-bg:#1d2550; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0e121b; --surface:#171d2a; --sunk:#1f2636; --ink:#e8ecf5; --muted:#98a3b8; --line:#2a3246;
+  --accent:#8fa3ff; --accent-ink:#0e121b;
+  --you:#ffc766; --you-bg:#3a2c0c; --ok:#6fdcaa; --ok-bg:#0f2e22; --bad:#ff9c92; --bad-bg:#3a1512;
+  --wait:#aab5c9; --wait-bg:#232b3c; --run:#aab8ff; --run-bg:#1d2550; color-scheme:dark }
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-block:18px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:22px;font-weight:700} h2{font-size:19px;font-weight:600} h3{font-size:15px;font-weight:600}
+p{margin:0}
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.nav{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nav button,.tabs button{border:1px solid var(--line);background:var(--surface);padding:7px 13px;border-radius:999px;font-weight:500}
+.nav button[aria-current="true"],.tabs button[aria-current="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.count{display:inline-block;min-width:20px;text-align:center;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--you-bg);color:var(--you);font-size:12px;font-weight:600}
+.note{margin-top:10px;color:var(--muted);font-size:13px}
+main{margin-top:20px;display:grid;gap:22px}
+.sec-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;justify-content:space-between}
+.sub{color:var(--muted);font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.you{background:var(--you-bg);color:var(--you)} .ok{background:var(--ok-bg);color:var(--ok)} .bad{background:var(--bad-bg);color:var(--bad)}
+.wait{background:var(--wait-bg);color:var(--wait)} .run{background:var(--run-bg);color:var(--run)}
+.mono{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+/* attention list */
+.group{display:grid;gap:8px}
+.group>h3{color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-size:12px;font-family:var(--body)}
+.task{display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:center;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.task:hover{border-color:var(--accent)}
+.task strong{font-weight:600} .task .go{color:var(--accent);font-weight:600;font-size:13px}
+.task .sub{grid-column:1/-1}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px;align-items:start}
+/* board */
+.board-scroll{overflow-x:auto;padding-bottom:6px}
+.board{display:grid;grid-template-columns:repeat(6,minmax(190px,1fr));gap:12px;min-width:1180px}
+.col{background:var(--sunk);border-radius:12px;padding:10px;display:grid;gap:8px;align-content:start}
+.col>header{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--display);font-weight:600;font-size:14px}
+.card{display:grid;gap:7px;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:10px}
+.card:hover{border-color:var(--accent)}
+.card strong{font-weight:600;font-size:14px;line-height:1.3}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.plat{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+.plat.done{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.plat.due{background:var(--you-bg);color:var(--you);border-color:transparent}
+.plat.fail{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.empty{color:var(--muted);font-size:13px;padding:6px 2px}
+.rows{display:grid;gap:8px}
+.prow{display:grid;grid-template-columns:minmax(170px,1fr) minmax(0,3fr);gap:8px 18px;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;align-items:start}
+.prow:hover{border-color:var(--accent)}
+.prow .pt{display:grid;gap:3px} .prow .pt strong{font-weight:600;line-height:1.3}
+.prow .pr{display:grid;gap:7px;min-width:0}
+.pn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+@media (max-width:720px){.prow{grid-template-columns:1fr}}
+.track{display:flex;flex-wrap:wrap;gap:3px}
+.track span{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sunk);color:var(--muted)}
+.track .past{background:var(--ok-bg);color:var(--ok)} .track .now{background:var(--run-bg);color:var(--run);font-weight:600}
+.track .need{background:var(--you-bg);color:var(--you);font-weight:600;outline:1.5px solid var(--you)} .track .fail{background:var(--bad-bg);color:var(--bad);font-weight:600;outline:1.5px solid var(--bad)}
+.track .nr{background:none;border:1px dashed var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;color:var(--muted)}
+[data-res]{cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+ol.remain{margin:0;padding-left:20px;display:grid;gap:4px;font-size:14px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:5px 11px;font-size:13px;font-weight:500} .seg button[aria-current="true"]{background:var(--ink);color:var(--bg)}
+.walk{background:var(--surface);border:2px solid var(--accent);border-radius:12px;padding:14px 16px;display:grid;gap:10px}
+/* workspace */
+.back{background:none;border:0;padding:0;color:var(--accent);font-weight:600}
+.rail{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.rail span{font-size:12px;padding:3px 9px;border-radius:6px;background:var(--sunk);color:var(--muted)}
+.rail span.past{background:var(--ok-bg);color:var(--ok)} .rail span.now{background:var(--ink);color:var(--bg);font-weight:600}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--you);margin-left:6px;vertical-align:middle}
+.tabs button[aria-current="true"] .dot{background:var(--you-bg)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px;min-width:0}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.script{background:var(--sunk);border-radius:8px;padding:12px;display:grid;gap:7px;font-size:14px;align-content:start}
+.script.chosen{outline:2px solid var(--ok)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:8px;font-weight:600}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.kv{display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:5px 14px;font-size:14px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;min-width:0}
+.media{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}
+@media (max-width:560px){.media{grid-template-columns:1fr}}
+.player{width:168px;max-width:100%;aspect-ratio:9/16;border-radius:10px;background:linear-gradient(160deg,var(--run-bg),var(--sunk));border:1px solid var(--line);display:grid;place-items:center;position:relative}
+.player::before{content:"";border-left:22px solid var(--accent);border-top:14px solid transparent;border-bottom:14px solid transparent;margin-left:6px}
+.player span{position:absolute;bottom:8px;left:8px;right:8px;font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center}
+.pdf{width:168px;max-width:100%;aspect-ratio:1/1.414;border-radius:6px;background:var(--ink);color:var(--bg);padding:14px;display:grid;align-content:space-between;font-family:var(--display)}
+.pdf b{font-size:17px;line-height:1.15} .pdf i{font-style:normal;font-size:11px;opacity:.75}
+.cap{background:var(--sunk);border-radius:8px;padding:10px 12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.qa{display:grid;gap:4px;font-size:13px} .qa div{display:flex;gap:8px;justify-content:space-between;border-bottom:1px dashed var(--line);padding:3px 0}
+textarea,input[type=text],input[type=url],input[type=datetime-local]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;max-width:440px}
+label{font-size:13px;color:var(--muted);display:grid;gap:4px}
+.block{background:var(--bad-bg);color:var(--bad);border-radius:8px;padding:9px 12px;font-size:14px}
+.info{background:var(--run-bg);color:var(--run);border-radius:8px;padding:9px 12px;font-size:14px}
+.steps{display:flex;flex-wrap:wrap;gap:6px}
+.day{display:grid;grid-template-columns:150px 1fr;gap:6px 16px;padding:12px 0;border-top:1px solid var(--line)}
+@media (max-width:560px){.day{grid-template-columns:1fr}}
+.day h3{font-size:14px} .ev{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:none;border:0;padding:3px 0;text-align:left}
+.ev:hover strong{color:var(--accent)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,520px);z-index:20}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>Content Command Centre</h1>
+    <nav class="nav" id="nav" aria-label="Views"></nav>
+  </div>
+  <p class="note">Prototype with invented sample projects, as of Monday 16 November 2026, 10:00. Buttons change this page only; nothing touches your files or workflow. Start with Walkthrough to follow one reel from transcript to all three platforms.</p>
+  <main id="app"></main>
+</div>
+<div id="toast" role="status" hidden></div>
+
+<script>
+const BASE = new Date('2026-11-16T10:00:00'); let NOW = BASE;
+const STAGES = ['source','rewrite','choose','record','avatar','hook','build','render','qa','candidate','instagram','distribute','done'];
+const STAGE_NAME = {source:'Source received',rewrite:'Rewriting',choose:'Choose script',record:'Record voiceover',avatar:'HeyGen avatar',hook:'Hook review',build:'Building',render:'Rendering candidate',qa:'QA',candidate:'Approve candidate',instagram:'Instagram',distribute:'Shorts and TikTok',done:'Done'};
+const COLS = [['Scripts',['source','rewrite','choose']],['Recording',['record','avatar']],['Video',['hook','build','render','qa','candidate']],['Instagram',['instagram']],['Shorts and TikTok',['distribute']],['Done',['done']]];
+const P = [
+ {id:'p0',title:'Claude projects in one minute',batch:'batch-not-started',reel:1,stage:'source',kw:null,res:'none'},
+ {id:'p1',title:'Arena: 100 agents, one answer',batch:'batch-2026-11-15-003',reel:1,stage:'rewrite',auto:'Review pass running (2 of 4 steps)',kw:'ARENA',res:'none'},
+ {id:'p2',title:'Three settings that save tokens',batch:'batch-2026-11-15-002',reel:2,stage:'choose',review:'READY TO RECORD',kw:'TOKENS',res:'none'},
+ {id:'p3',title:'The plugin that reviews its own plan',batch:'batch-2026-11-15-002',reel:1,ver:'A',stage:'record',kw:'REVIEW',res:'review'},
+ {id:'p4',title:'Stop building agents for every job',batch:'batch-2026-11-12-002',reel:2,ver:'A',stage:'avatar',slug:'skills-not-agents',kw:null,res:'none',audio:'Found 14 Nov, 16:02'},
+ {id:'p5',title:'A spreadsheet from one prompt',batch:'batch-2026-11-12-001',reel:1,ver:'B',stage:'hook',slug:'claude-sheets-two',kw:'SHEETS',res:'uploaded'},
+ {id:'p6',title:'Caveman mode, explained',batch:'batch-2026-11-11-002',reel:3,ver:'A',stage:'qa',slug:'caveman-explained',kw:null,res:'none',fail:'Candidate v002 failed QA: audio stream check'},
+ {id:'p7',title:'Four privacy switches',batch:'batch-2026-11-12-002',reel:1,ver:'A',stage:'candidate',slug:'privacy-four-changes',kw:null,res:'none',cand:3},
+ {id:'p8',title:'Build your first skill',batch:'batch-2026-11-11-001',reel:1,ver:'B',stage:'instagram',slug:'first-skill',kw:'FOLDER',res:'uploaded',drive:'copied'},
+ {id:'p9',title:'Usage limit fixes',batch:'batch-2026-11-09-001',reel:2,ver:'A',stage:'distribute',slug:'usage-limit-fixes',kw:'LIMITS',res:'live',drive:'confirmed',ig:{at:'2026-11-14T08:30:00',url:'instagram.com/reel/sample-1'},yt:{},tt:{}},
+ {id:'p10',title:'Websites that do not look AI-made',batch:'batch-2026-11-09-001',reel:1,ver:'B',stage:'distribute',slug:'hallmark-sites',kw:'DESIGN',res:'live',drive:'confirmed',ig:{at:'2026-11-15T19:10:00',url:'instagram.com/reel/sample-2'},yt:{},tt:{}},
+ {id:'p11',title:'Reels animated by Claude',batch:'batch-2026-11-05-001',reel:1,ver:'A',stage:'distribute',slug:'animate-reels',kw:'REEL',res:'live',drive:'confirmed',ig:{at:'2026-11-12T18:00:00',url:'instagram.com/reel/sample-3'},yt:{at:'2026-11-14T18:20:00',url:'youtube.com/shorts/sample'},tt:{}},
+ {id:'p12',title:'100 simulated buyers',batch:'batch-2026-11-07-001',reel:1,ver:'A',stage:'done',slug:'simulated-buyers',kw:'FOUNDER',res:'live',drive:'confirmed',ig:{at:'2026-11-09T18:00:00',url:'instagram.com/reel/sample-4'},yt:{at:'2026-11-11T18:05:00',url:'youtube.com/shorts/sample-2'},tt:{at:'2026-11-11T18:15:00',url:'tiktok.com/@you/video/sample'}}
+];
+const UNLINKED = [{file:'Uploads / Animate reel v2.mp4',guess:'Reels animated by Claude (filename is similar)',pid:'p11'}];
+let view = 'attention', cur = null, tab = 'scripts';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const idx = p => STAGES.indexOf(p.stage);
+const fmt = d => new Date(d).toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+const dueAt = p => { if(!p.ig) return null; const d=new Date(p.ig.at); d.setDate(d.getDate()+2); d.setHours(9,0,0,0); return d; };
+function platState(p,k){ if(k==='ig') return p.ig ? 'published' : (p.stage==='instagram' ? (blocked(p)?'blocked':'ready') : 'not yet');
+  const x=p[k]; if(!x) return 'not yet'; if(x.at) return 'published'; if(x.fail) return 'failed'; return dueAt(p) <= NOW ? 'due' : 'waiting'; }
+const blocked = p => p.kw && p.res !== 'live';
+function left(p){ const h=Math.round((dueAt(p)-NOW)/3600e3); if(h<=0){ const a=Math.abs(h); return a<1?'due now':a<24?`due ${a} h ago`:`overdue by ${Math.floor(a/24)} d ${a%24} h`; } return h<24?`in ${h} h`:`in ${Math.floor(h/24)} d ${h%24} h`; }
+function slugFile(p){ return `${String(p.reel).padStart(2,'0')}-${p.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-$/,'')}`; }
+
+function tasks(p){ const t=[]; const add=(g,label,tb,why,go)=>t.push({g,label,tab:tb,why,p,go:go||'Open'});
+  if(p.stage==='source') add('Production','Start the rewrite','scripts','Transcript received, not yet rewritten','Open source');
+  if(p.stage==='choose') add('Production','Choose Version A or B','scripts',`Review status: ${p.review}`,'Compare scripts');
+  if(p.res==='review') add('Production','Review the PDF guide','resource','Nothing is uploaded to Gumroad until you approve this file','Review PDF');
+  if(p.res==='changes') add('Production','PDF feedback recorded, revision not started','resource','Start the revision when you are ready','Open feedback');
+  if(p.stage==='record') add('Production','Record the voiceover in Audacity','recording','Approved script is ready to read','Open script');
+  if(p.stage==='avatar') add('Production','Create the avatar video in HeyGen','recording',`Voiceover file: ${p.audio||'not found yet'}`,'Open task');
+  if(p.stage==='hook') add('Production','Approve the 5-second hook preview','video','The rest of the reel is not built until you approve it','Review hook');
+  if(p.stage==='candidate') add('Production','Watch and approve the finished reel','video',`Candidate v00${p.cand} passed QA`,'Review candidate');
+  if(p.fail) add('Production','Recover a failed QA check','video',p.fail,'See failure');
+  if(p.stage==='instagram'){ if(blocked(p)) add('Publishing','Make the resource live before posting','resource',`Comment keyword ${p.kw} cannot be delivered yet`,'Finish resource'); else add('Publishing','Post to Instagram, then confirm','publish','Video and caption are ready','Publish'); }
+  if(p.stage==='distribute') for(const [k,n] of [['yt','YouTube Shorts'],['tt','TikTok']]) if(platState(p,k)==='due') add('Publishing',`Post to ${n}`,'publish',`Second day after Instagram: ${left(p)}`,'Publish');
+  return t; }
+const allTasks = () => P.flatMap(tasks);
+
+function chips(p){ return ['ig','yt','tt'].map(k=>{ const s=platState(p,k); const c=s==='published'?'done':(s==='due'||s==='ready')?'due':(s==='failed'||s==='blocked')?'fail':''; return `<span class="plat ${c}" title="${s}">${k.toUpperCase()} ${s==='not yet'?'·':s}</span>`; }).join(''); }
+function statePill(p){ const n=tasks(p).length; if(p.fail) return '<span class="pill bad">Failed</span>'; if(n) return '<span class="pill you">Needs you</span>';
+  if(p.stage==='done') return '<span class="pill ok">Published everywhere</span>'; if(p.stage==='distribute') return '<span class="pill wait">Waiting for date</span>'; return '<span class="pill run">Running</span>'; }
+
+function renderNav(){ const n=allTasks().length+UNLINKED.length;
+  $('#nav').innerHTML=[['attention',`Needs me <span class="count">${n}</span>`],['pipeline','Pipeline'],['schedule','Schedule'],['walk','Walkthrough']].map(([k,l])=>`<button data-view="${k}" aria-current="${view===k&&(!cur||k==='walk')}">${l}</button>`).join(''); }
+
+function vAttention(){ const t=allTasks(); const grp=g=>t.filter(x=>x.g===g);
+  const list=a=>a.length?a.map(x=>`<button class="task" data-open="${x.p.id}" data-tab="${x.tab}"><strong>${esc(x.label)}</strong><span class="go">${x.go}</span><span class="sub">${esc(x.p.title)} · ${esc(x.why)}</span></button>`).join(''):'<p class="empty">Nothing waiting here.</p>';
+  return `<div class="sec-head"><h2>Needs me</h2><span class="sub">${t.length+UNLINKED.length} items. Each one opens the project at the step you need.</span></div>
+  <div class="two"><section class="group"><h3>Production</h3>${list(grp('Production'))}</section>
+  <section class="group"><h3>Publishing</h3>${list(grp('Publishing'))}
+  <h3 style="margin-top:10px">Needs linking</h3>${UNLINKED.map(u=>`<button class="task" data-open="${u.pid}" data-tab="publish"><strong>${esc(u.file)}</strong><span class="go">Review</span><span class="sub">Possible match: ${esc(u.guess)}. Not attached until you confirm.</span></button>`).join('')}</section></div>
+  <section class="group"><h3>Running without you</h3>${P.filter(p=>!tasks(p).length&&idx(p)<10).map(p=>`<button class="task" data-open="${p.id}" data-tab="scripts"><strong>${esc(p.title)}</strong><span class="pill run">Running</span><span class="sub">${esc(p.auto||STAGE_NAME[p.stage])}</span></button>`).join('')||'<p class="empty">No automated work in progress.</p>'}</section>`; }
+
+const TR=[['source','Source'],['rewrite','Rewrite'],['choose','Script'],['record','Voice'],['avatar','Avatar'],['hook','Hook'],['build','Build'],['render','Render'],['qa','QA'],['candidate','Approve candidate'],['instagram','Instagram'],['yt','Shorts'],['tt','TikTok']];
+const MARK={past:'✓ ',need:'● ',now:'… ',fail:'✕ '};
+const RES={none:['wait','PDF not started'],review:['you','PDF awaiting your approval'],changes:['you','PDF changes requested'],uploaded:['run','PDF uploaded, not live'],live:['ok','PDF live'],failed:['bad','PDF upload failed']};
+function nextAct(p){ const t=tasks(p);
+  if(p.stage==='distribute'){ const part=k=>{ const st=platState(p,k); return st==='published'?'published '+fmt(p[k].at):st==='due'?'post now ('+left(p)+')':'due '+fmt(dueAt(p)); }; return [t.length?'You':'Date','Shorts: '+part('yt')+' | TikTok: '+part('tt')]; }
+  if(p.fail) return ['You','Recover: '+p.fail]; if(t.length) return ['You',t.map(x=>x.label).join(' + ')];
+  if(p.stage==='done') return ['','Nothing left to do']; return ['System',p.auto||STAGE_NAME[p.stage]]; }
+function track(p){ const i=idx(p); const need=tasks(p).some(t=>t.tab!=='resource'||p.stage==='instagram');
+  return `<span class="track">${TR.map(([k,l])=>{ let c='';
+    if(k==='yt'||k==='tt'){ const st=platState(p,k); c=st==='published'?'past':st==='due'?'need':st==='waiting'?'now':st==='failed'?'fail':''; }
+    else { const j=STAGES.indexOf(k); c=p.stage==='done'||j<i?'past':j===i?(p.fail||(k==='instagram'&&blocked(p))?'fail':need?'need':'now'):''; }
+    return `<span class="${c}">${MARK[c]||''}${l}</span>`; }).join('')}</span>`; }
+const LEGEND='<div class="legend"><span>Key:</span><span class="track"><span class="past">✓ Done</span><span class="need">● Waiting on you</span><span class="now">… Running, or waiting for a date</span><span class="fail">✕ Failed or blocked</span><span>Not started</span><span class="nr">Not required</span></span></div>';
+function rowsView(){ return `<div class="rows">${P.map(p=>{ const [who,txt]=nextAct(p);
+  return `<button class="prow" data-open="${p.id}"><span class="pt"><strong>${esc(p.title)}</strong><span class="mono">${p.batch.slice(6)} · reel ${p.reel}${p.ver?' · version '+p.ver:''}</span></span>
+  <span class="pr">${track(p)}<span class="pn">${who?`<span class="pill ${who==='You'?(p.fail?'bad':'you'):who==='System'?'run':'wait'}">Next: ${who==='Date'?'waiting for date':who}</span>`:'<span class="pill ok">Complete</span>'}<span>${esc(txt)}</span></span>
+  <span class="chips">${p.kw?`<span class="pill ${RES[p.res][0]}" data-res="${p.id}" title="Open the resource to see what remains">${RES[p.res][1]}</span>`:'<span class="track"><span class="nr">PDF not required</span></span>'}${blocked(p)&&p.stage==='instagram'?'<span class="pill bad">Blocks Instagram</span>':''}${idx(p)>=STAGES.indexOf('instagram')?'<span class="pill ok">Final ready</span>':''}</span></span></button>`; }).join('')}</div>`; }
+let pipe='tracks';
+function vPipeline(){ const head=`<div class="sec-head"><h2>Pipeline</h2><span class="seg"><button data-pipe="tracks" aria-current="${pipe==='tracks'}">Stage tracks</button><button data-pipe="board" aria-current="${pipe==='board'}">Board</button></span></div>
+  <p class="sub">${pipe==='tracks'?P.length+' projects. Each row shows every stage, the one it is on, what happens next and who does it. The PDF has its own line because it is worked on in parallel.':P.length+' projects, one card each, grouped by where they are. Use Stage tracks to see every stage of a project.'}</p>`;
+  if(pipe==='tracks') return head+LEGEND+rowsView();
+  return head+`<div class="board-scroll"><div class="board">${COLS.map(([name,st])=>{ const ps=P.filter(p=>st.includes(p.stage));
+    return `<section class="col"><header><span>${name}</span><span class="sub">${ps.length}</span></header>${ps.map(p=>`<button class="card" data-open="${p.id}"><strong>${esc(p.title)}</strong><span class="sub">${esc(p.fail||p.auto||STAGE_NAME[p.stage])}${p.kw&&p.res==='review'?' · PDF to review':''}</span><span class="chips">${statePill(p)}</span><span class="chips">${chips(p)}</span></button>`).join('')||'<p class="empty">Empty</p>'}</section>`; }).join('')}</div></div>`; }
+
+/* ---- walkthrough: one sample project, start to finish ---- */
+const W0={id:'w',title:'Three settings that save tokens',batch:'batch-2026-11-15-002',reel:2,slug:'token-settings',kw:'TOKENS',review:'READY TO RECORD'};
+const WIG={at:'2026-11-16T10:00:00',url:'instagram.com/reel/sample-w'};
+const STEPS=[
+ {t:'A transcript arrives',s:{stage:'source',res:'none'},tab:'scripts',see:'The new transcript is on the board before any work starts.',click:'Start rewrite.'},
+ {t:'Rewriting runs without you',s:{stage:'rewrite',auto:'Writing Version A and B, then the review pass'},tab:'scripts',see:'The project is marked Running. Nothing is asked of you.',click:'Nothing. Go to the next step.'},
+ {t:'Choose a script',s:{stage:'choose',auto:null},tab:'scripts',see:'The source transcript, Version A and Version B side by side, with the review status.',click:'Approve Version B.'},
+ {t:'Two jobs open at once',s:{stage:'record',ver:'B',res:'review',pdf:1},tab:'resource',see:'The PDF guide was built while the voiceover task opened. Both are on your list. Nothing has gone to Gumroad.',click:'Request changes, write a note, then Record feedback.'},
+ {t:'Feedback is recorded, nothing has started',s:{res:'changes',fb:{pdf:{saved:true,text:'Step 3 needs the exact menu name'}}},tab:'resource',see:'Your note is stored against PDF build 1. No work begins until you say so.',click:'Start revision.'},
+ {t:'A new PDF needs a new approval',s:{res:'review',pdf:2,fb:null},tab:'resource',see:'Build 2 has a different hash, so your earlier decision does not carry over.',click:'Approve and upload to Gumroad.'},
+ {t:'Record the voiceover',s:{res:'uploaded'},tab:'recording',see:'The approved script, one sentence per line, and the audio file this project expects.',click:'Record in Audacity, then "I have recorded it".'},
+ {t:'Create the avatar',s:{stage:'avatar',audio:'Linked 16 Nov, 11:20'},tab:'recording',see:'The audio to use and where the avatar video belongs. Reel creation is waiting for it.',click:'Make it in HeyGen, then "The avatar video is in place".'},
+ {t:'Approve the hook',s:{stage:'hook'},tab:'video',see:'The first five seconds at final quality. The rest of the reel is not built yet.',click:'Approve hook, build the rest.'},
+ {t:'QA fails',s:{stage:'qa',fail:'Candidate v001 failed QA: audio stream check'},tab:'video',see:'The failed check, by name. You are never asked to approve a file that failed QA.',click:'Retry render and QA.'},
+ {t:'Approve the finished reel',s:{stage:'candidate',fail:null,cand:2},tab:'video',see:'Candidate v002 passed QA. You approve this exact file, and it becomes final.',click:'Approve this file as final.'},
+ {t:'Instagram is blocked by the resource',s:{stage:'instagram'},tab:'publish',see:'The video is final, but keyword TOKENS cannot be delivered yet, so Instagram is blocked.',click:'Open the Resource tab, then "Mark keyword set up and live".'},
+ {t:'Post to Instagram',s:{res:'live',drive:'copied'},tab:'publish',see:'The video, its phone status and the Instagram caption with a Copy button.',click:'Post in the Instagram app, then "Mark as published to Instagram".'},
+ {t:'Waiting for the date',s:{stage:'distribute',drive:'confirmed',ig:WIG,yt:{},tt:{}},tab:'publish',see:'Instagram is published. Shorts and TikTok show their due date and are not on your list yet.',click:'Nothing until Wednesday 18 November, 09:00.'},
+ {t:'Two days later, both are due',s:{},now:'2026-11-18T09:30:00',tab:'publish',see:'It is now Wednesday 09:30. Both platforms are due, each with its own caption.',click:'Post the Short, then "Mark as published to YouTube Shorts".'},
+ {t:'One platform done, the other still due',s:{yt:{at:'2026-11-18T09:40:00',url:'youtube.com/shorts/sample-w'}},now:'2026-11-18T09:45:00',tab:'publish',see:'YouTube Shorts is published. TikTok is still due; one never marks the other.',click:'Post on TikTok, then "Mark as published to TikTok".'},
+ {t:'Published everywhere',s:{stage:'done',tt:{at:'2026-11-18T09:55:00',url:'tiktok.com/@you/video/sample-w'}},now:'2026-11-18T10:00:00',tab:'publish',see:'All three platforms show their own time and link. The project is complete.',click:'Nothing left.'}
+];
+let step=0, WP=null;
+function goStep(n){ step=Math.max(0,Math.min(STEPS.length-1,n)); WP=JSON.parse(JSON.stringify(W0)); NOW=BASE;
+  for(let k=0;k<=step;k++){ Object.assign(WP,JSON.parse(JSON.stringify(STEPS[k].s))); }
+  if(STEPS[step].now) NOW=new Date(STEPS[step].now);
+  cur=WP; tab=STEPS[step].tab; view='walk'; }
+function walkBar(){ const s=STEPS[step]; const t=tasks(WP).map(x=>x.label);
+  return `<div class="walk"><div class="row"><span class="pill run">Walkthrough, step ${step+1} of ${STEPS.length}</span><h3>${esc(s.t)}</h3></div>
+  <dl class="kv"><dt>What you see</dt><dd>${esc(s.see)}</dd><dt>What you click</dt><dd>${esc(s.click)}</dd><dt>On your Needs me list</dt><dd>${t.length?esc(t.join(' + ')):'Nothing for this project'}</dd></dl>
+  <div class="row"><button class="btn" data-walk="-1" ${step?'':'disabled'}>Previous</button><button class="btn primary" data-walk="1" ${step<STEPS.length-1?'':'disabled'}>Next step</button><span class="sub">The buttons below work too; Next step always puts the project in the right state.</span></div></div>`; }
+
+function vSchedule(){ const ev=[]; for(const p of P){ if(p.stage==='instagram') ev.push({d:null,p,t:blocked(p)?'Instagram: blocked by resource':'Instagram: ready to post',c:blocked(p)?'bad':'you'});
+    if(p.ig) for(const [k,n] of [['yt','YouTube Shorts'],['tt','TikTok']]){ const s=platState(p,k); if(s==='published') continue; ev.push({d:dueAt(p),p,t:`${n}: ${s==='due'?'due, '+left(p):'waiting, '+left(p)}`,c:s==='due'?'you':'wait'}); } }
+  const day=d=>d.toDateString(); const today=day(NOW); const tm=day(new Date(NOW.getTime()+864e5));
+  const groups=[['Ready now',e=>!e.d],['Overdue',e=>e.d&&e.d<NOW&&day(e.d)!==today],['Today',e=>e.d&&day(e.d)===today],['Tomorrow',e=>e.d&&day(e.d)===tm],['Later this week',e=>e.d&&e.d>NOW&&day(e.d)!==today&&day(e.d)!==tm]];
+  const row=e=>`<button class="ev" data-open="${e.p.id}" data-tab="publish"><span class="pill ${e.c}">${esc(e.t)}</span><strong>${esc(e.p.title)}</strong>${e.d?`<span class="sub">${fmt(e.d)}</span>`:''}</button>`;
+  const done=P.filter(p=>p.stage==='done');
+  return `<div class="sec-head"><h2>Publishing schedule</h2><span class="sub">Shorts and TikTok fall due at 09:00 UK time on the second calendar day after the Instagram post you confirmed.</span></div>
+  <div class="panel">${groups.map(([n,f])=>{ const a=ev.filter(f).sort((x,y)=>(x.d||0)-(y.d||0)); return `<div class="day"><h3>${n}</h3><div>${a.map(row).join('')||'<span class="sub">Nothing</span>'}</div></div>`; }).join('')}
+  <div class="day"><h3>Fully distributed</h3><div>${done.map(p=>`<button class="ev" data-open="${p.id}" data-tab="publish"><span class="pill ok">All three</span><strong>${esc(p.title)}</strong><span class="sub">Instagram ${fmt(p.ig.at)}</span></button>`).join('')||'<span class="sub">Nothing</span>'}</div></div></div>`; }
+
+/* ---- project workspace ---- */
+function feedback(p,key,version){ p.fb=p.fb||{}; const f=p.fb[key];
+  if(f&&f.saved) return `<div class="info">Feedback recorded against ${esc(version)}: "${esc(f.text)}". No work has started.</div><div class="row"><button class="btn small" data-act="startrev" data-key="${key}">Start revision</button><span class="sub">Starting is a separate step, so you can add more notes first.</span></div>`;
+  if(f&&f.open) return `<label>What should change in ${esc(version)}?<textarea id="fb-${key}" rows="3" placeholder="For example: the hook card overlaps my face"></textarea></label><div class="row"><button class="btn small primary" data-act="savefb" data-key="${key}">Record feedback</button><button class="btn small" data-act="cancelfb" data-key="${key}">Cancel</button></div>`;
+  return ''; }
+const SRC=['Most people add a new AI agent for every task.','That is why their setup keeps breaking.','The teams doing this well use a different approach.'];
+const SA=['You do not need another agent.','You need three settings most people never open.','First, turn on the one that trims every reply.','Second, set a default model for small jobs.','Third, clear context before each new task.'];
+const SB=['I cut my usage in half without changing plans.','It took three settings and about two minutes.','Open settings and switch on short replies.','Send small jobs to the lighter model.','Start each task with a clean context.'];
+
+function tScripts(p){ if(p.stage==='source') return `<div class="panel"><div class="row"><h3>Source transcript</h3><span class="pill you">Waiting to be rewritten</span></div><p>The transcript has arrived. Nothing has been written from it yet.</p><dl class="kv"><dt>File</dt><dd class="mono">Instagram_transcript/${slugFile(p).slice(3)}.md</dd><dt>Duration</dt><dd>38s</dd><dt>Source</dt><dd>Instagram</dd></dl><div class="row"><button class="btn primary" data-act="startrewrite">Start rewrite</button></div></div>`;
+  if(p.stage==='rewrite') return `<div class="panel"><span class="pill run">Rewriting</span><p>${esc(p.auto)}</p><dl class="kv"><dt>Source</dt><dd class="mono">reels-data/inputs/${p.batch}/</dd><dt>Will appear in</dt><dd class="mono">instagram_scripts_output/${p.batch}/</dd></dl></div>`;
+  const chosen=p.ver; const col=(v,lines,hook)=>`<div class="script ${chosen===v?'chosen':''}"><div class="row"><h3>${v==='S'?'Source transcript':'Version '+v}</h3>${chosen===v?'<span class="pill ok">Approved</span>':''}</div>${lines.map(l=>`<p>${esc(l)}</p>`).join('')}${v!=='S'?`<span class="sub">${lines.join(' ').split(' ').length} words · hook: ${hook}</span>${chosen?'':`<button class="btn primary" data-act="approve-script" data-v="${v}">Approve Version ${v}</button>`}`:'<span class="sub">Duration: 41s · source: Instagram</span>'}</div>`;
+  return `<div class="panel"><div class="row"><h3>Scripts</h3><span class="pill ${p.review==='REVIEW REQUIRED'?'you':'ok'}">${p.review||'READY TO RECORD'}</span></div>
+  <div class="grid3">${col('S',SRC)}${col('A',SA,'contrarian')}${col('B',SB,'result first')}</div>
+  ${chosen?`<dl class="kv"><dt>Approved file</dt><dd class="mono">instagram_scripts_output/approved/${p.batch}/${slugFile(p)}-version-${chosen.toLowerCase()}.txt</dd></dl>`:'<p class="sub">Approving runs the existing /approve-reel step and writes the same approved file it writes today.</p>'}</div>`; }
+
+function tResource(p){ if(!p.kw) return `<div class="panel"><span class="pill wait">Not required</span><p>This script's call to action is not a comment keyword, so no PDF is made.</p></div>`;
+  const S={none:['wait','Not started'],review:['you','Awaiting your approval'],changes:['you','Changes requested'],uploaded:['run','Uploaded, not live yet'],live:['ok','Live'],failed:['bad','Upload failed']}[p.res];
+  if(p.res==='none') return `<div class="panel"><span class="pill wait">Not started</span><p>The guide for keyword ${p.kw} is built after you approve a script.</p></div>`;
+  const ver='PDF build '+(p.pdf||1)+' (sha '+(p.pdf===2?'e77a41c0d9b3':'5c1e09a7b2d4')+')';
+  return `<div class="panel"><div class="row"><h3>Guide for keyword ${p.kw}</h3><span class="pill ${S[0]}">${S[1]}</span></div>
+  <div class="media"><div class="pdf"><i>Setup and Practical Guide</i><b>${esc(p.title)}</b><i>Inside: 4 sections · 6 pages</i></div>
+  <div style="display:grid;gap:10px;min-width:0"><dl class="kv"><dt>File</dt><dd class="mono">instagram_scripts_output/resources/${esc(p.title)}.pdf</dd><dt>Version</dt><dd class="mono">${ver}</dd><dt>Build check</dt><dd>OK, all links clickable</dd><dt>Gumroad</dt><dd>${p.res==='review'||p.res==='changes'?(p.pdfUp?'Build '+p.pdfUp+' is on Gumroad. This build is not, and waits for your approval.':'Not uploaded. Waits for your approval.'):'Added to the Claude Skills Pack'}</dd><dt>Delivery</dt><dd>${p.res==='live'?'Keyword set up, viewers can receive it':'Keyword not confirmed in the delivery tool'}</dd></dl>
+  ${p.res==='review'?`<div class="row"><button class="btn primary" data-act="approve-pdf">Approve and upload to Gumroad</button><button class="btn" data-act="openfb" data-key="pdf">Request changes</button><button class="btn" data-act="toast" data-msg="Opens the full PDF in the real dashboard">Open PDF</button></div>`:''}
+  ${p.res==='uploaded'?`<h3>What remains before this is live</h3><ol class="remain"><li>Set up keyword ${p.kw} in your comment delivery tool.</li><li>Comment the keyword on a test post and check the PDF arrives.</li><li>Mark it live here. That changes its line in resources.md from draft to live.</li></ol><div class="row"><button class="btn primary" data-act="live">Mark keyword set up and live</button><button class="btn" data-act="rebuild">Rebuild the guide</button></div><p class="sub">Instagram stays blocked for this reel until the resource is live.</p>`:''}
+  ${feedback(p,'pdf',ver)}</div></div></div>`; }
+
+function tRecording(p){ const i=idx(p)-1; const slug=p.slug||slugFile(p).slice(3);
+  const vo=i<2?['wait','Waiting for an approved script']:i===2?['you','Your turn']:['ok','Done'];
+  const av=i<3?['wait','Waiting for the voiceover']:i===3?['you','Your turn']:['ok','Done'];
+  return `<div class="grid3"><div class="panel"><div class="row"><h3>Record voiceover</h3><span class="pill ${vo[0]}">${vo[1]}</span></div>
+  <p class="sub">Manual, in Audacity. The dashboard only tracks it.</p>
+  ${i>=2?`<div class="script">${(p.ver==='B'?SB:SA).map(l=>`<p>${esc(l)}</p>`).join('')}</div>`:''}
+  <dl class="kv"><dt>Audio file for this project</dt><dd class="mono">raw-media/${slug}/voiceover.wav</dd><dt>Detected</dt><dd>${i>2?(p.audio||'Found'):'Not found yet'}</dd></dl>
+  ${i===2?`<div class="row"><button class="btn" data-act="copy" data-text="${esc((p.ver==='B'?SB:SA).join('\n'))}">Copy script</button><button class="btn primary" data-act="advance">I have recorded it</button></div>`:''}</div>
+  <div class="panel"><div class="row"><h3>Create HeyGen avatar</h3><span class="pill ${av[0]}">${av[1]}</span></div>
+  <p class="sub">Manual, in HeyGen. Reel creation waits for the video file.</p>
+  <dl class="kv"><dt>Linked audio</dt><dd class="mono">raw-media/${slug}/voiceover.wav</dd><dt>Avatar video for this project</dt><dd class="mono">raw-media/${slug}/avatar.mp4</dd><dt>Detected</dt><dd>${i>3?'Found, 1080p, 43s':'Not found yet'}</dd></dl>
+  ${i===3?`<div class="row"><button class="btn primary" data-act="advance">The avatar video is in place</button></div>`:''}</div></div>
+  <p class="sub">Each file is linked to its project by name, never guessed. The folder shown is a proposal; nothing in raw-media moves without your say.</p>`; }
+
+function tVideo(p){ const r=idx(p); const i=r<=5?r-1:r<=8?5:r-3; if(i<4) return `<div class="panel"><span class="pill wait">Not started</span><p>Reel creation starts when the avatar video exists.</p></div>`;
+  const hookV='opening fingerprint 4b41d7c5dcff'; const c=`${p.slug}-candidate-v00${p.cand||2}.mp4`; const candV=`${c} (sha 9fc266bd2aa9)`;
+  const hook=`<div class="panel"><div class="row"><h3>Hook preview</h3><span class="pill ${i===4?'you':'ok'}">${i===4?'Awaiting your approval':'Approved'}</span></div>
+  <div class="media"><div class="player"><span>0:00 to 0:05</span></div><div style="display:grid;gap:10px;min-width:0"><dl class="kv"><dt>What it is</dt><dd>The first five seconds at final quality, playing in HyperFrames Studio</dd><dt>Version</dt><dd class="mono">${hookV}</dd><dt>If the plan changes</dt><dd>This approval is void and you are asked again</dd></dl>
+  ${i===4?`<div class="row"><button class="btn primary" data-act="advance">Approve hook, build the rest</button><button class="btn" data-act="openfb" data-key="hook">Request changes</button></div>`:''}${feedback(p,'hook',hookV)}</div></div></div>`;
+  let cand;
+  if(i===5) cand=`<div class="panel"><div class="row"><h3>Finished reel</h3>${p.fail?'<span class="pill bad">QA failed</span>':'<span class="pill run">'+STAGE_NAME[p.stage]+'</span>'}</div>${p.fail?`<div class="block">${esc(p.fail)}</div><div class="qa"><div><span>Decode, size, frame rate</span><span class="pill ok">PASS</span></div><div><span>Audio stream</span><span class="pill bad">FAIL</span></div><div><span>Delivery review</span><span class="pill wait">NOT TESTED</span></div></div><p class="sub">To recover: fix the cause, render again and re-run QA. Approval stays unavailable until QA passes.</p><div class="row"><button class="btn primary" data-act="retry">Retry render and QA</button><button class="btn" data-act="toast" data-msg="Opens the QA report in the real dashboard">Open QA report</button></div>`:'<p>'+({build:'Draft v002 rendered. The candidate render comes next.',render:'Rendering the candidate file.',qa:'QA is running on the candidate. You are asked to approve only if it passes.'}[p.stage])+'</p>'}</div>`;
+  else if(i>=6) cand=`<div class="panel"><div class="row"><h3>Finished reel</h3><span class="pill ${i===6?'you':'ok'}">${i===6?'Awaiting your approval':'Final ready'}</span></div>
+  <div class="media"><div class="player"><span>0:43 · 1080 × 1920</span></div><div style="display:grid;gap:10px;min-width:0"><dl class="kv"><dt>File</dt><dd class="mono">renders/${candV}</dd><dt>Order</dt><dd>QA has already run on this exact file. Your approval makes it final; nothing is rendered again.</dd></dl>
+  <div class="qa"><div><span>Technical checks (11)</span><span class="pill ok">PASS</span></div><div><span>Speech integrity</span><span class="pill ok">PASS</span></div><div><span>Delivery review, 7 scenes</span><span class="pill ok">ALL DELIVERED</span></div><div><span>Flagged cuts to listen to</span><span class="pill wait">2</span></div></div>
+  ${i===6?`<div class="row"><button class="btn primary" data-act="advance">Approve this file as final</button><button class="btn" data-act="openfb" data-key="cand">Request changes</button></div>`:`<dl class="kv"><dt>Final</dt><dd class="mono">video-projects/${p.slug}/renders/final.mp4</dd></dl>`}${feedback(p,'cand',candV)}</div></div></div>`;
+  else cand='';
+  return hook+cand; }
+
+function capText(p,k){ const ask=p.kw?`Comment ${p.kw} and I will send you the guide.`:'Save this for later.';
+  if(k==='ig') return `${p.title}.\n\nThree changes, all free, about two minutes.\n\n${ask}\n\n#claude #claudecode #aitools`;
+  if(k==='tt') return `${p.title}: three free changes\n${ask}\n#claude #claudecode #aitools`;
+  return {title:`${p.title} (3 free changes)`,desc:`${p.title}, in under a minute.\nThree settings, no paid plan needed.\n${ask}\n#Shorts #claude #aitools`,tags:'claude settings, claude code, ai tools, claude tips'}; }
+function copyBox(label,text){ return `<div style="display:grid;gap:6px"><div class="row" style="justify-content:space-between"><span class="sub">${label}</span><button class="btn small" data-act="copy" data-text="${esc(text)}">Copy</button></div><div class="cap">${esc(text)}</div></div>`; }
+function markForm(k,n){ return `<div class="row" style="align-items:end"><label>Published at<input type="datetime-local" id="at-${k}" value="2026-11-16T10:00"></label><label>Post link (optional)<input type="url" id="url-${k}" placeholder="https://"></label><button class="btn primary" data-act="publish" data-k="${k}">Mark as published to ${n}</button></div>`; }
+
+function tPublish(p){ if(idx(p)<10) return `<div class="panel"><span class="pill wait">Not ready</span><p>Publishing opens when the finished reel is approved. Captions already exist in the approved script file.</p></div>`;
+  const D={copied:['run','Copied to sync folder'],confirmed:['ok','Confirmed available in Drive'],undefined:['wait','Not sent']}[p.drive];
+  const un=UNLINKED.filter(u=>u.pid===p.id);
+  const link=un.map(u=>`<div class="panel"><div class="row"><h3>Needs linking</h3><span class="pill you">Your decision</span></div><p><span class="mono">${esc(u.file)}</span> might belong to this project. It is not attached until you say so.</p><div class="row"><button class="btn primary" data-act="link">Yes, link it here</button><button class="btn" data-act="unlink">No, different project</button></div></div>`).join('');
+  const igS=platState(p,'ig');
+  const ig=`<div class="panel"><div class="row"><h3>Instagram</h3><span class="pill ${igS==='published'?'ok':igS==='blocked'?'bad':'you'}">${igS==='published'?'Published '+fmt(p.ig.at):igS==='blocked'?'Blocked':'Ready to post'}</span></div>
+  ${igS==='blocked'?`<div class="block">Keyword ${p.kw} cannot be delivered yet. Make the resource live first (Resource tab).</div>`:''}
+  <dl class="kv"><dt>Video</dt><dd class="mono">video-projects/${p.slug}/renders/final.mp4</dd><dt>On your phone</dt><dd><span class="pill ${D[0]}">${D[1]}</span>${p.drive==='copied'?' <span class="sub">Not yet verified in Drive</span>':''}</dd>${p.ig?`<dt>Post</dt><dd class="mono">${esc(p.ig.url||'no link given')}</dd>`:''}</dl>
+  ${copyBox('Instagram caption',capText(p,'ig'))}
+  ${igS==='ready'?`<div class="row"><button class="btn" data-act="drive">${p.drive?'Check Drive again':'Send to phone folder'}</button></div>${markForm('ig','Instagram')}<p class="sub">Sending the file to Drive never marks the reel as published. The two-day clock starts only when you confirm here.</p>`:''}</div>`;
+  const later=(k,n)=>{ const s=platState(p,k); const pc={published:'ok',due:'you',waiting:'wait',failed:'bad','not yet':'wait'}[s]; const y=capText(p,'yt');
+    return `<div class="panel"><div class="row"><h3>${n}</h3><span class="pill ${pc}">${s==='published'?'Published '+fmt(p[k].at):s==='due'?'Due, '+left(p):s==='waiting'?'Waiting, '+left(p):'After Instagram'}</span></div>
+    ${p.ig?`<dl class="kv"><dt>Due</dt><dd>${fmt(dueAt(p))} <span class="sub">(second calendar day, 09:00 UK time)</span></dd>${p[k].at?`<dt>Post</dt><dd class="mono">${esc(p[k].url||'no link given')}</dd>`:''}</dl>`:'<p class="sub">The date is set when Instagram is confirmed.</p>'}
+    ${k==='yt'?copyBox('Title',y.title)+copyBox('Description',y.desc)+copyBox('Tags',y.tags):copyBox('TikTok caption',capText(p,'tt'))}
+    ${p.kw?`<p class="sub">Keyword delivery on this platform: to confirm.</p>`:''}
+    ${s==='due'||s==='waiting'?markForm(k,n):''}</div>`; };
+  return link+`<div class="grid3">${ig}${later('yt','YouTube Shorts')}${later('tt','TikTok')}</div>`; }
+
+function vProject(){ const p=cur; const i=idx(p); const need=new Set(tasks(p).map(t=>t.tab)); if(UNLINKED.some(u=>u.pid===p.id)) need.add('publish');
+  const tabs=[['scripts','Scripts'],['resource','Resource'],['recording','Recording'],['video','Video'],['publish','Publish']];
+  const body={scripts:tScripts,resource:tResource,recording:tRecording,video:tVideo,publish:tPublish}[tab](p);
+  const bv=view==='walk'?'attention':view;
+  return `${p.id==='w'?walkBar():''}<div><button class="back" data-view="${bv}">Back to ${bv==='attention'?'Needs me':bv==='pipeline'?'Pipeline':'Schedule'}</button></div>
+  <div class="sec-head"><div><h2>${esc(p.title)}</h2><div class="mono">${p.batch} · reel ${p.reel}${p.ver?' · version '+p.ver:''}${p.slug?' · video-projects/'+p.slug:''}</div></div><div class="chips">${statePill(p)}${chips(p)}</div></div>
+  <div class="rail">${STAGES.map((s,j)=>`<span class="${j<i?'past':j===i?'now':''}">${STAGE_NAME[s]}</span>`).join('')}</div>
+  <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button data-tab-go="${k}" aria-current="${tab===k}">${l}${need.has(k)?'<span class="dot" title="Needs you"></span>':''}</button>`).join('')}</div>${body}`; }
+
+function render(){ renderNav(); $('#app').innerHTML = cur ? vProject() : view==='pipeline' ? vPipeline() : view==='schedule' ? vSchedule() : vAttention(); }
+let tt; function toast(m){ const t=$('#toast'); t.textContent=m; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>t.hidden=true,3200); }
+function setHash(){ const h=view==='walk'?'walkthrough':cur?'project-'+cur.id:view; if(location.hash!=='#'+h) history.replaceState(null,'','#'+h); }
+
+document.addEventListener('click',e=>{ const rs=e.target.closest('[data-res]');
+  if(rs){ if(view==='walk'){ view='attention'; NOW=BASE; } cur=P.find(x=>x.id===rs.dataset.res); tab='resource'; window.scrollTo(0,0); setHash(); render(); return; }
+  const b=e.target.closest('button'); if(!b) return; const d=b.dataset; const p=cur;
+  if(d.view==='walk'){ goStep(0); window.scrollTo(0,0); }
+  else if(d.view){ view=d.view; cur=null; NOW=BASE; }
+  else if(d.walk){ goStep(step+Number(d.walk)); window.scrollTo(0,0); }
+  else if(d.pipe){ pipe=d.pipe; }
+  else if(d.open){ if(view==='walk'){ view='attention'; NOW=BASE; } cur=P.find(x=>x.id===d.open); tab=d.tab||(tasks(cur)[0]||{}).tab||'scripts'; window.scrollTo(0,0); }
+  else if(d.tabGo){ tab=d.tabGo; }
+  else if(d.act==='copy'){ const done=()=>toast('Copied'); try{ navigator.clipboard.writeText(d.text).then(done,()=>toast('Copy was blocked here; select the text instead')); }catch(_){ toast('Copy was blocked here; select the text instead'); } return; }
+  else if(d.act==='toast'){ toast(d.msg); return; }
+  else if(d.act==='approve-script'){ p.ver=d.v; p.stage='record'; if(p.kw) p.res='review'; toast(`Version ${d.v} approved. The guide for ${p.kw||'this reel'} is built next.`); }
+  else if(d.act==='startrewrite'){ p.stage='rewrite'; p.auto='Writing Version A and B'; toast('Rewrite started.'); }
+  else if(d.act==='rebuild'){ p.pdf=(p.pdf||1)+1; p.res='review'; toast('New build. The earlier approval does not apply to it.'); }
+  else if(d.act==='approve-pdf'){ p.res='uploaded'; p.pdfUp=p.pdf||1; toast('Approved. This exact PDF was uploaded to Gumroad.'); }
+  else if(d.act==='live'){ p.res='live'; toast('Resource is live. Instagram is no longer blocked.'); }
+  else if(d.act==='advance'){ if(p.fail){ toast('Not available while a check has failed.'); return; } const next={record:'avatar',avatar:'hook',hook:'build',candidate:'instagram'}[p.stage]; const msg={avatar:'Voiceover confirmed.',hook:'Footage found. The hook preview is ready.',build:'Hook approved. Building the rest.',instagram:'Approved. That file is now final.mp4.'}[next]; p.stage=next; if(next==='build'){ p.stage='candidate'; p.cand=1; } if(next==='instagram') tab='publish'; toast(msg); }
+  else if(d.act==='retry'){ p.fail=null; p.stage='candidate'; p.cand=3; toast('Re-rendered. Candidate v003 passed QA.'); }
+  else if(d.act==='openfb'){ p.fb=p.fb||{}; p.fb[d.key]={open:true}; }
+  else if(d.act==='cancelfb'){ delete p.fb[d.key]; }
+  else if(d.act==='savefb'){ const v=$('#fb-'+d.key).value.trim(); if(!v){ toast('Write what should change first'); return; } p.fb[d.key]={saved:true,text:v}; if(d.key==='pdf') p.res='changes'; toast('Feedback recorded. Nothing has started.'); }
+  else if(d.act==='startrev'){ delete p.fb[d.key]; if(d.key==='pdf'){ p.res='review'; p.pdf=(p.pdf||1)+1; } toast('Revision started. A new version will ask for approval again.'); }
+  else if(d.act==='drive'){ p.drive=p.drive==='copied'?'confirmed':'copied'; toast(p.drive==='copied'?'Copied to the sync folder. Not yet verified in Drive.':'Confirmed available in Drive.'); }
+  else if(d.act==='publish'){ if(d.k==='ig'&&blocked(p)){ toast('Blocked: the resource is not live yet.'); return; } const at=$('#at-'+d.k).value||'2026-11-16T10:00'; const url=$('#url-'+d.k).value.trim(); p[d.k]={at,url};
+    if(d.k==='ig'){ p.stage='distribute'; p.yt=p.yt||{}; p.tt=p.tt||{}; toast('Instagram confirmed. Shorts and TikTok fall due at 09:00 on the second day.'); }
+    else { if(p.yt.at&&p.tt.at) p.stage='done'; toast('Recorded. The other platform is unchanged.'); } }
+  else if(d.act==='link'||d.act==='unlink'){ const k=UNLINKED.findIndex(u=>u.pid===p.id); UNLINKED.splice(k,1); toast(d.act==='link'?'Linked to this project.':'Left unlinked. It will ask again under Needs linking.'); }
+  else return;
+  setHash(); render(); });
+
+function fromHash(){ const h=location.hash.slice(1); if(h==='walkthrough'){ if(view!=='walk') goStep(0); } else if(h.startsWith('project-')){ const p=P.find(x=>x.id===h.slice(8)); if(p){ cur=p; tab=(tasks(p)[0]||{}).tab||'scripts'; } } else if(['attention','pipeline','schedule'].includes(h)){ view=h; cur=null; } render(); }
+window.addEventListener('hashchange',fromHash); fromHash();
+</script>

@@ -29,6 +29,9 @@ function preflight(dir, ...extra) {
 }
 function approvePlan(dir, extra = []) {
   const fp = JSON.parse(preflight(dir, '--json').stdout).fingerprint;
+  // Gate B shows the person the playable opening first; record that it was shown.
+  const op = preflight(dir, '--record-opening', '--end', '2');
+  assert.equal(op.status, 0, op.stdout + op.stderr);
   const r = preflight(dir, '--approve', '--fingerprint', fp.slice(0, 12), '--approved-by', 'test person', ...extra);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   return fp;
@@ -442,6 +445,11 @@ test('preflight-reel: read-only report changes nothing; --approve refuses a wron
   refuse(['--fingerprint', '0'.repeat(12), '--approved-by', 'x'], /does not match the current plan/);
   refuse(['--fingerprint', fp.slice(0, 12)], /--approved-by is required/);
   refuse(['--fingerprint', fp.slice(0, 12), '--approved-by', 'x', '--paid-provider', 'kie'], /needs both --paid-provider and --spend-limit/);
+  // Gate B shows the playable opening before approval: refused until it is recorded, and the report says so.
+  refuse(['--fingerprint', fp.slice(0, 12), '--approved-by', 'x'], /opening preview is MISSING/);
+  assert.match(report.stdout, /Opening preview \(first ~5 s, playable in HyperFrames Studio\): MISSING/);
+  assert.equal(preflight(dir, '--record-opening', '--end', '0').status, 1, 'an opening needs a length');
+  assert.equal(preflight(dir, '--record-opening', '--end', '5', '--file', 'nope.html').status, 1, 'and an existing composition');
   assert.ok(readFileSync(join(dir, 'reel.json')).equals(before), 'refusals wrote nothing');
   approvePlan(dir, ['--paid-provider', 'kie', '--spend-limit', 'USD 5', '--max-calls', '3']);
   const p = core.readJson(join(dir, 'reel.json')).preflight;

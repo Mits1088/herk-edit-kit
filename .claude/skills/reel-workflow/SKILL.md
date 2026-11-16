@@ -79,8 +79,9 @@ This is the most important step. These transcripts come from Reels Mits selected
 3. Map the pacing: what keeps people watching, the order of reveals and examples.
 4. Note the strongest examples, demonstrations, facts and numbers that carry the content.
 5. Note the narrative structure: is it a countdown, a story, a problem-solution, a before-and-after?
-6. Run `beats.py` on the source for its approximate spoken duration, unless Mits supplied the real duration. Use the real one if so.
+6. Get the source's **real** duration. Use, in order: a `Duration: Ns` line in the transcript file; the duration Mits gave; or, when the file has an Instagram URL and the Signal Room tools are available, `durationSeconds` from Signal Room (`list_instagram_content` or `top_instagram_content` for that URL). Write it into the record as `Duration: Ns (real)`. Only if none exists, estimate with `beats.py` and write `Duration: estimated: Xs`, plus a Factual warning that length was checked against an estimate. Never estimate when a real duration is available: source creators often speak 200+ words a minute, so a word-count estimate makes the target far too long.
 7. Identify the CTA, its purpose and what it promises.
+8. Set the **word budget**: real source seconds × Mits's pace (the `Pace:` line in `voice.md`, 165 wpm by default) ÷ 60. A 45s source at 165 wpm is about 124 words. This budget, not the source's word count, is the length target for both versions.
 
 Then save a short source record, using the format under Records below. Do not change a strong hook unnecessarily, and do not automatically replace a successful source hook with a generic alternative. The source structure is evidence of a potentially effective approach. Preserve the original appeal without copying its distinctive wording.
 
@@ -154,7 +155,8 @@ Version A should be a natural, original adaptation that retains the source's cen
 - Correct awkward language and transcription mistakes, but avoid unnecessary structural changes.
 - Do not remove useful details just to make sentences shorter.
 - Do not rearrange the order unless there is a clear editorial reason.
-- Stay reasonably close to the source's duration, normally within 20%.
+- Stay within 20% of the word budget from step A.8, and prefer being under it to over it.
+- Fidelity is not sentence-by-sentence. Merge the source's beats where one sentence can carry two, rather than giving each its own "It..." sentence.
 - The language must be genuinely new and conversational. Do not swap synonyms or paraphrase line by line.
 - Fidelity means the source's mechanism, beats and length, not its vocabulary. Where the source uses a technical term the audience may not know, keep the idea and say it more plainly. Never move a technical term into the hook when the source's hook didn't have one.
 
@@ -165,7 +167,7 @@ Version B must explore a genuinely different creative opening or narrative appro
 - Do not just rephrase Version A's hook and rearrange two paragraphs. The difference between A and B must be obvious when read aloud.
 - You may change the hook formula, reorder the whole structure, lead with a different example, use a different narrative device, or frame the same topic from a different angle.
 - It uses the same central idea and verified information as Version A. It must not be Version A with different synonyms.
-- It keeps the source's important information too. Do not drop facts or shorten it just to differ from A, and stay normally within 20% of the source duration.
+- It keeps the source's important information too. Do not drop facts just to differ from A, and stay within 20% of the word budget from step A.8.
 - Both versions must be complete standalone scripts, strong enough to publish independently, and two viable ways to say the same thing.
 - Do not turn it into a different video.
 - It ends on the same CTA as Version A, with the same keyword if there is one, because the three platform captions are shared by both versions. Change how the CTA is said, not what it asks for.
@@ -198,7 +200,11 @@ Never sacrifice credibility to make a hook more exciting. But don't front-load c
 
 Scripts must sound natural when spoken on camera. Write for the person watching Instagram, not for another AI agent evaluating the output.
 
-The viewer is curious and uses ChatGPT or Claude, but is not a developer. Every spoken line should make sense the first time it is heard, with no rewind. Keep a technical term when the Reel needs it, and give it a short plain gloss the first time it appears, such as "Ghidra, a free tool for looking inside apps". Say what the viewer gets before how it works.
+The viewer is curious and uses ChatGPT or Claude, but is not a developer. Every spoken line should make sense the first time it is heard, with no rewind. Keep a technical term when the Reel needs it, and give it a short plain gloss the first time it appears, such as "Ghidra, a free tool for looking inside apps". Glosses are four words or fewer, appear once, and are skipped when the context already makes the meaning clear. Prefer replacing a term with plain words over adding a gloss. Say what the viewer gets before how it works.
+
+**Say it once.** Each idea appears once per script. Do not restate the benefit in a second form ("free plugin", "free add-on", "you're not paying for an expensive tool" is one idea said three times), and do not repeat the same outcome as "what's wrong", "what to fix" and "what to change". Name things like "competitors" once. Vary sentence openers: no more than three sentences start with the same word, and "It..." chains count.
+
+**Accuracy without padding.** A correction replaces the overclaim with true wording of the same length or shorter. It never adds a clause beside it. If the true version needs more words, cut a weaker detail elsewhere to stay within the budget. Number qualifiers such as "up to" and "more than" are fine; stacked hedges are not.
 
 Never put these in a spoken script: version numbers, commands, file names, URLs, hyphenated or code-style names (say "a skill called Find Skills", not "find-skills"), or lists of more than three brands or product names. They go in the caption.
 
@@ -209,13 +215,13 @@ Never put these in a spoken script: version numbers, commands, file names, URLs,
 - Read each version as spoken dialogue and revise anything that sounds rehearsed, robotic, unnecessarily formal or difficult to say aloud.
 - Do not include artificial filler to pad the word count.
 - Keep factual explanations concise, but write in full spoken sentences, not lists of fragments.
-- Aim for concise, high-retention delivery. Use the source Reel's duration as the primary benchmark. When no source duration is available, generally target 45 to 70 seconds, while allowing longer scripts when the content justifies it.
-- Never sacrifice essential information just to make a script shorter. Do not shorten a Reel just because shorter sometimes performs better. If a script ends up more than 20% away from the source, explain why in the comparison.
-- `beats.py` assumes one speaking rate. Allow for natural pauses, technical terms and rhythm when estimating duration, and use `--wpm` when a script is clearly slower or faster than the default.
+- Aim for concise, high-retention delivery. The word budget from step A.8 is the target. When no source duration is available at all, generally target 45 to 60 seconds.
+- Never sacrifice essential information just to make a script shorter. Cut repetition, glosses and secondary details first. If a script ends up more than 20% away from the budget, explain why in the comparison. More than 35% over fails `check_reel.py` whatever the explanation.
+- Time scripts at Mits's pace: `beats.py --wpm <voice.md pace> --target <real source seconds>`. Never time a script at the source creator's pace.
 
 ### G. Apply the tools to both versions
 
-1. `hookscore.py` and `ig-reel` for hook strength. `beats.py --target <source seconds>` for pacing and duration.
+1. `hookscore.py` and `ig-reel` for hook strength. `beats.py --wpm <voice.md pace> --target <real source seconds>` for pacing and duration.
 2. `humanize.py --report` and `detect.py` for robotic language. Rewrite flagged lines by hand.
 3. Review the result manually. Keep it natural, specific and easy to say on camera.
 
@@ -291,7 +297,7 @@ This is the final gate before output. Do not present scripts or captions as fini
 1. **Hook:** Each hook is compelling, relevant, and the script delivers what it promises.
 2. **Creative approach:** The source's effective approach is preserved where appropriate, and no important source information was lost without reason.
 3. **Different versions:** A and B are a real creative choice that is obvious when read aloud. Each platform caption is written for its platform, not copied from another.
-4. **Spoken delivery:** The scripts sound natural aloud, with no filler, hype, needless repetition or research-note language.
+4. **Spoken delivery:** The scripts sound natural aloud, with no filler, hype or research-note language. No idea is said twice in different words, and no run of sentences starts the same way.
 5. **Technical claims:** Re-read each important claim against your verification notes and the sources. Nothing was added that is unsupported.
 6. **Names and commands:** Product names, repositories and commands are exact, and confirmed at their source.
 7. **Misleading claims:** Nothing unsupported or overstated remains. Replace absolute promises like "you'll never have to X again" with accurate but engaging alternatives. Never describe a tool as low-risk, safe or sandboxed unless official documentation confirms it.
@@ -300,7 +306,7 @@ This is the final gate before output. Do not present scripts or captions as fini
 10. **Caption match:** Every caption is true for both versions and complements them rather than summarising them. Read every caption sentence literally: any count or description must match the commands and details printed beneath it.
 11. **Caption rules:** Every caption has zero emojis, the right hashtag count for its platform with no generic tags, and the main search phrase where section H puts it.
 12. **CTAs:** Each script has one natural, appropriate CTA, and both scripts and all three captions use the same one. Any promised resource is listed in `resources.md`, or planned and possible to build from verified sources.
-13. **Pacing:** Each script is appropriately paced and close to the source duration, or the extra length is justified by essential information.
+13. **Pacing:** Each script is within 20% of the word budget (real source seconds at Mits's pace), or the difference is justified by essential information. Count the words; do not judge by eye.
 14. **Plain spoken language:** Each hook makes sense to a non-developer on first hearing and is no more technical than the source's. Every technical term in the body earns its place and has a plain gloss. No version numbers, commands, file names or code-style names are spoken, and at most one setup or safety caveat is spoken.
 
 If a check fails, revise only the affected content, then repeat only the checks that revision touches. Do not rewrite material that already passes. Do not introduce new hooks, change the style or restructure a script as part of a fix. Version A keeps the source's approach and Version B keeps its alternative approach.
@@ -308,10 +314,10 @@ If a check fails, revise only the affected content, then repeat only the checks 
 Then run:
 
 ```bash
-python -I -X utf8 D:/herk-edit-kit/.claude/skills/reel-workflow/check_reel.py <reel-file> --source <transcript-file>
+python -I -X utf8 D:/herk-edit-kit/.claude/skills/reel-workflow/check_reel.py <reel-file> --source <transcript-file> --seconds <real source seconds>
 ```
 
-Fix every FAIL. Review each WARN.
+Omit `--seconds` only when the transcript has a `Duration:` line or no real duration exists. Fix every FAIL. Review each WARN; a REPEATS or OPENERS warning means a line needs merging or cutting unless the repeated word is the product name.
 
 ### K. Records and status
 
@@ -323,7 +329,8 @@ Hook: [original hook and why it works]
 Structure: [the sequence of beats]
 Key information: [facts, examples and tools that must survive]
 CTA: [original CTA]
-Duration: [real, or "estimated": Xs]
+Duration: [Ns (real), or "estimated: Xs"]
+Word budget: [N words at X wpm]
 
 ## Claims
 - [Claim and its precise scope] | [primary source URL] | [supported, qualified or unverified]
@@ -390,4 +397,4 @@ The final review builds `combined.md`.
 
 ## Apply review changes
 
-If asked to apply review changes on a batch, read `outputs/<batch-id>/review.md`. Make each listed change exactly as written, and nothing else. If a Reel says `Changes: None`, leave it alone. Do not change any status. Re-run `check_reel.py` on each edited Reel, then reply with one line giving the number of changes applied and any you could not apply. If `review.md` lists no changes, reply with one line straight away. Do not hand back.
+If asked to apply review changes on a batch, read `outputs/<batch-id>/review.md`. Make each listed change exactly as written, and nothing else. If a Reel says `Changes: None`, leave it alone. Do not change any status. Re-run `check_reel.py` (with `--seconds`) on each edited Reel; if the changes pushed a script into a length FAIL, say so in your reply rather than cutting on your own, then reply with one line giving the number of changes applied and any you could not apply. If `review.md` lists no changes, reply with one line straight away. Do not hand back.

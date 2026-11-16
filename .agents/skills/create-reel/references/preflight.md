@@ -12,9 +12,12 @@ plan is approved and still matches. Projects created before Gate B have no such 
 1. **Scaffold** with `new-reel` (local, free). Planning files live in the project from the start.
 2. **Analyse the source**: brief, `brand/DESIGN.md`, supplied assets, and for footage the transcript (provider and
    cost per `docs/TOOLS-AND-API-KEYS.md`, with permission), then local silence and mistake cuts (Mode B owner rules).
-3. **Story and openings**: hook, payoff, CTA; the existing openings rule (one rough opening plus two written
-   alternatives, [modes.md](modes.md)). Before approval, show the rough opening in Studio preview or as static
-   snapshots (`npx hyperframes snapshot --describe false`), never as a `render-reel` draft. Where it is feasible
+3. **Story and openings**: hook, payoff, CTA; the openings rule (one built opening plus two written alternatives,
+   [modes.md](modes.md)). **The opening preview is required** (Mits, 12 Nov 2026): build the first ~5 s of the reel at
+   final fidelity in the real composition (real footage and voice for Mode B, captions, representative sound), check
+   it in motion at phone size, serve it in HyperFrames Studio (`npx hyperframes preview`), and record it with
+   `preflight-reel --record-opening --end <s> --url <studio url>`. `--approve` refuses without it on new reels.
+   Never show it as a `render-reel` draft. Building the opening is allowed before approval; nothing beyond it is. Where it is feasible
    without paid production, also prepare three storyboard keyframes or equivalent static concepts (the hook, the
    hero beat, one more representative scene) so the person approves pictures, not only prose. Make them at the
    intended production fidelity, not as wireframes: they set the bar the build must meet or beat. Save each as
@@ -119,4 +122,5 @@ Present this in the conversation (keep it short) and save the same facts in `DES
 6. **Authentic versus simulated**: which visuals are real evidence and which are reconstructed, illustrative or
    simulated.
 7. **Assets and cost**: the asset-gap table, paid calls planned, and the provider and spending limit you are asking for.
-8. **Fingerprint** (12 hex) and the question: "Do you approve this creative plan?"
+8. **Opening preview**: the Studio link to the playable first ~5 s and what to look for in it.
+9. **Fingerprint** (12 hex) and the question: "Do you approve this creative plan?"

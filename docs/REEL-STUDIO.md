@@ -27,8 +27,9 @@ Type `/create-reel` followed by your brief, or just ask Claude for a Reel in pla
 /create-reel A 20 second Reel explaining why our app saves freelancers 5 hours a week. Audience: freelance designers. End with "Try it free". Organic post.
 ```
 
-Claude picks one of three modes, tells you which, sets up the project, and plans the reel. Then it stops and shows
-you a **creative preflight**: what the viewer will see in each scene, why each visual is there (and why it beats stock
+Claude picks one of three modes, tells you which, sets up the project, and plans the reel. It builds only the
+**first ~5 seconds** at final quality (your real footage, voice, captions and sound) and opens them in HyperFrames
+Studio for you to play. Then it stops and shows you that preview with a **creative preflight**: what the viewer will see in each scene, why each visual is there (and why it beats stock
 footage or another text card), what recurs between scenes, which visuals are real evidence and which are simulated,
 and any paid generation it wants. Nothing is generated, built in full or rendered until you approve that plan. If you
 type `/create-reel` with no brief, it asks you for one.

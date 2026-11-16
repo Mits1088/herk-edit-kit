@@ -30,7 +30,9 @@
    "trim": "0.2:4.4",
    "verified_at": "2026-11-07",
    "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
-   "approved_in": ["claude-arena v003"]
+   "approved_in": [
+    "claude-arena v003"
+   ]
   },
   {
    "id": "crowd-boo",
@@ -60,7 +62,157 @@
    "trim": "4.06:6.77",
    "verified_at": "2026-11-07",
    "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
-   "approved_in": ["claude-arena v003"]
+   "approved_in": [
+    "claude-arena v003"
+   ]
+  },
+  {
+   "id": "stamp-rubber-press",
+   "role": "hero",
+   "tags": [
+    "stamp",
+    "rubber",
+    "paper",
+    "press",
+    "seal",
+    "desk"
+   ],
+   "about": "Firm rubber stamp pressed onto paper (one take)",
+   "file": "sounds/hero/stamp-rubber-press.wav",
+   "sha256": "fcebec750440a1ce86c52a3601cf256614fb17f4119c7d1468028017fc2be262",
+   "duration_s": 0.64,
+   "integrated_lufs": -34.3,
+   "true_peak_dbfs": -12.2,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "17_stamp, rubber, plastic.wav",
+   "creator": "15FPanska_KristynaHaupt",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/15FPanska_KristynaHaupt/sounds/461888",
+   "file_url": "https://cdn.freesound.org/previews/461/461888_9681967-hq.mp3",
+   "original_sha256": "e7b35604edcb9a3c6776f22371c08ff3b0618b93ad090e5800a603fa03803a2e",
+   "trim": "0.66:1.3",
+   "verified_at": "2026-11-09",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": null
+  },
+  {
+   "id": "whistle-referee-short",
+   "role": "accent",
+   "tags": [
+    "whistle",
+    "referee",
+    "coach",
+    "blow",
+    "short"
+   ],
+   "about": "Short referee whistle blast (one take)",
+   "file": "sounds/accent/whistle-referee-short.wav",
+   "sha256": "e04fdcad5f6afd8e3d47156116a32b7cbae6b3a9fa3a82e1cb93723c37d08db3",
+   "duration_s": 0.536,
+   "integrated_lufs": -9.4,
+   "true_peak_dbfs": -8.6,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Referee whistle sound.wav",
+   "creator": "Rosa-Orenes256",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/Rosa-Orenes256/sounds/538422",
+   "file_url": "https://cdn.freesound.org/previews/538/538422_11966684-hq.mp3",
+   "original_sha256": "1bc56409d3439a16fd54bc8fa83affb7e2bc69519b15ac49979d924e895910bf",
+   "trim": null,
+   "verified_at": "2026-11-09",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": null
+  },
+  {
+   "id": "crowd-yay-small",
+   "role": "hero",
+   "tags": [
+    "cheer",
+    "yay",
+    "applause",
+    "small",
+    "office"
+   ],
+   "about": "About 25 people cheer and clap briefly; a friendly payoff, smaller than a stadium roar",
+   "file": "sounds/hero/crowd-yay-small.wav",
+   "sha256": "7e579f6e6338cafd51ea1f187246ae063fe7d7f2ed4e51dd76b639ee9faf4ec9",
+   "duration_s": 3.2,
+   "integrated_lufs": -21.5,
+   "true_peak_dbfs": -10.5,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Crowd.Yay.Applause.25ppl.Short.wav",
+   "creator": "jessepash",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/jessepash/sounds/139972",
+   "file_url": "https://cdn.freesound.org/previews/139/139972_968325-hq.mp3",
+   "original_sha256": "51a08430d441f5c29fef03b2820f0650179b9b449a965e9beb2b379f14b100f8",
+   "trim": "0:3.2",
+   "verified_at": "2026-11-11",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": null
+  },
+  {
+   "id": "elephant-trumpet",
+   "role": "hero",
+   "tags": [
+    "elephant",
+    "trumpet",
+    "animal",
+    "call",
+    "reveal"
+   ],
+   "about": "Real elephant trumpet call, trimmed to the call (earshot find z +4.9)",
+   "file": "sounds/hero/elephant-trumpet.wav",
+   "sha256": "8e469240c6d99dae530862f901772b03fbe288f715794b387a6d57e122354635",
+   "duration_s": 1.238,
+   "integrated_lufs": -13.7,
+   "true_peak_dbfs": -8.4,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Elephant Trumpets Growls.flac",
+   "creator": "D.jones",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/D.jones/sounds/527845",
+   "file_url": "https://cdn.freesound.org/previews/527/527845_11431915-hq.mp3",
+   "original_sha256": "c785714009850d14d953eeea12136bceb33577938e3430b4c8848544c02239ae",
+   "trim": "0.087:1.325",
+   "verified_at": "2026-11-16",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": null
+  },
+  {
+   "id": "breaker-switch-on",
+   "role": "hero",
+   "tags": [
+    "switch",
+    "breaker",
+    "power",
+    "on",
+    "clunk",
+    "mechanical",
+    "metal"
+   ],
+   "about": "A big metal breaker switch thrown on: one solid clunk. Used for 17 agents lighting their scans at once (claude-seo-plugin).",
+   "file": "sounds/hero/breaker-switch-on.wav",
+   "sha256": "913897dfe1e272e541846214e76c4b6b0fc0afefa4ca01b47023d99a12ee0f9f",
+   "duration_s": 0.84,
+   "integrated_lufs": -24.4,
+   "true_peak_dbfs": -4.9,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "switch big breaker metal click on, off.flac",
+   "creator": "kyles",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/kyles/sounds/451933",
+   "file_url": "https://cdn.freesound.org/previews/451/451933_612689-hq.mp3",
+   "original_sha256": "d8d20b8964658bcc5080104af0ae137ab1f6cd7112eb165d9b9ad95192eb9f3c",
+   "trim": "0.06:0.9",
+   "verified_at": "2026-11-16",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": null
   }
  ]
 }

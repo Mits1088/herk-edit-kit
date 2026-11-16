@@ -7,7 +7,7 @@ argument-hint: "[batch, Reel number or title, version A or B]"
 
 # /approve-reel
 
-Only scripts Mits likes get recorded, so a resource is built only after one is approved. Never post, message, publish or set up delivery.
+Only scripts Mits likes get recorded, so a resource is built only after one is approved. Never post, message, publish or set up delivery. Never upload to Gumroad either: since 2026-11-16 Mits reviews every resource PDF in the content dashboard first, and the dashboard uploads it only when he presses its separate upload button (step 9).
 
 Input: a Reel number or title and a version, plus a batch. Several Reels can be approved at once. Use the newest batch in `D:/herk-edit-kit/instagram_scripts_output/` if none is named. If the version is missing, ask for it in one line.
 
@@ -22,7 +22,7 @@ Input: a Reel number or title and a version, plus a batch. Several Reels can be 
 
 Skip this step if the CTA is not Comment KEYWORD. If `D:/herk-edit-kit/reels-data/resources.md` already lists the keyword, and that resource delivers what this script promises, reuse it.
 
-Resources are always Word documents. Draft the guide as Markdown in `D:/herk-edit-kit/reels-data/resource-sources/<keyword>.md`, then convert it to the finished file (step 7 below). Include:
+Resources are branded PDF guides with a cover page. Draft the guide as Markdown in `D:/herk-edit-kit/reels-data/resource-sources/<keyword>.md`, then build the PDF (steps 7 and 8 below). Include:
 
 1. **What it is:** the tool or plan and who it suits, in two or three lines.
 2. **Before you start:** accounts, subscriptions, versions, API keys, permissions and costs.
@@ -30,15 +30,38 @@ Resources are always Word documents. Draft the guide as Markdown in `D:/herk-edi
 4. **Check it worked:** what the reader should see.
 5. **Safety and limits:** what it can access, and what it doesn't do.
 6. **Sources:** official links.
-7. **Convert it:** run `node D:/herk-edit-kit/.agents/skills/approve-reel/guide_to_docx.js D:/herk-edit-kit/reels-data/resource-sources/<keyword>.md D:/herk-edit-kit/instagram_scripts_output/resources/<keyword>.docx`. It uses simple Markdown: `#` headings, numbered and bullet lists, bold, inline code, code fences and pipe tables.
+7. **Cover details:** write `D:/herk-edit-kit/reels-data/resource-sources/<keyword>.pdf.json`. Copy the shape of an existing one, such as `founder.pdf.json`:
+   - `name`: the skill or tool name customers will recognise, such as `Founder Skill` or `Claude Academy`. Optional `nameLines` splits a long name over two cover lines; the second line is the yellow one.
+   - `topic`: the useful outcome, taken from the approved reel's YouTube Shorts title or hook, such as `Test a Business Idea on 100 Simulated Buyers`. The file is named `<name> - <topic>.pdf`, so keep it short, clear and in title case. If nothing fits, use `Setup & Practical Guide`.
+   - `label`: the small cover label, such as `Skill Setup & Practical Guide`, `Setup & Practical Guide`, `Course Guide` or `Step-by-Step Plan`. `tag` is an optional short line top right, such as `11 free Claude skills`.
+   - `subtitle`: one or two sentences on what the guide helps the reader achieve, using only facts from the guide.
+   - `inside`: four short lines for the cover's "Inside this guide" list, matching the guide's real sections.
+   - `visual` (optional): `{"type":"command"}` shows the guide's first command in a terminal card (set `text` to choose another), `{"type":"quote"}` shows the reel's hook, and `{"type":"dots", ...}` is Founder's buyer grid. Never show a made-up result; label any illustration as one.
+   - `reel`: `title` (the approved YouTube Shorts title), `hook` (the script's first line), `approved` (the approved file path) and `url`. Take `url` from `D:/herk-edit-kit/reels-data/insights/links.json` (the `permalink` whose `approved.file` matches), or `null` until the reel is published. A null URL leaves the link out; nothing else changes.
+   - `endNote` (optional): a closing line, such as a not-affiliated note for a third-party project.
+8. **Build and check it:** run `node D:/herk-edit-kit/.agents/skills/approve-reel/guide_to_pdf.mjs <keyword> --preview`. It writes `D:/herk-edit-kit/instagram_scripts_output/resources/<name> - <topic>.pdf` and a cover image in `resources/previews/`, with Mits's photo from `D:/herk-edit-kit/brand/assets/profile.png` (a text-only cover if that file is missing). It reads simple Markdown: `#` headings, numbered and bullet lists (with code blocks or sub-lists inside a step), bold, italics, inline code, code fences, pipe tables and links. Every URL in the prose becomes a clickable link; URLs inside code stay plain text. It prints `OK`, or `CHECK` with the problems, such as a link that isn't clickable or a cover that overflows. Fix every `CHECK`, then look at the cover preview and at least the first guide page before replying. `--all` rebuilds every guide that has a `.pdf.json`.
+
+9. **Stop before Gumroad. Do not upload.** Once the PDF passes step 8 and you have looked at it, your part ends. Mits opens the content dashboard (`node D:/herk-edit-kit/dashboard/server.mjs`, then http://localhost:4319), looks at the PDF on the project's Resource tab and approves it or asks for changes. Approval and upload are two separate buttons. "Approve this file" records the PDF's SHA-256 in `D:/herk-edit-kit/reels-data/content/pdf-approvals.json` and uploads nothing. Only when Mits then presses "Upload to Gumroad" does the dashboard run `gumroad_upload.mjs <keyword>` itself; "Check upload status" re-reads Gumroad without uploading again. Never run that script from this skill, and never create or edit `pdf-approvals.json`: the script holds any PDF without a matching approval (exit code 4), and a rebuilt PDF needs a new approval. If Mits asks for changes, revise the guide, rebuild with step 8 and tell him it is ready to review again.
+
+   For reference, the upload adds the PDF to the Claude Skills Pack, using the product and content page in `D:/herk-edit-kit/reels-data/gumroad.json`. A resource counts as Claude-related when "Claude" appears in its name, topic, subtitle, reel title or guide title. Set `"gumroad": true` or `false` in the `.pdf.json` to override that. The script:
+   - only adds files. It never deletes or replaces one, and never changes the product's name, price, description, covers, publication or checkout fields;
+   - skips a PDF already on the product with the same name and size, and flags one with the same name but a different size instead of uploading it again (a rebuilt guide needs Mits to swap it in Gumroad);
+   - runs a dry run first and stops if the CLI plans to remove anything;
+   - saves before-and-after copies of the product in `reels-data/gumroad-backups/`, re-checks the product after uploading, and adds a line to `reels-data/gumroad-uploads.md`.
+
+   Exit code 3 means the CLI is not logged in: Mits runs `gumroad auth login` and approves it in the browser (never ask for a token). Exit code 4 means a PDF was held because it is not approved. The CLI is in `%LOCALAPPDATA%\gumroad\gumroad.exe`, from https://github.com/antiwork/gumroad-cli. Never upload to any other product or create a new one.
+
+If Mits asks for an editable Word copy, `guide_to_docx.js` still converts the same Markdown: `node D:/herk-edit-kit/.agents/skills/approve-reel/guide_to_docx.js <guide.md> <guide.docx>`.
 
 It must deliver what the script and caption promise, and cover every tool the promise includes.
 
 Use the batch's `records/` entries and `D:/herk-edit-kit/reels-data/corrections.md`, then confirm each command and requirement at the official docs or original repository. Never invent a step, result or personal experience. If something can't be confirmed, leave it out and say so in your reply. Write in plain British English with no emojis.
 
-Add this line to `resources.md`, with the delivery method as `to confirm` unless Mits has given it:
+Add this line to `resources.md`, with the delivery method as `to confirm` unless Mits has given it. The resource file is the PDF:
 
 `- KEYWORD: what the viewer receives | delivery | resource file | draft`
+
+When the reel is published later and its link appears in `links.json`, add the `url` to the `.pdf.json` and rebuild, so the guide links back to the video.
 
 ## 3. YouTube Shorts and TikTok captions
 
@@ -78,4 +101,4 @@ If the approved file already has these sections, leave them alone unless Mits as
 
 ## 4. Reply
 
-Give the approved file and resource paths, and anything left out. Then list what Mits does next: check the guide, set the keyword up in the delivery tool (and decide how YouTube and TikTok commenters get it), and change `draft` to `live` in `resources.md`.
+Give the approved file path, the PDF's filename and path, its cover preview path, and anything left out. Say the PDF is waiting for his approval in the content dashboard and has not been uploaded. Then list what Mits does next: review and approve the guide in the dashboard, then upload it from the dashboard (once Gumroad verifies the upload, the dashboard marks the keyword `live` in `resources.md` by itself), and decide how YouTube and TikTok commenters get it.

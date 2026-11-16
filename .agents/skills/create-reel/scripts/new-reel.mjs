@@ -4,14 +4,17 @@
 // Usage:  node .claude/skills/create-reel/scripts/new-reel.mjs <slug> [--profile organic|organic-60|ad|ad-disclaimer]
 //                                                                  [--duration S] [--mode faceless|footage|brand] [--title "..."]
 //                                                                  [--style brand|vox-explainer|kallaway|none]
+//                                                                  [--script <batch-date-nnn-reel, e.g. 2026-11-15-003-01>]
 //
 // Runs `scripts/new-video.mjs <slug>` (Herk's generator: copies the starter and the pinned GSAP), then replaces the
 // landscape starter with a native vertical composition: meta.json, root id / data-composition-id / data-width /
 // data-height / data-duration / data-fps, the timeline registration key, CSS sizes and staging all come from one ID
 // and one profile. Writes reel.json (profile, mode, style, fonts, empty direction, the creative-preflight requirement, render log) and DESIGN.md (from brand/DESIGN.md when
 // present). --style installs that style's local fonts (fonts.mjs); the default is brand, and a missing file stops it.
-// Never overwrites an existing project.
-import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
+// --script links the new project to its script in the content dashboard (reels-data/content/<id>.json), the same
+// record the dashboard's own "link video project" writes, so the reel is not shown twice. Checked before anything
+// is created. Never overwrites an existing project.
+import { readFileSync, writeFileSync, copyFileSync, existsSync, readdirSync, mkdirSync, renameSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -83,6 +86,10 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
     // Gate B: no draft or final renders until a person approves the creative preflight (preflight-reel.mjs).
     preflightRequired: true,
     preflight: null,
+    // Gate B also shows the person the first ~5 s built at final fidelity and playable in HyperFrames Studio
+    // (Mits, 12 Nov 2026); preflight-reel --record-opening records it, and --approve refuses until it exists.
+    openingPreviewRequired: true,
+    openingPreview: null,
     // Stage 2: a person approves a verified candidate before it becomes renders/final.mp4. Footage always requires it.
     requireHumanApproval: true,
     renders: [],
@@ -105,11 +112,34 @@ function parseArgs(argv) {
   return opts;
 }
 
+// The content dashboard's id for reel NN of instagram_scripts_output/batch-<date>-<nnn>/. Returns the manifest path
+// and its current contents, or throws if the script does not exist or is already linked to another project.
+export function checkScriptLink(root, id, slug) {
+  const m = /^(\d{4}-\d{2}-\d{2}-\d{3})-(\d{2})$/.exec(String(id));
+  if (!m) throw new Error(`--script must look like 2026-11-15-003-01 (batch date, batch number, reel number), got ${id}`);
+  const batchDir = join(root, 'instagram_scripts_output', `batch-${m[1]}`);
+  let names = []; try { names = readdirSync(batchDir); } catch { /* checked below */ }
+  if (!names.some(n => n.startsWith(`${m[2]}-`))) throw new Error(`--script ${id}: no reel ${m[2]} in instagram_scripts_output/batch-${m[1]}/`);
+  const file = join(root, 'reels-data', 'content', `${id}.json`);
+  const manifest = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { id, format: 'reel', links: {}, tasks: {} };
+  manifest.links ||= {};
+  if (manifest.links.project && manifest.links.project !== slug) throw new Error(`--script ${id} is already linked to video project "${manifest.links.project}". Unlink it in the dashboard first.`);
+  return { file, manifest };
+}
+
+export function writeScriptLink(root, { file, manifest }, slug) {
+  const at = new Date().toISOString();
+  manifest.links.project = slug; manifest.updatedAt = at;
+  mkdirSync(join(root, 'reels-data', 'content'), { recursive: true });
+  writeFileSync(file + '.tmp', JSON.stringify(manifest, null, 2) + '\n'); renameSync(file + '.tmp', file);
+  appendFileSync(join(root, 'reels-data', 'content', 'history.jsonl'), JSON.stringify({ at, id: manifest.id, action: { id: manifest.id, type: 'link', kind: 'project', value: slug, by: 'new-reel.mjs --script' } }) + '\n');
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   const slug = opts._[0];
   if (!slug || opts.help) {
-    console.log('Usage: node .claude/skills/create-reel/scripts/new-reel.mjs <slug> [--profile organic] [--duration 20] [--mode faceless|footage|brand] [--title "..."] [--style brand]');
+    console.log('Usage: node .claude/skills/create-reel/scripts/new-reel.mjs <slug> [--profile organic] [--duration 20] [--mode faceless|footage|brand] [--title "..."] [--style brand] [--script 2026-11-15-003-01]');
     process.exit(slug || opts.help ? 0 : 1);
   }
   const profile = getProfile(opts.profile);
@@ -130,6 +160,8 @@ function main() {
       (opts.style === undefined ? 'The default brand fonts ship in brand/assets/fonts/; restore them (git checkout -- brand/assets/fonts) or pass --style <name>, or --style none for system fonts.' : 'Add them or pick another --style.'));
   }
 
+  const scriptLink = opts.script ? checkScriptLink(kitRoot, opts.script, slug) : null;
+
   // Herk's own generator validates the slug, refuses existing projects, and copies the pinned GSAP.
   const gen = spawnSync(process.execPath, [join(kitRoot, 'scripts/new-video.mjs'), slug], { stdio: 'inherit', windowsHide: true });
   if (gen.status !== 0) process.exit(gen.status || 1);
@@ -140,6 +172,8 @@ function main() {
   const { id, fonts, unlicensed } = convertToVertical(dir, { slug, profile, duration, mode, title, brandDesign, style });
   console.log(`Converted to native vertical: ${profile.width}x${profile.height} @ ${profile.fps} fps, ${duration} s, composition "${id}", profile ${profile.name}, mode ${mode}, style ${style} (${fonts.length} local font file(s)).`);
   for (const f of unlicensed) console.log(`Note: no licence file shipped for ${f}; add one next to the font in its source folder.`);
+  if (scriptLink) { writeScriptLink(kitRoot, scriptLink, slug); console.log(`Linked to script ${opts.script} in the content dashboard.`); }
+  else console.log('Note: no --script given, so the content dashboard shows this as an unlinked video. Link it there, or pass --script next time.');
   console.log(`Next: cd video-projects/${slug} && npx hyperframes lint`);
 }
 

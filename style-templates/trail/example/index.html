@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Claude Code Websites</title>
+<!-- One composition, one GSAP (assets/gsap.min.js), one paused timeline. Timings: assets/reel-data.js (from scripts/write_plan.py). -->
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<script src="assets/gsap.min.js"></script>
+<script src="assets/reel-eases.js"></script>
+<script src="assets/brand/clawd-glyphs.js"></script>
+<script>window.ClawdGlyphs = { Ho, Xe, Je, Qe, Ze, eo };</script>
+<script src="assets/clawd.js"></script>
+<script src="assets/reel-data.js"></script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#eceef1;font-family:"Inter",Arial,sans-serif}
+#hallmark-websites{position:relative;width:1080px;height:1920px;overflow:hidden;background:#eceef1;--safe-top:200px;--safe-bottom:320px;--safe-left:90px;--safe-right:150px;--ink:#15171a;--accent:#ebc934;--neg:#ff6b5b;--ok:#1f9d55}
+#stage{position:absolute;left:0;top:0;width:1080px;height:1920px}
+.ground{position:absolute;inset:0;background:
+  radial-gradient(ellipse 80% 38% at 50% 18%,rgba(255,255,255,.85),rgba(255,255,255,0) 70%),
+  repeating-linear-gradient(0deg,rgba(20,24,30,.045) 0 1px,transparent 1px 40px),
+  repeating-linear-gradient(90deg,rgba(20,24,30,.045) 0 1px,transparent 1px 40px),#eceef1}
+.abs{position:absolute}
+#top{position:absolute;left:0;top:0;width:1080px;height:1920px;will-change:transform,opacity}
+#zoom{position:absolute;left:0;top:0;width:1080px;height:1920px;transform-origin:540px 733px;will-change:transform}
+/* ---- title stack (s00) */
+.title{position:absolute;left:0;width:1080px;top:214px;text-align:center;font-weight:900;font-size:76px;letter-spacing:-2.5px;line-height:1;color:var(--ink);will-change:transform,opacity}
+.banner{position:absolute;left:0;width:1080px;top:316px;text-align:center;will-change:transform,opacity}
+.banner span{display:inline-block;background:var(--accent);color:var(--ink);font-family:"Fraunces",Georgia,serif;font-style:italic;font-weight:560;font-size:54px;line-height:1;padding:14px 34px 18px;border-radius:6px}
+/* ---- browser frame (holds still until the hero) */
+.frame{position:absolute;left:115px;top:470px;width:850px;height:526px;border-radius:22px;background:#fff;overflow:hidden;
+  box-shadow:0 34px 70px -18px rgba(20,24,30,.30),0 0 0 1px rgba(20,24,30,.08)}
+.chrome{position:absolute;left:0;top:0;right:0;height:56px;background:#f6f6f7;border-radius:22px 22px 0 0;border-bottom:1px solid rgba(20,24,30,.08)}
+.dot{position:absolute;top:21px;width:15px;height:15px;border-radius:50%}
+.pill{position:absolute;left:180px;top:8px;width:490px;height:40px;border-radius:20px;background:#fff;box-shadow:0 0 0 1px rgba(20,24,30,.08);overflow:hidden}
+.pill .row{position:absolute;left:0;top:0;width:490px;height:40px;line-height:40px;text-align:center;font-size:30px;font-weight:600;color:#3b3f45;letter-spacing:-.4px;white-space:nowrap;opacity:0;will-change:transform,opacity}
+.pill .row i{font-style:normal;font-weight:500;color:#8a9099}
+.view{position:absolute;left:0;top:56px;width:850px;height:470px;overflow:hidden}
+.pane{position:absolute;left:0;top:0;width:850px;height:470px;overflow:hidden;will-change:transform,clip-path;clip-path:inset(0 0 0 100%);background:#fff}
+.site{position:absolute;left:0;top:0;width:850px;height:531px;will-change:transform,clip-path;clip-path:inset(0 0 0 100%)}
+.site img,.pane img{display:block;width:850px;transform-origin:50% 0}
+#site-dusk,#pane-sites{clip-path:inset(0 0 0 0)}
+.dim{position:absolute;left:0;top:0;width:850px;height:526px;border-radius:22px;background:rgba(16,18,22,.55);opacity:0;will-change:opacity}
+.wipe-edge{position:absolute;top:56px;width:6px;height:470px;left:0;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.95),rgba(255,255,255,0));opacity:0}
+/* ---- skill card (s01) */
+.card{position:absolute;left:190px;top:600px;width:700px;height:560px;border-radius:24px;background:#fff;opacity:0;clip-path:inset(0 0 298px 0 round 24px);transform-origin:50% 50%;
+  box-shadow:0 40px 80px -20px rgba(10,12,16,.55),0 0 0 1px rgba(20,24,30,.06)}
+.card .path{position:absolute;left:48px;top:44px;font-family:"JetBrains Mono",monospace;font-size:32px;color:#6b7280}
+.card .file{position:absolute;left:48px;top:112px;font-family:"JetBrains Mono",monospace;font-size:84px;line-height:1;color:var(--ink);letter-spacing:-1px}
+.card .hl{position:absolute;left:36px;top:110px;width:430px;height:96px;background:var(--accent);border-radius:8px;transform-origin:0 50%;transform:scaleX(0)}
+.card .icon{position:absolute;right:48px;top:112px;width:72px;height:88px;border-radius:10px;border:5px solid #d6d9de}
+.card .icon:after{content:"";position:absolute;left:12px;right:12px;top:22px;height:5px;background:#d6d9de;box-shadow:0 14px 0 #d6d9de,0 28px 0 #d6d9de}
+.card .rules{position:absolute;left:48px;right:48px;top:262px;border-top:2px solid #eceef1;padding-top:22px}
+.card .rule{font-size:34px;line-height:1.22;color:var(--ink);font-weight:600;margin:0 0 18px;display:flex;gap:16px;opacity:0}
+.card .rule b{font-family:"JetBrains Mono",monospace;font-weight:400;color:#9aa0a8;flex:none}
+/* ---- terminal pane (s01, s07) */
+.term{background:#fbfaf7}
+.mono{font-family:"JetBrains Mono",monospace}
+.tline{position:absolute;left:40px;font-size:30px;color:var(--ink);white-space:nowrap}
+.okline{position:absolute;left:40px;font-size:34px;font-weight:700;color:var(--ok);opacity:0}
+.chipfile{position:absolute;left:40px;top:300px;height:72px;padding:0 26px;border-radius:14px;background:#fff;box-shadow:0 0 0 2px #e3e5e8,0 12px 24px -12px rgba(20,24,30,.3);display:flex;align-items:center;gap:16px;font-family:"JetBrains Mono",monospace;font-size:34px;color:var(--ink);opacity:0}
+.chipfile i{display:inline-block;width:30px;height:38px;border-radius:5px;border:4px solid #c9cdd3}
+/* ---- tag zone: the one readable claim above the frame */
+.tag{position:absolute;opacity:0;will-change:transform,opacity}
+.chip{position:absolute;height:84px;border-radius:42px;padding:0 24px;display:flex;align-items:center;gap:12px;font-size:34px;font-weight:700;color:var(--ink);background:#fff;white-space:nowrap;
+  box-shadow:0 18px 40px -16px rgba(20,24,30,.35),0 0 0 1px rgba(20,24,30,.08);opacity:0;will-change:transform,opacity}
+.chip b{font-weight:900;border-radius:12px;padding:6px 14px}
+.chip.ghostchip{background:transparent;box-shadow:none;border:3px dashed rgba(21,23,26,.25);color:#8a9099}
+.src{position:absolute;left:0;width:1080px;text-align:center;font-size:32px;color:#6b7280;opacity:0}
+.quote{position:absolute;left:0;width:1080px;top:236px;text-align:center;opacity:0}
+.quote span{display:inline-block;font-family:"Fraunces",Georgia,serif;font-weight:560;font-size:72px;line-height:1;color:var(--ink);padding:10px 30px 18px;background:#fff;border-radius:18px;box-shadow:0 18px 40px -16px rgba(20,24,30,.35)}
+.count{position:absolute;left:0;width:1080px;top:206px;text-align:center;opacity:0;color:var(--ink)}
+.count .n{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:170px;line-height:1;letter-spacing:-4px;display:inline-block;min-width:200px}
+.count .u{font-size:48px;font-weight:800;display:inline-block;margin-left:14px;vertical-align:28px}
+.tell{position:absolute;left:150px;height:70px;border-radius:14px;padding:0 24px 0 18px;display:flex;align-items:center;gap:16px;background:#fff;font-size:34px;font-weight:650;color:var(--ink);white-space:nowrap;
+  box-shadow:0 18px 34px -14px rgba(0,0,0,.5);opacity:0;will-change:transform,opacity}
+.tell .x{width:38px;height:38px;border-radius:50%;background:var(--neg);color:#fff;font-size:26px;font-weight:900;line-height:38px;text-align:center;flex:none}
+.tell .strike{position:absolute;left:70px;right:22px;top:33px;height:5px;background:var(--neg);transform-origin:0 50%;transform:scaleX(0)}
+.tellhead{position:absolute;left:150px;top:500px;font-size:32px;font-weight:700;color:#fff;opacity:0}
+.mark{position:absolute;background:rgba(235,201,52,.55);border-radius:6px;transform-origin:0 50%;transform:scaleX(0);mix-blend-mode:multiply}
+.slider{position:absolute;top:0;width:4px;height:470px;background:#fff;box-shadow:0 0 14px rgba(0,0,0,.3);opacity:0}
+.slider:after{content:"";position:absolute;left:-24px;top:207px;width:52px;height:52px;border-radius:50%;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+/* ---- deal (s07) */
+.illu{position:absolute;left:115px;top:424px;font-size:32px;color:#6b7280;opacity:0}
+.tcard{position:absolute;top:118px;width:262px;height:164px;border-radius:12px;box-shadow:0 16px 30px -12px rgba(20,24,30,.45),0 0 0 1px rgba(20,24,30,.08);opacity:0;will-change:transform,opacity}
+.tcard img{width:262px;height:164px;display:block;border-radius:12px}
+.tlabel{position:absolute;top:304px;width:262px;text-align:center;font-size:32px;font-weight:700;color:var(--ink);opacity:0}
+.ring{position:absolute;left:-8px;top:-8px;right:-8px;bottom:-8px;border-radius:18px;border:6px solid var(--accent);opacity:0}
+/* ---- build + devices (s08, s09) */
+.blk{position:absolute;background:#e5e7ea;border-radius:10px;opacity:0}
+.dev{position:absolute;left:60px;top:250px;width:960px;height:746px;clip-path:inset(220px 55px 0px 55px round 22px);background:#fff;opacity:0;visibility:hidden}
+.dev .win{position:absolute;top:0;height:746px;background:#f8f7f3;overflow:hidden}
+.dev .bar{position:absolute;left:0;top:0;right:0;height:46px;background:#f6f6f7;border-bottom:1px solid rgba(20,24,30,.08)}
+.dev .bar .dot{top:16px;width:13px;height:13px}
+.dev img{position:absolute;left:0;top:46px;display:block}
+.ghost{position:absolute;border:3px dashed rgba(21,23,26,.25);border-radius:22px;opacity:0}
+.wl{position:absolute;top:205px;font-size:32px;font-weight:700;color:#3b3f45;display:flex;align-items:center;gap:10px;opacity:0}
+.wl .tk{display:inline-block;width:40px;height:40px;border-radius:50%;background:var(--ok);color:#fff;font-size:26px;line-height:40px;text-align:center;font-weight:900;transform:scale(0)}
+.scan{position:absolute;left:0;width:324px;height:10px;top:0;background:linear-gradient(180deg,rgba(235,201,52,0),rgba(235,201,52,.95),rgba(235,201,52,0));opacity:0}
+.badge{position:absolute;height:64px;border-radius:32px;padding:0 24px;display:flex;align-items:center;gap:12px;background:var(--ok);color:#fff;font-size:34px;font-weight:800;opacity:0;box-shadow:0 14px 30px -12px rgba(20,24,30,.45)}
+/* ---- face layouts (s02, s10) */
+.name{position:absolute;left:0;width:1080px;top:214px;text-align:center;opacity:0}
+.name span{position:relative;display:inline-block;font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:150px;line-height:1;letter-spacing:-3px;color:var(--ink);padding:0 20px 14px}
+.name .uh{position:absolute;left:0;right:0;bottom:6px;height:40px;background:var(--accent);border-radius:6px;z-index:-1;transform-origin:0 50%;transform:scaleX(0)}
+.bubble{position:absolute;left:190px;top:206px;width:700px;height:176px;border-radius:44px;background:#fff;opacity:0;box-shadow:0 24px 50px -18px rgba(20,24,30,.4),0 0 0 1px rgba(20,24,30,.06)}
+.bubble:after{content:"";position:absolute;left:96px;bottom:-26px;border:26px solid transparent;border-top-color:#fff;border-bottom:0}
+.bubble .who{position:absolute;left:40px;top:44px;width:88px;height:88px;border-radius:50%;background:#d9dde2}
+.bubble .lbl{position:absolute;left:156px;top:30px;font-size:36px;font-weight:600;color:#8a9099}
+.bubble .kw{position:absolute;left:150px;top:68px;font-size:96px;font-weight:900;letter-spacing:-2px;color:var(--ink);line-height:1}
+/* ---- full-bleed beats: each composed for the whole 9:16 frame */
+.full{position:absolute;left:0;top:0;width:1080px;height:1920px;opacity:0;visibility:hidden;overflow:hidden;background:
+  repeating-linear-gradient(0deg,rgba(20,24,30,.045) 0 1px,transparent 1px 40px),repeating-linear-gradient(90deg,rgba(20,24,30,.045) 0 1px,transparent 1px 40px),#eceef1;will-change:opacity}
+#fullA{background:#f8f7f4}
+#fullA .wall{position:absolute;left:0;top:0;width:1080px;will-change:transform}
+.ccard{position:absolute;left:240px;top:1160px;width:600px;height:200px;border-radius:32px;background:#fff;display:flex;align-items:center;justify-content:center;gap:18px;color:var(--ink);opacity:0;
+  box-shadow:0 30px 60px -20px rgba(20,24,30,.45),0 0 0 1px rgba(20,24,30,.06)}
+.ccard .n{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:150px;line-height:1;letter-spacing:-4px;min-width:170px;text-align:right}
+.ccard .u{font-size:48px;font-weight:800;line-height:1.05}
+.page{position:absolute;left:60px;width:960px;height:600px;border-radius:24px;overflow:hidden;background:#fff;box-shadow:0 30px 60px -20px rgba(20,24,30,.35),0 0 0 1px rgba(20,24,30,.08);will-change:transform,opacity}
+.page img{display:block;width:960px}
+.fchip{position:absolute;height:84px;border-radius:42px;padding:0 26px;display:flex;align-items:center;gap:14px;font-size:38px;font-weight:700;color:var(--ink);background:#fff;white-space:nowrap;opacity:0;
+  box-shadow:0 18px 40px -14px rgba(20,24,30,.45),0 0 0 1px rgba(20,24,30,.08);will-change:transform,opacity}
+.fchip b{font-weight:900;border-radius:12px;padding:6px 14px}
+.fsrc{position:absolute;left:0;width:1080px;top:1548px;text-align:center;font-size:32px;color:#6b7280;opacity:0}
+.devF{position:absolute;left:20px;top:260px;width:1040px;height:1180px;background:#fff;visibility:hidden;will-change:clip-path}
+.devF .win{position:absolute;background:#f8f7f3;overflow:hidden}
+.devF .bar{position:absolute;left:0;top:0;right:0;background:#f6f6f7;border-bottom:1px solid rgba(20,24,30,.08)}
+.devF .bar .dot{width:16px;height:16px}
+.devF img{position:absolute;left:0;display:block}
+.fpill{position:absolute;left:250px;top:10px;width:540px;height:44px;border-radius:22px;background:#fff;box-shadow:0 0 0 1px rgba(20,24,30,.08);text-align:center;line-height:44px;font-size:32px;font-weight:600;color:#3b3f45}
+.fghost{position:absolute;border:3px dashed rgba(21,23,26,.25);border-radius:24px;opacity:0}
+.fwl{position:absolute;top:205px;font-size:34px;font-weight:700;color:#3b3f45;display:flex;align-items:center;gap:10px;opacity:0}
+.fwl .tk{display:inline-block;width:42px;height:42px;border-radius:50%;background:var(--ok);color:#fff;font-size:28px;line-height:42px;text-align:center;font-weight:900;transform:scale(0)}
+/* ---- clawd */
+.clawd{position:absolute}
+.clawd .pose{position:absolute;left:0;top:0}
+/* ---- captions */
+#caps{position:absolute;left:0;top:0;width:1080px;height:1920px;will-change:transform}
+.cap{position:absolute;left:0;width:1080px;top:1030px;text-align:center;opacity:0}
+.cap span{display:inline-block;background:var(--ink);color:#fff;font-weight:900;font-size:56px;line-height:1;letter-spacing:-.5px;text-transform:uppercase;padding:14px 26px 16px;border-radius:14px;box-shadow:0 0 0 2px rgba(255,255,255,.55),0 14px 30px -12px rgba(10,12,16,.45)}
+.cap b{font-weight:900;color:var(--neg)}
+.cap em{font-style:normal;color:var(--accent)}
+/* ---- presenter panel: one rounded panel whose clip opens from the split window to the full face */
+.panel{position:absolute;left:50px;top:420px;width:980px;height:1500px;background:#101114;clip-path:inset(722px 0 0 0 round 40px);will-change:clip-path}
+#facewrap{position:absolute;left:-294px;top:716px;width:1536px;height:864px;transform-origin:0 0;will-change:transform}
+#face{position:absolute;left:0;top:0;width:1536px;height:864px}
+</style></head><body>
+<div id="hallmark-websites" data-composition-id="hallmark-websites" data-start="0" data-duration="34.6333" data-width="1080" data-height="1920" data-fps="30">
+<div id="stage" class="clip" data-start="0" data-duration="34.6333" data-track-index="0">
+  <div class="ground"></div>
+  <div class="panel" id="panel"><div id="facewrap"><video id="face" src="assets/edit/cut.mp4" poster="assets/edit/poster.jpg" preload="auto" muted playsinline data-start="0" data-duration="34.6333" data-track-index="2"></video></div></div>
+
+  <div id="zoom">
+  <div id="top">
+    <!-- tag zone -->
+    <div class="title" id="title">Claude Code Websites</div>
+    <div class="banner" id="banner"><span id="banner-strip">without the AI-made look</span></div>
+    <div class="quote" id="q-together"><span>Made by Together AI.</span></div>
+    <div class="src" id="src-gh" style="top:352px">README · github.com/Nutlope/hallmark</div>
+    <div class="count" id="count"><span class="n" id="count-n">0</span><span class="u">design themes</span></div>
+    <div class="chip" id="chip-opus" style="left:96px;top:246px"><span id="opus-txt">Opus 5.5 alone</span><b style="background:#ffe3df;color:#c8352a">26 issues</b></div>
+    <div class="chip ghostchip" id="chip-wait" style="left:560px;top:246px">with Hallmark <b style="color:#8a9099">?</b></div>
+    <div class="chip" id="chip-hm" style="left:560px;top:246px;box-shadow:0 0 0 5px var(--accent),0 18px 40px -16px rgba(20,24,30,.35)">Hallmark<b style="background:#dcf5e5;color:var(--ok)">0 issues</b></div>
+    <div class="src" id="src-cmp" style="top:356px">Issue counts: Hallmark's own checker</div>
+    <div class="illu" id="illu">Illustration</div>
+
+    <div class="frame" id="frame">
+      <div class="view" id="view">
+        <div class="pane" id="pane-sites">
+          <div class="site" id="site-dusk"><img src="assets/web/dusk.jpg" alt=""></div>
+          <div class="site" id="site-ribbon"><img src="assets/web/ribbon.jpg" alt=""></div>
+          <div class="site" id="site-atelier"><img src="assets/web/atelier.jpg" alt=""></div>
+          <div class="site" id="site-refract"><img src="assets/web/refract.jpg" alt=""></div>
+        </div>
+        <div class="pane term" id="pane-term">
+          <div class="tline mono" style="top:40px"><span style="color:#9aa0a8">$ </span><span id="type-install"></span></div>
+          <div class="okline" id="ok-added" style="top:116px">✓ hallmark added</div>
+          <div class="tline mono" id="ok-path" style="top:170px;color:#6b7280;opacity:0">~/.claude/skills/hallmark/</div>
+          <div class="chipfile" id="chipfile"><i></i>SKILL.md</div>
+        </div>
+        <div class="pane" id="pane-gh"><img src="assets/broll/gh-readme.png" alt="" style="width:850px">
+          <div class="mark" id="mark-gh" style="left:42px;top:248px;width:198px;height:34px"></div></div>
+        <div class="pane" id="pane-gallery" style="background:#f8f7f4"><img id="gallery-img" src="assets/broll/gallery.png" alt="" style="width:850px"></div>
+        <div class="pane" id="pane-cmp">
+          <img src="assets/captures/compare-without.png" alt="" style="width:850px">
+          <div id="cmp-with" style="position:absolute;inset:0;clip-path:inset(0 0 0 100%)"><img src="assets/captures/compare-with.png" alt="" style="width:850px"></div>
+          <div class="slider" id="slider"></div>
+        </div>
+        <div class="pane term" id="pane-deal">
+          <div class="tline mono" style="top:44px"><span style="color:#d77757">&gt; </span><span id="type-prompt"></span></div>
+          <div class="tcard" id="tc-furrow" style="left:18px"><img src="assets/web/furrow.jpg" alt=""></div>
+          <div class="tcard" id="tc-refract" style="left:294px"><img src="assets/web/refract.jpg" alt=""><div class="ring" id="ring"></div></div>
+          <div class="tcard" id="tc-cobalt" style="left:570px"><img src="assets/web/cobalt.jpg" alt=""></div>
+          <div class="tlabel" id="tl-furrow" style="left:18px">Furrow</div>
+          <div class="tlabel" id="tl-refract" style="left:294px">Refract</div>
+          <div class="tlabel" id="tl-cobalt" style="left:570px">Cobalt</div>
+        </div>
+        <div class="pane" id="pane-build" style="background:#f8f7f3">
+          <div class="blk" style="left:60px;top:12px;width:730px;height:34px;border-radius:17px"></div>
+          <div class="blk" style="left:26px;top:112px;width:210px;height:30px"></div>
+          <div class="blk" style="left:26px;top:150px;width:150px;height:30px"></div>
+          <div class="blk" style="left:26px;top:196px;width:190px;height:12px"></div>
+          <div class="blk" style="left:26px;top:214px;width:160px;height:12px"></div>
+          <div class="blk" style="left:26px;top:240px;width:76px;height:26px;border-radius:13px"></div>
+          <div class="blk" style="left:112px;top:240px;width:66px;height:26px;border-radius:13px"></div>
+          <div class="blk" style="left:265px;top:0;width:585px;height:470px;border-radius:0;background:#eef1f3"></div>
+          <div class="blk" style="left:330px;top:88px;width:210px;height:190px;background:#fff"></div>
+          <div id="build-real" style="position:absolute;inset:0;clip-path:inset(0 0 100% 0)"><img src="assets/captures/refract-1440.png" alt="" style="width:850px"></div>
+        </div>
+      </div>
+      <div class="chrome">
+        <div class="dot" style="left:24px;background:#ff5f57"></div><div class="dot" style="left:48px;background:#febc2e"></div><div class="dot" style="left:72px;background:#28c840"></div>
+        <div class="pill" id="pill"></div>
+      </div>
+      <div class="wipe-edge" id="edge"></div>
+      <div class="dim" id="dim"></div>
+      <div class="tellhead" id="tellhead" style="left:35px;top:44px">From Hallmark's list of AI tells:</div>
+    </div>
+    <div class="tell" id="tell0" style="top:632px"><span class="x">✕</span>The eyebrow above every heading<span class="strike"></span></div>
+    <div class="tell" id="tell1" style="top:722px"><span class="x">✕</span>One coloured word in a headline<span class="strike"></span></div>
+    <div class="tell" id="tell2" style="top:812px"><span class="x">✕</span>An email sign-up on every page<span class="strike"></span></div>
+
+    <div class="card" id="card">
+      <div class="path">~/.claude/skills/hallmark/</div>
+      <div class="hl" id="hl"></div>
+      <div class="file">SKILL.md</div>
+      <div class="icon"></div>
+      <div class="rules">
+        <div class="rule" id="rule0"><b>1</b>Every colour and every font goes through a token.</div>
+        <div class="rule" id="rule1"><b>2</b>Never one italic word inside a roman heading.</div>
+        <div class="rule" id="rule2"><b>3</b>Never <span class="mono" style="font-weight:400">transition: all</span>.</div>
+      </div>
+    </div>
+
+    <!-- devices (s08, s09) -->
+    <div class="ghost" id="g-desk" style="left:115px;top:470px;width:850px;height:526px"></div>
+    <div class="ghost" id="g-tab" style="left:300px;top:250px;width:480px;height:746px"></div>
+    <div class="wl" id="wl-desk" style="left:120px"><span class="tk">✓</span>1440</div>
+    <div class="wl" id="wl-tab" style="left:300px"><span class="tk">✓</span>834</div>
+    <div class="wl" id="wl-ph" style="left:716px"><span class="tk">✓</span>390 px</div>
+    <div style="position:absolute;left:0;top:0;filter:drop-shadow(0 30px 34px rgba(20,24,30,.28))">
+      <div class="dev" id="dev-tab"><div class="win" style="left:240px;width:480px;border-radius:22px">
+        <div class="bar"><div class="dot" style="left:18px;background:#ff5f57"></div><div class="dot" style="left:38px;background:#febc2e"></div><div class="dot" style="left:58px;background:#28c840"></div></div>
+        <img src="assets/captures/refract-834.png" alt="" style="width:480px"></div></div>
+    </div>
+    <div id="phwrap" style="position:absolute;left:0;top:0;filter:drop-shadow(0 30px 34px rgba(20,24,30,.28));transform-origin:540px 620px">
+      <div class="dev" id="dev-ph"><div class="win" style="left:318px;width:324px;border-radius:30px">
+        <div class="bar" style="height:44px"><div class="dot" style="left:18px;top:15px;background:#ff5f57"></div><div class="dot" style="left:38px;top:15px;background:#febc2e"></div><div class="dot" style="left:58px;top:15px;background:#28c840"></div></div>
+        <img src="assets/captures/refract-390.png" alt="" style="width:324px;top:44px"><div class="scan" id="scan"></div></div></div>
+      <div class="badge" id="badge" style="left:560px;top:278px">✓ Reviewed</div>
+    </div>
+    <div id="clawd-host"></div>
+  </div>
+  </div>
+
+  <!-- face-layout type -->
+  <div class="name" id="name"><span>Hallmark<i class="uh" id="name-uh"></i></span></div>
+  <div class="bubble" id="bubble"><div class="who"></div><div class="lbl">Comment</div><div class="kw">DESIGN</div></div>
+  <div class="full" id="fullA">
+    <img class="wall" id="wall" src="assets/broll/gallery.png" alt="">
+    <div class="ccard" id="ccard"><span class="n" id="ccard-n">0</span><span class="u">design<br>themes</span></div>
+  </div>
+  <div class="full" id="fullB">
+    <div class="page" id="pg-opus" style="top:210px"><img src="assets/captures/compare-without.png" alt=""></div>
+    <div class="fchip" id="fc-opus" style="left:90px;top:706px"><span id="fc-opus-t">Opus 5.5 alone</span><b style="background:#ffe3df;color:#c8352a">26 issues</b></div>
+    <div class="page" id="pg-hm" style="top:930px"><img src="assets/captures/compare-with.png" alt=""></div>
+    <div class="fchip" id="fc-hm" style="left:90px;top:1426px;box-shadow:0 0 0 5px var(--accent),0 18px 40px -14px rgba(20,24,30,.45)">With Hallmark<b style="background:#dcf5e5;color:var(--ok)">0 issues</b></div>
+    <div class="fsrc" id="fsrc">Same prompt · Hallmark's own issue checker</div>
+    <div id="clawdB"></div>
+  </div>
+  <div class="full" id="fullC">
+    <div class="fghost" id="fg-desk" style="left:20px;top:500px;width:1040px;height:710px"></div>
+    <div class="fghost" id="fg-tab" style="left:220px;top:393px;width:640px;height:913px"></div>
+    <div class="fwl" id="fwl-desk" style="left:40px"><span class="tk">✓</span>1440</div>
+    <div class="fwl" id="fwl-tab" style="left:240px"><span class="tk">✓</span>834</div>
+    <div class="fwl" id="fwl-ph" style="left:820px"><span class="tk">✓</span>390 px</div>
+    <div style="position:absolute;left:0;top:0;filter:drop-shadow(0 30px 34px rgba(20,24,30,.28))">
+      <div class="devF" id="fd-desk" style="clip-path:inset(240px 0px 230px 0px round 24px)"><div class="win" style="left:0;top:240px;width:1040px;height:710px;border-radius:24px">
+        <div class="bar" style="height:64px"><div class="dot" style="left:26px;top:24px;background:#ff5f57"></div><div class="dot" style="left:52px;top:24px;background:#febc2e"></div><div class="dot" style="left:78px;top:24px;background:#28c840"></div>
+          <div class="fpill"><span id="fd-url"></span></div></div>
+        <img src="assets/captures/refract-1440.png" alt="" style="top:64px;width:1040px"></div></div>
+      <div class="devF" id="fd-tab" style="clip-path:inset(240px 0px 230px 0px round 24px)"><div class="win" style="left:200px;top:133px;width:640px;height:913px;border-radius:24px">
+        <div class="bar" style="height:56px"><div class="dot" style="left:20px;top:20px;background:#ff5f57"></div><div class="dot" style="left:44px;top:20px;background:#febc2e"></div><div class="dot" style="left:68px;top:20px;background:#28c840"></div></div>
+        <img src="assets/captures/refract-834.png" alt="" style="top:56px;width:640px"></div></div>
+      <div class="devF" id="fd-ph" style="clip-path:inset(133px 200px 134px 200px round 24px)"><div class="win" style="left:260px;top:0;width:520px;height:1180px;border-radius:40px">
+        <div class="bar" style="height:54px"><div class="dot" style="left:22px;top:19px;background:#ff5f57"></div><div class="dot" style="left:46px;top:19px;background:#febc2e"></div><div class="dot" style="left:70px;top:19px;background:#28c840"></div></div>
+        <img src="assets/captures/refract-390.png" alt="" style="top:54px;width:520px"></div></div>
+    </div>
+    <div id="clawdC"></div>
+  </div>
+  <div id="caps"></div>
+</div>
+<audio id="mix" src="assets/audio/mix.wav" data-start="0" data-duration="34.6333" data-track-index="3"></audio>
+</div>
+<script>
+(function () {
+  const R = window.REEL, D = 34.6333, E = window.ReelEases, EV = R.events, SC = R.scenes;
+  const tl = gsap.timeline({ paused: true });
+  const T = (t, from, to, at) => tl.fromTo(t, from, Object.assign({ immediateRender: false }, to), at);
+  const set = (t, vars, at) => tl.set(t, vars, at);
+  const $ = s => document.querySelector(s);
+  const el = (parent, cls, css, html) => { const d = document.createElement('div'); if (cls) d.className = cls; Object.assign(d.style, css || {}); if (html != null) d.innerHTML = html; parent.appendChild(d); return d; };
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9']/g, '');
+  const w = (text, after) => R.words.find(x => x.s >= (after || 0) - 1e-3 && norm(x.t) === norm(text)).s;
+  const we = (text, after) => R.words.find(x => x.s >= (after || 0) - 1e-3 && norm(x.t) === norm(text)).e;
+  const pop = (n, at, d, y) => T(n, { opacity: 0, y: y == null ? 30 : y, scale: .92 }, { opacity: 1, y: 0, scale: 1, duration: d || .34, ease: E.snapSettle }, at);
+  const out = (n, at, d, y) => T(n, { opacity: 1, y: 0 }, { opacity: 0, y: y == null ? -30 : y, duration: d || .24, ease: E.accelExit }, at);
+  const typeInto = (node, text, at, dur) => { const o = { n: 0 }; node.textContent = '';
+    tl.fromTo(o, { n: 0 }, { n: text.length, duration: dur, ease: 'none', immediateRender: false, onUpdate: () => { node.textContent = text.slice(0, Math.round(o.n)); } }, at); };
+  const count = (node, to, at, dur) => { const o = { v: 0 }; node.textContent = '0';
+    tl.fromTo(o, { v: 0 }, { v: to, duration: dur, ease: 'power2.out', immediateRender: false, onUpdate: () => { node.textContent = String(Math.round(o.v)); } }, at); };
+
+  // ================= layouts: split (graphic above the speaker), full (the evidence fills the screen), face (speaker full frame)
+  // One state machine: every property is tweened from the previous state's exact value, so any seek order lands the same.
+  const L = {
+    split: { clip: 'inset(722px 0px 0px 0px round 40px)', fw: { x: 0, y: 0, scale: 1 }, top: { opacity: 1, y: 0 }, zoom: { y: 0, scale: 1 }, caps: 0 },
+    fullA: { clip: 'inset(1500px 0px 0px 0px round 40px)', fw: { x: 0, y: 0, scale: 1 }, top: { opacity: 0, y: -80 }, zoom: { y: 0, scale: 1 }, caps: 0, layer: '#fullA' },
+    fullB: { clip: 'inset(1500px 0px 0px 0px round 40px)', fw: { x: 0, y: 0, scale: 1 }, top: { opacity: 0, y: -80 }, zoom: { y: 0, scale: 1 }, caps: -200, layer: '#fullB' },
+    fullC: { clip: 'inset(1500px 0px 0px 0px round 40px)', fw: { x: 0, y: 0, scale: 1 }, top: { opacity: 0, y: -80 }, zoom: { y: 0, scale: 1 }, caps: 470, layer: '#fullC' },
+    face:  { clip: 'inset(0px 0px 0px 0px round 40px)', fw: { x: -577, y: -713, scale: 1.736 }, top: { opacity: 0, y: -80 }, zoom: { y: 0, scale: 1 }, caps: 420 } };
+  const SEQ = [[SC.s02[0] - .06, 'face'], [SC.s03[0] - .04, 'split'], [SC.s04[0] - .04, 'fullA'], [SC.s05[0] - .04, 'split'],
+    [SC.s06[0] - .04, 'fullB'], [SC.s07[0] - .04, 'split'], [EV['full-screen'], 'fullC'], [SC.s09[0] - .06, 'split'], [SC.s10[0] - .06, 'face']];
+  let cur = L.split;
+  SEQ.forEach(([at, k]) => {
+    const n = L[k], d = .36, ez = 'power3.inOut';
+    T('#panel', { clipPath: cur.clip }, { clipPath: n.clip, duration: d, ease: ez }, at);
+    T('#facewrap', cur.fw, Object.assign({ duration: d, ease: ez }, n.fw), at);
+    T('#top', cur.top, Object.assign({ duration: n.top.opacity ? .30 : .26, ease: n.top.opacity ? E.softLand : E.accelExit }, n.top), n.top.opacity && !cur.top.opacity ? at + .04 : at);
+    T('#zoom', cur.zoom, Object.assign({ duration: d, ease: ez }, n.zoom), at);
+    T('#caps', { y: cur.caps }, { y: n.caps, duration: d, ease: ez }, at);
+    if (cur.layer) { T(cur.layer, { opacity: 1 }, { opacity: 0, duration: .26, ease: E.cruise }, at); set(cur.layer, { visibility: 'hidden' }, at + .26); }
+    if (n.layer) { set(n.layer, { visibility: 'visible' }, at); T(n.layer, { opacity: 0, scale: 1.04 }, { opacity: 1, scale: 1, duration: .34, ease: E.softLand }, at); }
+    cur = n;
+  });
+
+  // ================= address pill: one row per state, rolled on change
+  const pill = $('#pill'); let prevRow = null;
+  function pillTo(html, at) {
+    const r = el(pill, 'row', {}, html);
+    if (at <= 0) { gsap.set(r, { opacity: 1 }); tl.set(r, { opacity: 1 }, 0); }
+    else {
+      T(r, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: .26, ease: E.snapSettle }, at + .08);
+      if (prevRow) T(prevRow, { y: 0, opacity: 1 }, { y: -40, opacity: 0, duration: .2, ease: 'power2.in' }, at);
+    }
+    prevRow = r;
+  }
+
+  // ================= panes: contained wipes inside the frame (the frame itself holds still)
+  const WIPE = .34; let curPane = '#pane-sites';
+  function paneTo(id, at, cut) {
+    if (cut) { set(id, { clipPath: 'inset(0 0 0 0%)' }, at); }
+    else {
+      T(id, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: WIPE, ease: 'power3.inOut' }, at);
+      T('#edge', { x: 850, opacity: 1 }, { x: -6, opacity: 1, duration: WIPE, ease: 'power3.inOut' }, at);
+      set('#edge', { opacity: 0 }, at + WIPE);
+    }
+    const prev = curPane; set(prev, { clipPath: 'inset(0 0 0 100%)' }, at + (cut ? 0 : WIPE)); curPane = id;
+  }
+
+  // ================= s00 hook: title stack + four real sites on spoken beats
+  T('#title', { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: .30, ease: E.snapSettle }, 0);
+  T('#banner-strip', { scaleX: .2, opacity: 0 }, { scaleX: 1, opacity: 1, duration: .32, ease: E.snapSettle }, .10);
+  gsap.set('#title', { opacity: 0 }); gsap.set('#banner-strip', { opacity: 0 });
+  const SITES = [['dusk', 0, 'Dusk'], ['ribbon', EV['example-swap1'], 'Ribbon'], ['atelier', EV['example-swap2'], 'Atelier'], ['refract', EV['example-swap3'], 'Refract']];
+  pillTo('<i>theme</i>&nbsp; Dusk', 0);
+  SITES.forEach(([k, at, label], i) => {
+    const next = SITES[i + 1] ? SITES[i + 1][1] + WIPE : SC.s01[1];
+    T(`#site-${k} img`, { scale: i ? 1.06 : 1.0, y: 0 }, { scale: i ? 1.0 : 1.05, y: i ? 0 : -18, duration: next - at, ease: 'none' }, at);
+    if (i) {
+      T(`#site-${k}`, { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: WIPE, ease: 'power3.inOut' }, at);
+      T('#edge', { x: 850, opacity: 1 }, { x: -6, opacity: 1, duration: WIPE, ease: 'power3.inOut' }, at);
+      set('#edge', { opacity: 0 }, at + WIPE);
+      pillTo(`<i>theme</i>&nbsp; ${label}`, at);
+    }
+  });
+  T('#title', { y: 0, opacity: 1 }, { y: -36, opacity: 0, duration: .28, ease: E.accelExit }, EV['title-retire']);
+  T('#banner-strip', { y: 0, opacity: 1, scaleX: 1 }, { y: -36, opacity: 0, scaleX: 1, duration: .28, ease: E.accelExit }, EV['title-retire'] + .05);
+
+  // ================= s01 one skill -> a set of instructions -> added to Claude Code
+  const tDim = EV['focus-dim'], tCard = EV['card-forward'], tOpen = EV['card-open'], tAdd = EV['install'];
+  T('#dim', { opacity: 0 }, { opacity: 1, duration: .24, ease: E.cruise }, tDim);
+  set('#card', { opacity: 1 }, tCard);
+  T('#card', { y: 70, scale: .92, x: 0 }, { y: 0, scale: 1, x: 0, duration: .36, ease: E.snapSettle }, tCard);
+  T('#hl', { scaleX: 0 }, { scaleX: 1, duration: .30, ease: 'power2.out' }, w('skill', 5) - .02);
+  // instructions: the card rises and opens to its first rules (verbatim from SKILL.md, "The Floor")
+  T('#card', { y: 0, scale: 1, x: 0 }, { y: -250, scale: 1, x: 0, duration: .40, ease: 'power3.inOut' }, tOpen);
+  T('#card', { clipPath: 'inset(0px 0px 298px 0px round 24px)' }, { clipPath: 'inset(0px 0px 0px 0px round 24px)', duration: .40, ease: 'power3.inOut' }, tOpen);
+  ['#rule0', '#rule1', '#rule2'].forEach((r, i) => pop(r, tOpen + .18 + i * .12, .3, 16));
+  // added to Claude Code: the frame clears, a light Claude Code window, the file flies in, the real install line types
+  pillTo('Claude Code', tAdd);
+  paneTo('#pane-term', tAdd, true);
+  T('#dim', { opacity: 1 }, { opacity: 0, duration: .24, ease: E.cruise }, tAdd);
+  T('#card', { y: -250, scale: 1, x: 0 }, { y: -64, scale: .3, x: -235, duration: .38, ease: 'power3.in' }, tAdd);
+  T('#card', { opacity: 1 }, { opacity: 0, duration: .12, ease: 'none' }, tAdd + .28);
+  pop('#chipfile', tAdd + .34, .28, 0);
+  typeInto($('#type-install'), 'npx skills add nutlope/hallmark -g', tAdd + .02, .62);
+  const tAdded = we('Claude', 8) - .02;
+  pop('#ok-added', tAdded, .26, 10); pop('#ok-path', tAdded + .08, .26, 10);
+
+  // ================= s03 provenance (after the face beat): the real README, its credit line marked and set large
+  pillTo('github.com/Nutlope/hallmark', SC.s03[0] - .1);
+  paneTo('#pane-gh', SC.s02[0] + .3, true);
+  T('#mark-gh', { scaleX: 0 }, { scaleX: 1, duration: .32, ease: 'power2.out' }, EV['highlight']);
+  pop('#q-together', EV['highlight'] + .06, .36, 24);
+  T('#src-gh', { opacity: 0 }, { opacity: 1, duration: .25, ease: E.cruise }, EV['highlight'] + .2);
+  T('#pane-gh img', { y: 0 }, { y: -12, duration: SC.s03[1] - SC.s03[0], ease: 'none' }, SC.s03[0]);
+  out('#q-together', SC.s04[0] - .02); T('#src-gh', { opacity: 1 }, { opacity: 0, duration: .18 }, SC.s04[0] - .02);
+
+  // ================= s04 fifty themes: the real gallery pulls back while the count rolls to 50
+  pillTo('usehallmark.com', SC.s04[0]);
+  paneTo('#pane-gallery', SC.s04[0]);
+  T('#gallery-img', { y: 0, scale: 1.35 }, { y: -980, scale: 1, duration: SC.s05[0] - SC.s04[0] + .25, ease: 'power2.inOut' }, SC.s04[0]);
+  pop('#count', EV['count'] - .1, .3, 20); count($('#count-n'), 50, EV['count'], .55);
+  out('#count', SC.s05[0] - .02);
+
+  // ================= s05 the tells: the same prompt built by Opus alone, its real tag; Hallmark's listed tells stack over it
+  pillTo('<i>same prompt</i>&nbsp; Opus 5.5 alone', SC.s05[0]);
+  paneTo('#pane-cmp', SC.s05[0]);
+  pop('#chip-opus', SC.s05[0] + .12, .34, 20); pop('#chip-wait', SC.s05[0] + .30, .34, 20);
+  T('#src-cmp', { opacity: 0 }, { opacity: 1, duration: .25 }, SC.s05[0] + .4);
+  const tTells = EV['tells'];
+  T('#dim', { opacity: 0 }, { opacity: .8, duration: .24, ease: E.cruise }, tTells - .05);
+  T('#tellhead', { opacity: 0 }, { opacity: 1, duration: .2 }, tTells);
+  [tTells + .04, w('signs') - .02, w('scream') + .05].forEach((t, i) => T(`#tell${i}`, { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: .3, ease: E.snapSettle }, t));
+
+  // ================= s06 so it knows what to avoid: the slider sweeps to Hallmark's version; 26 issues -> 0
+  const tSweep = EV['slider-sweep'], tZero = EV['issues-zero'];
+  [0, 1, 2].forEach(i => T(`#tell${i} .strike`, { scaleX: 0 }, { scaleX: 1, duration: .16, ease: 'power2.out' }, tSweep - .04 + i * .05));
+  [0, 1, 2].forEach(i => T(`#tell${i}`, { opacity: 1, x: 0, y: 0 }, { opacity: 0, x: 0, y: 70, duration: .3, ease: 'power2.in' }, tSweep + .16 + i * .05));
+  T('#tellhead', { opacity: 1 }, { opacity: 0, duration: .15 }, tSweep + .1);
+  T('#dim', { opacity: .8 }, { opacity: 0, duration: .26, ease: E.cruise }, tSweep + .12);
+  set('#slider', { opacity: 1 }, tSweep + .12);
+  T('#cmp-with', { clipPath: 'inset(0 0 0 100%)' }, { clipPath: 'inset(0 0 0 0%)', duration: .42, ease: 'power3.inOut' }, tSweep + .14);
+  T('#slider', { x: 850 }, { x: 0, duration: .42, ease: 'power3.inOut' }, tSweep + .14);
+  set('#slider', { opacity: 0 }, tSweep + .6);
+  pillTo('<i>same prompt</i>&nbsp; with Hallmark', tSweep + .3);
+  T('#chip-opus', { opacity: 1 }, { opacity: .45, duration: .25 }, tZero - .05);
+  set('#opus-txt', { textDecoration: 'line-through' }, tZero - .05);
+  T('#chip-wait', { opacity: 1 }, { opacity: 0, duration: .12 }, tZero);
+  pop('#chip-hm', tZero, .36, 0);
+  T('#chip-hm', { scale: 1 }, { keyframes: [{ scale: 1.1, duration: .1 }, { scale: 1, duration: .26, ease: E.snapSettle }] }, tZero + .36);
+  ['#chip-opus', '#chip-hm'].forEach(c => T(c, { y: 0 }, { y: -30, duration: .24, ease: E.accelExit }, SC.s07[0] - .02));
+  T('#chip-opus', { opacity: .45 }, { opacity: 0, duration: .2 }, SC.s07[0] - .02);
+  T('#chip-hm', { opacity: 1 }, { opacity: 0, duration: .2 }, SC.s07[0] - .02);
+  T('#src-cmp', { opacity: 1 }, { opacity: 0, duration: .18 }, SC.s07[0] - .02);
+
+  // ================= s07 tell it what you're making -> three themes dealt -> one fits (an illustration, real thumbnails)
+  pillTo('Claude Code', SC.s07[0]);
+  paneTo('#pane-deal', SC.s07[0]);
+  T('#illu', { opacity: 0 }, { opacity: 1, duration: .25 }, SC.s07[0] + .2);
+  typeInto($('#type-prompt'), '/hallmark a site for an outdoor pool', EV['type'], we('making') - EV['type'] + .1);
+  const tDeal = EV['deal'];
+  [['furrow', -276], ['refract', 0], ['cobalt', 276]].forEach(([k, dx], i) => {
+    set(`#tc-${k}`, { opacity: 1 }, tDeal + i * .07);
+    T(`#tc-${k}`, { x: -dx, y: 60, rotation: (i - 1) * -6, scale: .8 }, { x: 0, y: 0, rotation: 0, scale: 1, duration: .38, ease: E.snapSettle }, tDeal + i * .07);
+    T(`#tl-${k}`, { opacity: 0 }, { opacity: 1, duration: .2 }, tDeal + .3 + i * .07);
+  });
+  const tPick = EV['pick'];
+  ['furrow', 'cobalt'].forEach(k => { T(`#tc-${k}`, { opacity: 1 }, { opacity: .3, duration: .25 }, tPick); T(`#tl-${k}`, { opacity: 1 }, { opacity: .3, duration: .25 }, tPick); });
+  T('#tc-refract', { y: 0, scale: 1 }, { y: -14, scale: 1.08, duration: .32, ease: E.snapSettle }, tPick);
+  T('#ring', { opacity: 0 }, { opacity: 1, duration: .2 }, tPick);
+  T('#illu', { opacity: 1 }, { opacity: 0, duration: .18 }, SC.s08[0]);
+
+  // ================= s08 hero: it builds the page, opens it in a real browser, checks it at three widths
+  pillTo('', SC.s08[0]);
+  paneTo('#pane-build', SC.s08[0]);
+  const tBuild = EV['build'];
+  document.querySelectorAll('#pane-build .blk').forEach((b, i) => T(b, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: .22, ease: E.softLand }, tBuild + i * .045));
+  T('#build-real', { clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0 0 0% 0)', duration: .5, ease: 'power2.inOut' }, w('page', 23) - .04);
+  pillTo('<span style="color:#1f9d55">●</span>&nbsp; localhost', EV['browser']);
+  const tRes = EV['resize'], tPh = w('screens', 26) - .08;
+  // desktop -> tablet: the tablet window opens from the desktop frame's rectangle; the frame hands over
+  set('#dev-tab', { opacity: 1, visibility: 'visible' }, tRes);
+  T('#dev-tab', { clipPath: 'inset(220px 55px 0px 55px round 22px)' }, { clipPath: 'inset(0px 240px 0px 240px round 22px)', duration: .36, ease: 'power3.inOut' }, tRes);
+  T('#frame', { opacity: 1 }, { opacity: 0, duration: .1, ease: 'none' }, tRes);
+  T('#g-desk', { opacity: 0 }, { opacity: 1, duration: .2 }, tRes + .2);
+  T('#wl-desk', { opacity: 0 }, { opacity: 1, duration: .2 }, tRes + .2);
+  T('#wl-desk .tk', { scale: 0 }, { scale: 1, duration: .3, ease: E.snapSettle }, tRes + .26);
+  // tablet -> phone
+  set('#dev-ph', { opacity: 1, visibility: 'visible' }, tPh);
+  T('#dev-ph', { clipPath: 'inset(0px 240px 0px 240px round 22px)' }, { clipPath: 'inset(0px 318px 0px 318px round 30px)', duration: .34, ease: 'power3.inOut' }, tPh);
+  T('#dev-tab', { opacity: 1 }, { opacity: 0, duration: .1, ease: 'none' }, tPh);
+  T('#g-tab', { opacity: 0 }, { opacity: 1, duration: .2 }, tPh + .2);
+  T('#wl-tab', { opacity: 0 }, { opacity: 1, duration: .2 }, tPh + .2);
+  T('#wl-tab .tk', { scale: 0 }, { scale: 1, duration: .3, ease: E.snapSettle }, tPh + .26);
+  T('#wl-ph', { opacity: 0 }, { opacity: 1, duration: .2 }, tPh + .42);
+  T('#wl-ph .tk', { scale: 0 }, { scale: 1, duration: .3, ease: E.snapSettle }, tPh + .5);
+
+  // ================= s09 a second AI reviews with fresh eyes, then it comes back to you
+  const tFresh = EV['blink'], tBack = EV['hand-back'];
+  T('#scan', { y: 40, opacity: 0 }, { y: 700, opacity: 1, duration: .7, ease: 'power1.inOut' }, tFresh + .14);
+  set('#scan', { opacity: 0 }, tFresh + .86);
+  pop('#badge', tFresh + .82, .32, 10);
+  ['#g-desk', '#g-tab', '#wl-desk', '#wl-tab', '#wl-ph'].forEach(g => T(g, { opacity: 1 }, { opacity: 0, duration: .2 }, tBack));
+  T('#phwrap', { y: 0, scale: 1, opacity: 1 }, { y: 640, scale: .45, opacity: 0, duration: .62, ease: 'power2.in' }, tBack + .06);
+
+  // ================= Clawd(s): official glyph poses on stacked layers swapped on the clock
+  const POSES = { def: { arms: 'down' }, up: { arms: 'up' }, left: { eyes: 'left', arms: 'down' }, right: { eyes: 'right', arms: 'down' },
+    blink: { eyes: 'closed', arms: 'down' }, upR: { eyes: 'right', arms: 'up' } };
+  function clawd(x, y, cell, start, host) {
+    const c = el($(host || '#clawd-host'), 'clawd', { left: x + 'px', top: y + 'px', width: 10 * cell + 'px', height: 6 * cell + 'px' });
+    const bod = el(c, 'pose', { width: 10 * cell + 'px', height: 6 * cell + 'px', transformOrigin: '50% 100%' });
+    const P = {}; Object.keys(POSES).forEach(k => { const d = el(bod, 'pose'); d.innerHTML = window.Clawd.svg(POSES[k], cell); P[k] = d; gsap.set(d, { opacity: k === start ? 1 : 0 }); });
+    c.show = (k, at) => Object.keys(P).forEach(p => set(P[p], { opacity: p === k ? 1 : 0 }, at));
+    c.hop = (at, h) => T(bod, { y: 0, scaleY: 1, scaleX: 1 }, { keyframes: [{ scaleY: .86, scaleX: 1.1, duration: .07 }, { y: -h, scaleY: 1.06, scaleX: .96, duration: .15, ease: 'power2.out' },
+      { y: 0, scaleY: 1, scaleX: 1, duration: .15, ease: 'power2.in' }, { scaleY: .9, scaleX: 1.07, duration: .06 }, { scaleY: 1, scaleX: 1, duration: .12, ease: E.snapSettle }] }, at);
+    c.bod = bod; return c;
+  }
+  const CELL = 13, A = clawd(838, 470 - 6 * CELL + 4, CELL, 'def');
+  A.show('left', EV['example-swap1'] + .02); A.show('blink', EV['example-swap2'] + .10); A.show('left', EV['example-swap2'] + .22);
+  A.show('up', EV['example-swap3'] + .06); A.hop(EV['example-swap3'], 26); A.show('def', EV['example-swap3'] + .62);
+  A.show('left', tCard + .1);
+  A.show('up', tAdded); A.hop(tAdded, 22); A.show('def', tAdded + .6);
+  A.show('left', SC.s04[0] + .1);
+  A.show('blink', tTells + .3); A.show('left', tTells + .45);
+  A.show('up', tZero + .02); A.hop(tZero, 30); A.show('def', tZero + .7);
+  A.show('left', tDeal); A.show('up', tPick + .05); A.hop(tPick, 20); A.show('left', tPick + .6);
+  // the hero: Clawd jumps down from the frame edge to stand beside the shrinking page
+  A.show('left', tRes);
+  T(A, { x: 0, y: 0 }, { keyframes: [{ x: -60, y: -50, duration: .2, ease: 'power2.out' }, { x: -122, y: 526, duration: .32, ease: 'power2.in' }] }, tRes + .05);
+  // the reviewer: a second Clawd hops in from the left, blinks for fresh eyes, then both cheer the hand-back
+  const B2 = clawd(196, 996 - 6 * CELL + 4, CELL, 'right'); gsap.set(B2, { opacity: 0 }); set(B2, { opacity: 0 }, 0);
+  const tRev = EV['reviewer-in'];
+  set(B2, { opacity: 1 }, tRev);
+  T(B2, { x: -300 }, { x: 0, duration: .5, ease: 'power2.out' }, tRev);
+  B2.hop(tRev + .02, 18); B2.hop(tRev + .3, 14);
+  B2.show('blink', tFresh); B2.show('right', tFresh + .3); B2.hop(tFresh + .3, 12);
+  A.show('right', tRev + .3);
+  B2.show('upR', tBack + .2); A.show('up', tBack + .26); B2.hop(tBack + .2, 20); A.hop(tBack + .28, 20);
+
+  // ================= s02 name and s10 CTA (face layout)
+  pop('#name', EV['name'] - .1, .34, 24);
+  T('#name-uh', { scaleX: 0 }, { scaleX: 1, duration: .32, ease: 'power2.out' }, EV['name'] + .1);
+  T('#name', { opacity: 1, y: 0 }, { opacity: 0, y: -30, duration: .22, ease: E.accelExit }, SC.s03[0] - .08);
+  pop('#bubble', EV['keyword'] - .05, .36, 30);
+  T('#bubble', { scale: 1 }, { keyframes: [{ scale: 1.07, duration: .1 }, { scale: 1, duration: .26, ease: E.snapSettle }] }, w('design', 31) - .02);
+
+  // ================= captions: hand-grouped phrases; red on the AI tells, yellow on the keyword
+  const capHost = $('#caps');
+  R.caps.forEach((c, i) => {
+    let html = c.text.replace(/\b(vibe-coded|AI-made\.|AI built this,)/g, '<b>$1</b>');
+    if (/^Comment design/.test(c.text)) html = html.replace('design', '<em>design</em>');
+    const d = el(capHost, 'cap', {}, `<span>${html}</span>`);
+    const a = c.s, b = (R.caps[i + 1] ? R.caps[i + 1].s : D);
+    set(d, { opacity: 1 }, a);
+    T(d.firstChild, { scale: .9, y: 8 }, { scale: 1, y: 0, duration: .16, ease: E.snapSettle }, a);
+    if (b < D - .01) set(d, { opacity: 0 }, b);
+  });
+
+  // ================= full beats
+  // A: fifty themes, the real gallery as a full-bleed wall; the count rolls on "50"
+  const a0 = SC.s04[0] - .04, a1 = SC.s05[0] - .04;
+  T('#wall', { y: 140, scale: 1.08 }, { y: -330, scale: 1, duration: a1 - a0 + .3, ease: 'power2.inOut' }, a0);
+  pop('#ccard', EV['count'] - .08, .34, 30); count($('#ccard-n'), 50, EV['count'], .55);
+  // B: the same prompt, stacked: Opus alone on top; Hallmark's version rises from below; 26 issues -> 0
+  const b0 = SC.s06[0] - .04;
+  pop('#fc-opus', b0 + .2, .32, 16);
+  gsap.set('#pg-hm', { y: 1000 }); set('#pg-hm', { y: 1000 }, 0); // parked below the frame until it rises
+  T('#pg-hm', { y: 1000 }, { y: 0, duration: .5, ease: 'power3.out' }, tSweep + .1);
+  T('#pg-opus', { opacity: 1, scale: 1 }, { opacity: .5, scale: .97, duration: .3, ease: E.cruise }, tZero - .05);
+  set('#fc-opus-t', { textDecoration: 'line-through' }, tZero - .05);
+  T('#fc-opus', { opacity: 1, y: 0, scale: 1 }, { opacity: .55, y: 0, scale: 1, duration: .25 }, tZero - .05);
+  pop('#fc-hm', tZero, .36, 20);
+  T('#fc-hm', { scale: 1 }, { keyframes: [{ scale: 1.1, duration: .1 }, { scale: 1, duration: .26, ease: E.snapSettle }] }, tZero + .36);
+  T('#fsrc', { opacity: 0 }, { opacity: 1, duration: .25 }, tZero + .3);
+  const CB = clawd(838, 930 - 6 * 13 + 4, 13, 'def', '#clawdB'); gsap.set(CB, { opacity: 0 }); set(CB, { opacity: 0 }, 0);
+  set(CB, { opacity: 1 }, tSweep + .5); CB.show('up', tZero + .02); CB.hop(tZero, 30); CB.show('def', tZero + .8);
+  // C: opens in a real browser, then the same real page at 1440, 834 and 390 px, full height
+  const c0 = EV['full-screen'];
+  set('#fd-desk', { visibility: 'visible' }, c0);
+  typeInto($('#fd-url'), 'localhost', EV['browser'] + .05, .3);
+  set('#fd-tab', { visibility: 'visible' }, tRes);
+  T('#fd-tab', { clipPath: 'inset(240px 0px 230px 0px round 24px)' }, { clipPath: 'inset(133px 200px 134px 200px round 24px)', duration: .38, ease: 'power3.inOut' }, tRes);
+  set('#fd-desk', { visibility: 'hidden' }, tRes + .02);
+  T('#fg-desk', { opacity: 0 }, { opacity: 1, duration: .2 }, tRes + .22);
+  T('#fwl-desk', { opacity: 0 }, { opacity: 1, duration: .25 }, c0 + .3);
+  T('#fwl-desk .tk', { scale: 0 }, { scale: 1, duration: .3, ease: E.snapSettle }, tRes + .28);
+  set('#fd-ph', { visibility: 'visible' }, tPh);
+  T('#fd-ph', { clipPath: 'inset(133px 200px 134px 200px round 24px)' }, { clipPath: 'inset(0px 260px 0px 260px round 40px)', duration: .36, ease: 'power3.inOut' }, tPh);
+  set('#fd-tab', { visibility: 'hidden' }, tPh + .02);
+  T('#fg-tab', { opacity: 0 }, { opacity: 1, duration: .2 }, tPh + .22);
+  T('#fwl-tab', { opacity: 0 }, { opacity: 1, duration: .2 }, tPh + .22);
+  T('#fwl-tab .tk', { scale: 0 }, { scale: 1, duration: .3, ease: E.snapSettle }, tPh + .28);
+  T('#fwl-ph', { opacity: 0 }, { opacity: 1, duration: .2 }, tPh + .42);
+  T('#fwl-ph .tk', { scale: 0 }, { scale: 1, duration: .3, ease: E.snapSettle }, tPh + .5);
+  const CC = clawd(812, 1440 - 6 * 13 + 4, 13, 'left', '#clawdC');
+  CC.show('up', tPh + .5); CC.hop(tPh + .5, 22); CC.show('left', tPh + 1.1);
+
+  tl.to({}, { duration: D }, 0); // anchor: the timeline is exactly the composition duration
+  // Settling once makes a fresh page start from the same state a backward seek reaches (chained clip-path and pose sets).
+  tl.progress(1).progress(0);
+  window.__events = [{ t: 0.5, label: 'hook' }, { t: tCard + .5, label: 'SKILL.md' }, { t: tOpen + .6, label: 'rules' }, { t: tAdded + .3, label: 'added' },
+    { t: EV['name'] + .4, label: 'Hallmark' }, { t: EV['highlight'] + .5, label: 'Together AI' }, { t: EV['count'] + .7, label: '50 themes' },
+    { t: w('scream') + .5, label: 'tells' }, { t: tZero + .5, label: '0 issues' }, { t: tPick + .4, label: 'pick' }, { t: EV['browser'] + .3, label: 'built' },
+    { t: tPh + .7, label: 'three widths' }, { t: tFresh + .9, label: 'reviewed' }, { t: tBack + .4, label: 'back to you' }, { t: EV['keyword'] + .5, label: 'CTA' }];
+  window.__timelines = window.__timelines || {};
+  window.__timelines['hallmark-websites'] = tl;
+})();
+</script></body></html>

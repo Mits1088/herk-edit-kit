@@ -32,6 +32,9 @@ const node = (script, args) => nodeIn(dir, script, args);
 // Gate B: the fingerprint the read-only report prints, then an automated test approval of that exact plan.
 const approvePlan = d => {
   const fp = JSON.parse(nodeIn(d, 'preflight-reel.mjs', ['--json']).stdout).fingerprint;
+  // Gate B shows the person the playable opening first; record that it was shown (automated, synthetic).
+  const op = nodeIn(d, 'preflight-reel.mjs', ['--record-opening', '--end', '2']);
+  if (op.status !== 0) return op;
   return nodeIn(d, 'preflight-reel.mjs', ['--approve', '--fingerprint', fp.slice(0, 12), '--approved-by', 'smoke-test (automated, synthetic plan)']);
 };
 const scaffold = (s, mode, duration, extra = {}) => {

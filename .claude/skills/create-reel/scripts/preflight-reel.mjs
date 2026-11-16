@@ -3,6 +3,7 @@
 // facts the person needs to approve it, and (with --approve) record that person's explicit approval.
 //
 // Usage:  node .claude/skills/create-reel/scripts/preflight-reel.mjs <project-folder> [--json]
+//         node .claude/skills/create-reel/scripts/preflight-reel.mjs <project-folder> --record-opening --end <s> [--file index.html] [--url <studio url>]
 //         node .claude/skills/create-reel/scripts/preflight-reel.mjs <project-folder> --approve --fingerprint <12+ hex>
 //                --approved-by "<name>" [--paid-provider <name> --spend-limit "<limit>" [--max-calls N]] [--note "..."]
 //
@@ -15,13 +16,14 @@
 // can run it. Paid generation is not approved unless --paid-provider and --spend-limit are given.
 // Exit codes: 0 valid (or approved), 1 invalid or refused, 2 usage.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, resolve, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { kitRoot } from './lib.mjs';
 import { preflightStatus, readPreflightInputs } from './qa-core.mjs';
 import { validateVisualPlan } from '../../short-form-edit/scripts/validate-plan.mjs';
 
-const BOOL = new Set(['approve', 'json', 'help']);
+const BOOL = new Set(['approve', 'json', 'help', 'recordOpening']);
 function parseArgs(argv) {
   const o = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -48,6 +50,34 @@ export function preflightReport(dir) {
   return { dir, reel, plan: inputs.plan, status, errors: [...new Set(errors)] };
 }
 
+// The opening preview: the first ~5 s of the reel built at final fidelity (real footage, voice, captions, representative
+// sound) and shown to the person in HyperFrames Studio before the rest is built. Recorded, not judged: the record says
+// which composition file and time range was shown, and its hash at the time.
+export function openingStatus(reel, dir) {
+  if (!reel.openingPreviewRequired) return { required: false, ok: true, text: 'not required (project created before the opening-preview rule)' };
+  const o = reel.openingPreview;
+  if (!o) return { required: true, ok: false, text: 'MISSING: build the first ~5 s in HyperFrames Studio, show it to the person, then record it with --record-opening --end <seconds>' };
+  const file = join(dir, o.file);
+  return { required: true, ok: true, text: `shown ${o.start}-${o.end} s of ${o.file} in Studio${o.url ? ` (${o.url})` : ''}, recorded ${o.recordedAt}${existsSync(file) ? '' : ' (file since removed)'}` };
+}
+
+export function recordOpening(dir, { end, file = 'index.html', url = '' } = {}) {
+  dir = resolve(dir);
+  const reelPath = join(dir, 'reel.json');
+  if (!existsSync(reelPath)) throw new Error(`No reel.json in ${dir}.`);
+  const reel = JSON.parse(readFileSync(reelPath, 'utf8'));
+  const e = Number(end);
+  if (!(e > 0 && e <= 12)) throw new Error('--end must be the length of the opening shown, in seconds (about 5; at most 12).');
+  const path = join(dir, file);
+  if (!existsSync(path)) throw new Error(`--file ${file} does not exist in the project: build the opening first.`);
+  let planFingerprint = null; // the creative plan this opening was shown for, so an approval can be tied to the preview
+  try { planFingerprint = preflightReport(dir).status.fingerprint || null; } catch { /* no readable plan yet */ }
+  reel.openingPreview = { start: 0, end: e, file, url: String(url || ''), sha256: createHash('sha256').update(readFileSync(path)).digest('hex'), planFingerprint,
+    recordedAt: new Date().toISOString(), note: 'Shown to the person in HyperFrames Studio before the rest of the reel was built.' };
+  writeFileSync(reelPath, JSON.stringify(reel, null, 2) + '\n');
+  return reel.openingPreview;
+}
+
 export function approvePreflight(dir, { fingerprint, approvedBy, paidProvider, spendLimit, maxCalls, note = '' } = {}) {
   const r = preflightReport(dir);
   if (!r.status.required) throw new Error('This reel does not use the creative preflight (legacy project: no preflightRequired and no schemaVersion 2 plan).');
@@ -57,6 +87,8 @@ export function approvePreflight(dir, { fingerprint, approvedBy, paidProvider, s
   if (!String(approvedBy || '').trim()) throw new Error('--approved-by is required: name the person who approved the creative plan.');
   if (!!paidProvider !== !!spendLimit) throw new Error('Paid generation needs both --paid-provider and --spend-limit, or neither.');
   if (maxCalls !== undefined && !(Number(maxCalls) > 0)) throw new Error('--max-calls must be a positive number.');
+  const op = openingStatus(r.reel, r.dir);
+  if (!op.ok) throw new Error(`the opening preview is ${op.text}`);
   const reel = r.reel, previous = reel.preflight;
   reel.preflight = {
     status: 'approved',
@@ -159,6 +191,7 @@ function printReport(r) {
   console.log(`Paid assets planned: ${m.paidAssets?.join(', ') || 'none'}${m.paidAssets?.length ? ` (approved scope: ${r.reel.preflight?.paidScope ? JSON.stringify(r.reel.preflight.paidScope) : 'none; ask for a provider and spending limit'})` : ''}`);
   console.log(`Planned callbacks (declared, not verified as rendered transitions): ${(m.callbacks || []).map(c => `${c.from} -> ${c.to} ${c.motif}${c.element ? ` #${c.element}` : ''}${c.adjacent ? '' : ' (callback)'}`).join(', ') || 'none'}`);
   if (scenes.length) printMechanics(storyMechanics(plan));
+  console.log(`Opening preview (first ~5 s, playable in HyperFrames Studio): ${openingStatus(r.reel, r.dir).text}`);
   const approval = r.reel.preflight;
   console.log(`\nApproval: ${status.ok ? `APPROVED by ${approval.approvedBy} at ${approval.approvedAt}; the current plan matches` : approval?.status === 'approved' ? 'approved earlier, but no longer valid:' : 'not approved'}`);
   if (!status.ok) for (const p of status.problems) if (!r.errors.includes(p)) console.log(`  - ${p}`);
@@ -173,17 +206,20 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   let o;
   try { o = parseArgs(process.argv.slice(2)); } catch (e) { console.error(e.message); process.exit(2); }
   if (!o._[0] || o.help) {
-    console.log('Usage: node .claude/skills/create-reel/scripts/preflight-reel.mjs <project-folder> [--json] | --approve --fingerprint <12+ hex> --approved-by "<name>" [--paid-provider <p> --spend-limit "<limit>" [--max-calls N]]');
+    console.log('Usage: node .claude/skills/create-reel/scripts/preflight-reel.mjs <project-folder> [--json] | --record-opening --end <s> [--file index.html] [--url <studio url>] | --approve --fingerprint <12+ hex> --approved-by "<name>" [--paid-provider <p> --spend-limit "<limit>" [--max-calls N]]');
     process.exit(o.help ? 0 : 2);
   }
   try {
-    if (o.approve) {
+    if (o.recordOpening) {
+      const p = recordOpening(o._[0], { end: o.end, file: o.file, url: o.url });
+      console.log(`Opening preview recorded: ${p.start}-${p.end} s of ${p.file}${p.url ? ` at ${p.url}` : ''} (${p.sha256.slice(0, 12)}). Present it with the Gate B report and wait.`);
+    } else if (o.approve) {
       const p = approvePreflight(o._[0], o);
       console.log(`Creative preflight approved by ${p.approvedBy} (${p.fingerprint.slice(0, 12)}). Paid generation: ${p.paidScope ? JSON.stringify(p.paidScope) : 'not approved'}.`);
       console.log('Recorded in reel.json "preflight". This is a workflow safeguard, not proof of identity.');
     } else {
       const r = preflightReport(o._[0]);
-      if (o.json) console.log(JSON.stringify({ required: r.status.required, valid: !r.errors.length, approved: r.status.ok, errors: r.errors, problems: r.status.problems, warnings: r.status.warnings, fingerprint: r.status.fingerprint ?? null, metrics: r.status.validation?.metrics ?? null, storyMechanics: r.plan?.scenes ? storyMechanics(r.plan) : null }, null, 2));
+      if (o.json) console.log(JSON.stringify({ required: r.status.required, valid: !r.errors.length, approved: r.status.ok, errors: r.errors, problems: r.status.problems, warnings: r.status.warnings, fingerprint: r.status.fingerprint ?? null, opening: openingStatus(r.reel, r.dir), metrics: r.status.validation?.metrics ?? null, storyMechanics: r.plan?.scenes ? storyMechanics(r.plan) : null }, null, 2));
       else printReport(r);
       process.exitCode = r.errors.length ? 1 : 0;
     }

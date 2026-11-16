@@ -3,7 +3,12 @@
 
 A pass proves the mechanical checks only, never that the facts are right.
 
-Usage: python -I -X utf8 check_reel.py reel-01-topic.md [--source transcript.md] [--final]
+Usage: python -I -X utf8 check_reel.py reel-01-topic.md [--source transcript.md] [--seconds 45] [--wpm 165] [--final]
+
+Script length is judged by time, not by word count: the source's real duration (from --seconds, or a
+"Duration: 45s" line in the source file) against each script spoken at Mits's pace (--wpm, else the
+"Pace:" line in voice.md, else 165). Source creators often talk far faster than Mits, so matching
+their word count makes the script too long.
 """
 
 import argparse
@@ -37,6 +42,17 @@ WORD_RE = re.compile(r"[A-Za-z0-9$%'’-]+")
 GENERIC_TAGS = {"fyp", "foryou", "foryoupage", "viral", "explore", "explorepage", "trending", "reels", "reel",
                 "instagood", "tiktok", "youtube"}
 SCRIPT_MAX_DELTA = 0.20
+SCRIPT_HARD_OVER = 0.35   # longer than this over the source duration fails even when explained
+VOICE = "D:/herk-edit-kit/reels-data/voice.md"
+DEFAULT_WPM = 165
+META_LINE_RE = re.compile(r"^\s*(#+ |(source|published|duration|creator|url|reach|views|likes|captured|stats)\b[^:]{0,20}:)", re.I)
+DURATION_RE = re.compile(r"^\s*duration\b[^:]{0,20}:\s*([\d.]+)\s*s", re.I | re.M)
+SENT_RE = re.compile(r"[^.!?]+[.!?]?")
+STOPWORDS = set("""a an the and or but so if then than that this these those it its it's is are was were be been
+being to of in on at for from with by as into about over under up down out you your you're i i'll i'm me my we our
+they their them he she his her what which who whom when where why how all any some more most other such no not only
+own same too very can will just do does did done have has had get gets got there here one each also even like
+because than ve ll re s t don't doesn't isn't aren't""".split())
 MAX_ECHO = 0.25       # shared word runs with the source. Above this, paraphrase.
 MAX_SIMILAR = 0.5     # shared word runs between A and B, or between two captions. Above this, too alike.
 # label, hashtag range, word range (hashtags excluded), first-line character limit
@@ -233,10 +249,49 @@ def check_comparison(comparison, add, final=False):
         add("PASS", "STATUS EVIDENCE", "consistent with the warnings and links")
 
 
+def spoken_source(text):
+    """The transcript body only: drop headings and metadata lines that would inflate the word count."""
+    return "\n".join(ln for ln in text.splitlines() if not META_LINE_RE.match(ln))
+
+
+def voice_wpm(path=VOICE):
+    try:
+        m = re.search(r"Pace:\**\s*(\d+)\s*words per minute", open(path, encoding="utf-8").read(), re.I)
+        return int(m.group(1)) if m else DEFAULT_WPM
+    except OSError:
+        return DEFAULT_WPM
+
+
+def check_repetition(key, label, text, add):
+    """Flag scripts that drone: many sentences opening the same way, or one idea word said again and again."""
+    sentences = [s.strip() for s in SENT_RE.findall(text) if len(words(s)) >= 2]
+    openers = {}
+    for s in sentences:
+        first = re.sub(r"['’](s|ll|re|ve|d)$", "", words(s)[0])   # "It's" and "It" are the same opener
+        openers[first] = openers.get(first, 0) + 1
+    worst = max(openers.items(), key=lambda kv: kv[1], default=("", 0))
+    if sentences and worst[1] >= 4 and worst[1] / len(sentences) >= 0.3:
+        add("WARN", f"SCRIPT {label} OPENERS", f"{worst[1]} of {len(sentences)} sentences start with \"{worst[0]}\"")
+    else:
+        add("PASS", f"SCRIPT {label} OPENERS", "varied")
+    counts = {}
+    for w in words(text):
+        if w not in STOPWORDS and len(w) > 3:
+            counts[w] = counts.get(w, 0) + 1
+    repeated = sorted((w for w, c in counts.items() if c >= 3), key=lambda w: -counts[w])
+    if repeated:
+        add("WARN", f"SCRIPT {label} REPEATS",
+            ", ".join(f"{w} x{counts[w]}" for w in repeated[:6]) + ": say each idea once unless it is the name")
+    else:
+        add("PASS", f"SCRIPT {label} REPEATS", "no word used 3+ times")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("reel")
     ap.add_argument("--source", help="original transcript, for length and echo checks")
+    ap.add_argument("--seconds", type=float, help="the source Reel's real duration in seconds")
+    ap.add_argument("--wpm", type=int, help="Mits's speaking rate (default: voice.md Pace line, else 165)")
     ap.add_argument("--final", action="store_true", help="require a final status from the independent review")
     ap.add_argument("--corrections", default=CORRECTIONS, help="corrections file")
     args = ap.parse_args()
@@ -266,18 +321,38 @@ def main():
     sim = overlap(parts["script_a"], parts["script_b"])
     add("PASS" if sim <= MAX_SIMILAR else "WARN", "A/B DISTINCT", f"{sim:.0%} of A's word runs appear in B")
 
+    for key, label in (("script_a", "A"), ("script_b", "B")):
+        check_repetition(key, label, parts[key], add)
+
     if args.source:
-        source = open(args.source, encoding="utf-8").read()
-        base = len(words(source))
+        raw_source = open(args.source, encoding="utf-8").read()
+        source = spoken_source(raw_source)
+        wpm = args.wpm or voice_wpm()
+        seconds = args.seconds
+        if not seconds and (m := DURATION_RE.search(raw_source)):
+            seconds = float(m.group(1))
+        if seconds:
+            add("PASS", "SOURCE DURATION", f"{seconds:.0f}s real; budget {seconds * wpm / 60:.0f} words at {wpm} wpm")
+        else:
+            seconds = len(words(source)) / DEFAULT_WPM * 60
+            add("WARN", "SOURCE DURATION", f"no real duration, estimated {seconds:.0f}s from word count. "
+                "Add 'Duration: Ns' to the source or pass --seconds; fast talkers make this estimate too long")
+        explained = field(parts["comparison"], "Duration change")
+        explained = explained and explained.rstrip(".").lower() != "none"
         for key, label in (("script_a", "A"), ("script_b", "B")):
             n = len(words(parts[key]))
-            delta = (n - base) / base if base else 0
-            ok = abs(delta) <= SCRIPT_MAX_DELTA
-            explained = field(parts["comparison"], "Duration change")
-            explained = explained and explained.rstrip(".").lower() != "none"
-            add("PASS" if ok else "WARN" if explained else "FAIL", f"SCRIPT {label} LENGTH",
-                f"{n} words vs source {base} ({delta:+.0%})"
-                + ("" if ok else ", explained, for review" if explained else ", unexplained"))
+            spoken = n / wpm * 60
+            delta = (spoken - seconds) / seconds if seconds else 0
+            if abs(delta) <= SCRIPT_MAX_DELTA:
+                status, note = "PASS", ""
+            elif delta > SCRIPT_HARD_OVER:
+                status, note = "FAIL", ", too long even with an explanation: cut repetition and qualifiers"
+            elif explained:
+                status, note = "WARN", ", explained, for review"
+            else:
+                status, note = "FAIL", ", unexplained"
+            add(status, f"SCRIPT {label} LENGTH",
+                f"{n} words = {spoken:.0f}s at {wpm} wpm vs source {seconds:.0f}s ({delta:+.0%}){note}")
             echo = overlap(parts[key], source)
             add("PASS" if echo <= MAX_ECHO else "WARN", f"SCRIPT {label} ORIGINAL",
                 f"{echo:.0%} of word runs copied from the source")
