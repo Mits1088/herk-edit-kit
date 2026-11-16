@@ -13,6 +13,8 @@ Ask no setup questions. Mits drops new transcripts in `D:/herk-edit-kit/Instagra
 
 **Real duration.** Every transcript file should carry a `Duration: Ns` line near the top, because script length is judged against the source's real seconds at Mits's pace, not its word count. When you pull a transcript from Signal Room, write its `durationSeconds` there. When a file has an Instagram URL but no `Duration:` line and the Signal Room tools are available, look it up and add it before queueing. Keep any other metadata (views, likes, reach) to one `Stats:` line so it is not mistaken for spoken words.
 
+**Note from Mits.** A transcript's header may carry a `Note from Mits:` line. It is his own direction for the rewrite (the angle he wants), written by him and never spoken in the source. Do not treat it as transcript text, quote it as a source line, or count it among the source's words. Use it to steer both versions, and keep the line in the file when you copy, move or split it.
+
 Run `pwd` to choose the route.
 
 ## Route 1: inside ClaudeClaw (the path contains `.claudeclaw/agents/main`)

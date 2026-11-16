@@ -1,4 +1,5 @@
-// Research area of the Command Centre. Read-only: it shows research already saved in reels-data/research/.
+// Research area of the Command Centre. It shows research already saved in reels-data/research/, and lets Mits
+// save an idea with his own angle, copy a brief, and export a qualifying short-form post to the script workflow.
 // New research runs in Claude Code (the research-signals skill) and arrives through the importer.
 // Loaded by index.html, which calls Research.mount(app) when the Research view is chosen.
 (() => {
@@ -18,19 +19,29 @@
   const WINDOW = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months', all: 'any date' };
   const DEFAULTS = { search: '', q: '', platform: '', format: '', window: '30', sort: 'published' };
 
-  let root = null, tab = 'signals', F = { ...DEFAULTS }, data = null, searches = null, detail = null, detailId = null, error = null, returnTo = null;
+  let root = null, tab = 'signals', F = { ...DEFAULTS }, data = null, searches = null, ideas = null, detail = null, detailId = null, error = null, returnTo = null, removeAsk = false, busy = false;
   const get = async url => { const r = await fetch(url); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; };
 
   async function loadList() { error = null; try { data = await get('/api/research?' + new URLSearchParams(F)); } catch (x) { error = x.message; } draw(); }
+  async function loadIdeas() { error = null; try { ideas = (await get('/api/research/ideas')).ideas; } catch (x) { error = x.message; } draw(); }
+  const LOAD = { signals: () => loadList(), searches: () => loadSearches(), ideas: () => loadIdeas() };
+  // One saved-idea action. A click is ignored while a request is in flight, and every action is repeat-safe on the server.
+  async function act(body, focusSel) {
+    if (busy) return; busy = true;
+    try { const r = await fetch('/api/research/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); toast(r.ok ? j.message : j.error || 'That did not work'); }
+    catch (x) { toast('That did not work: ' + x.message); }
+    busy = false; removeAsk = false; data = null; ideas = null;
+    if (detailId) { try { detail = await get('/api/research/post?' + new URLSearchParams({ id: detailId, q: F.q || F.search })); } catch (x) { error = x.message; } draw(); const f = focusSel && root.querySelector(focusSel); if (f) f.focus(); }
+  }
   async function loadSearches() { error = null; try { searches = (await get('/api/research/searches')).searches; } catch (x) { error = x.message; } draw(); }
   async function openPost(id) {
-    returnTo = id; detailId = id; detail = null; draw(); window.scrollTo(0, 0);
+    returnTo = id; detailId = id; detail = null; removeAsk = false; draw(); window.scrollTo(0, 0);
     try { detail = await get('/api/research/post?' + new URLSearchParams({ id, q: F.q || F.search })); } catch (x) { error = x.message; detailId = null; }
     draw(); const h = root && root.querySelector('#r-title'); if (h) h.focus();
   }
 
   // ---- pieces ----
-  const tags = r => `<span class="r-tags">${r.providers.map(p => `<span class="r-tag" title="${e(SOURCE_KIND[p])}">${e(SOURCE[p] || p)} · ${e(SOURCE_KIND[p] || '')}</span>`).join('')}</span>`;
+  const tags = (r, saved) => `<span class="r-tags">${saved ? '<span class="r-tag r-saved">Saved idea</span>' : ''}${r.providers.map(p => `<span class="r-tag" title="${e(SOURCE_KIND[p])}">${e(SOURCE[p] || p)} · ${e(SOURCE_KIND[p] || '')}</span>`).join('')}</span>`;
   const fresh = m => m.measuredAt ? `<span class="${m.stale ? 'r-warn' : ''}">Measured ${ago(m.ageDays)}${m.stale ? ' (stale)' : ''}</span>` : '<span class="r-warn">Measurement time unknown</span>';
   function engagementCell(r) {
     const g = r.engagement; if (!g) return '<span class="sub">No count recorded</span>';
@@ -52,7 +63,7 @@
     return `<div class="r-frame"><table class="r-table r-list"><caption class="sub" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">${e(caption)}</caption>
     <thead><tr><th scope="col">Post</th><th scope="col">Published</th><th scope="col">Evidence saved</th><th scope="col">Raw engagement</th><th scope="col">Creator outlier</th><th scope="col">Growth</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td class="post" data-label="Post"><button class="r-open" data-r-open="${e(r.id)}">${e(r.title || 'Untitled post')}</button>
-      <span class="sub">${e(r.creator.handle ? '@' + String(r.creator.handle).replace(/^@/, '') : r.creator.name || 'Creator unknown')} · ${dur(r.durationSeconds)}</span>${tags(r)}</td>
+      <span class="sub">${e(r.creator.handle ? '@' + String(r.creator.handle).replace(/^@/, '') : r.creator.name || 'Creator unknown')} · ${dur(r.durationSeconds)}</span>${tags(r, data.ideaPosts.includes(r.id))}</td>
       <td class="nowrap" data-label="Published">${publishedCell(r)}</td><td data-label="Evidence saved">${evidenceCell(r)}</td>
       <td data-label="Raw engagement">${engagementCell(r)}</td><td data-label="Creator outlier">${outlierCell(r)}</td><td data-label="Growth">${growthCell(r)}</td></tr>`).join('')}
     </tbody></table></div>`;
@@ -84,6 +95,47 @@
     return `${note()}${filters}${fails}${summary}${groups || '<div class="panel"><p>No saved post matches these filters.</p></div>'}`;
   }
   const note = () => `<div class="r-note"><span>These filters search research already saved on this PC. They do not run a new search.</span><span>New research runs in Claude Code:</span><code>/research-signals &lt;topic&gt;</code><button class="btn small" data-r-copy="/research-signals ">Copy command</button></div>`;
+
+  // ---- Ideas ----
+  const PF = p => `${PLATFORM[p.platform]} · ${FORMAT[p.format]}`;
+  function ideaState(x) {
+    if (x.exported) return ['ok', 'Exported to the script workflow', `${x.exported.file} · ${when(x.exported.at)}`];
+    if (x.handoff.ok) return ['you', 'Ready to export', 'Short-form with a full transcript, a source link and a duration.'];
+    return ['wait', 'Brief only', x.handoff.reasons.join(' ')];
+  }
+  function vIdeas() {
+    if (!ideas) return '<p class="sub">Loading saved ideas…</p>';
+    if (!ideas.length) return '<div class="panel"><h3>No idea is saved yet</h3><p>Open a post in Signals and choose Save idea. A post can be saved with or without a transcript.</p></div>';
+    return `<p class="sub">Your saved ideas, newest first. Your angle is your own direction; the source evidence stays on the post's page. Research imports never change an idea.</p><div class="r-ideas">` + ideas.map((x, i) => {
+      if (x.missing) return `<section class="panel"><h3>Source post not found</h3><p class="sub">The post <span class="mono">${e(x.idea.postId)}</span> is no longer in the research store. Your angle is kept.</p><div class="r-angle">${e(x.idea.angle || 'No angle written.')}</div></section>`;
+      const [cls, label, why] = ideaState(x);
+      return `<section class="panel" aria-label="Idea: ${e(x.post.title || 'Untitled post')}"><div class="r-head"><div><button class="r-open" data-r-open="${e(x.post.id)}">${e(x.post.title || 'Untitled post')}</button><span class="r-tags"><span class="r-tag">${e(PF(x.post))}</span><span class="r-tag">${EVIDENCE[x.post.evidence]}</span></span></div><span class="pill ${cls}">${label}</span></div>
+        <div><p class="r-kind">Your angle</p>${x.idea.angle ? `<div class="r-angle">${e(x.idea.angle)}</div>` : '<p class="sub">No angle written yet.</p>'}</div>
+        <p class="sub">${e(why)}</p>
+        <div class="row"><button class="btn small" data-r-open="${e(x.post.id)}" aria-label="Open idea and evidence: ${e(x.post.title || 'Untitled post')}">Open idea and evidence</button><button class="btn small" data-r-briefof="${i}">Copy brief</button></div></section>`;
+    }).join('') + '</div>';
+  }
+
+  // Mits's own direction for one post: kept visibly apart from the source evidence further down the page.
+  function ideaPanel(d) {
+    const i = d.idea, x = d.exported, h = d.handoff;
+    const intro = '<p class="sub">Your own direction. It is kept apart from the source evidence below, and research imports never change it.</p>';
+    if (d.remote) return `<section class="panel r-idea" aria-label="Your idea"><h3>Your idea</h3><p class="sub">${i ? 'Saved.' : 'Not saved.'} Ideas are saved, edited and exported on the PC.</p>${i && i.angle ? `<div class="r-angle">${e(i.angle)}</div>` : ''}</section>`;
+    const field = `<div class="r-field r-angle-field"><label for="r-angle">Your angle or note${i ? '' : ' (optional)'}</label><textarea id="r-angle" rows="3" maxlength="2000" placeholder="For example: show the build live instead of describing it">${e(i ? i.angle : '')}</textarea></div>`;
+    if (!i) return `<section class="panel r-idea" aria-label="Your idea"><h3>Your idea</h3>${intro}${field}<div class="row"><button class="btn primary" data-r-save="1">Save idea</button><span class="sub">Works with or without a transcript.</span></div></section>`;
+    let hand;
+    if (x) hand = `<p>Exported ${when(x.at)} as <span class="mono">${e(x.file)}</span>. ${x.waiting ? 'The file is waiting in Instagram_transcript.' : 'The file is no longer in the drop folder: the script workflow has taken it, or it was moved.'}</p>
+      ${x.angleChanged ? '<p class="r-warn">You changed your angle after exporting. The exported file still carries the earlier one.</p>' : ''}
+      <div class="row"><span class="sub">Start the scripts in Claude Code:</span><code class="mono">${e(x.command)}</code><button class="btn small" data-r-copy="${e(x.command)}" data-r-toast="Copied. Paste it into Claude Code.">Copy command</button></div>
+      ${x.pipelineId ? `<div class="row"><button class="btn small" data-r-pipeline="${e(x.pipelineId)}">Open “${e(x.pipelineTitle)}” in Pipeline</button></div>` : '<p class="sub">No Pipeline item is linked to this file yet.</p>'}`;
+    else if (h.ok) hand = `<div class="row"><button class="btn primary" data-r-export="1">Export to the script workflow</button><span class="sub">Writes one transcript file into Instagram_transcript, with your angle on its own “Note from Mits” line. Nothing else changes, and an existing file is never replaced.</span></div>`;
+    else hand = `<p>Not available for this post:</p><ul class="r-reasons">${h.reasons.map(r => `<li>${e(r)}</li>`).join('')}</ul>`;
+    return `<section class="panel r-idea" aria-label="Your idea"><div class="r-head"><h3>Your idea</h3><span class="pill ok">Saved</span></div>${intro}${field}
+      <p class="sub">Saved ${when(i.createdAt)}${i.updatedAt !== i.createdAt ? ' · last changed ' + when(i.updatedAt) : ''}</p>
+      <div class="row"><button class="btn" data-r-angle="1">Save angle</button><button class="btn" data-r-copybrief="1">Copy brief</button>
+      ${x ? '' : removeAsk ? '<span class="sub">Remove this idea and its angle?</span><button class="btn small" data-r-removeyes="1">Yes, remove the idea</button><button class="btn small" data-r-removeno="1">Keep it</button>' : '<button class="btn small" data-r-remove="1">Remove idea</button>'}</div>
+      <div class="r-hand"><h4>Short-form handoff</h4>${hand}</div></section>`;
+  }
 
   // ---- Searches ----
   function vSearches() {
@@ -131,30 +183,39 @@
     const inputs = `<section class="panel" aria-label="Builder inputs"><h3>Original records</h3><p class="sub">What the batch was built from, kept so a copied number can be checked against its source.</p>
       ${d.builderInputs.map(b => `<div><p><span class="mono">${e(b.batchId)}</span> · ${e(SOURCE[b.provider])} · ${b.kept ? `kept in <span class="mono">${e(b.folder)}</span>` : '<span class="r-warn">not kept for this batch</span>'}</p>
         ${b.records.length ? b.records.map(r => `<details><summary class="sub">${e(r.what)}</summary><pre class="r-json">${e(JSON.stringify(r.data, null, 2))}</pre></details>`).join('') : b.kept ? '<p class="sub">This post was not found in the kept records.</p>' : ''}</div>`).join('') || '<p class="sub">No batch is recorded for this post.</p>'}</section>`;
-    return `${back}<div class="r-detail"><div><h2 id="r-title" tabindex="-1">${d.titleSegments ? segs(d.titleSegments) : e(d.title || 'Untitled post')}</h2><span class="r-tags">${d.providers.map(p => `<span class="r-tag">${e(SOURCE[p])} · ${e(SOURCE_KIND[p])}</span>`).join('')}</span></div>${facts}${found}${meas}${text}${inputs}</div>`;
+    return `${back}<div class="r-detail"><div><h2 id="r-title" tabindex="-1">${d.titleSegments ? segs(d.titleSegments) : e(d.title || 'Untitled post')}</h2><span class="r-tags">${d.providers.map(p => `<span class="r-tag">${e(SOURCE[p])} · ${e(SOURCE_KIND[p])}</span>`).join('')}</span></div>${ideaPanel(d)}<h3 class="r-divide">Source evidence</h3>${facts}${found}${meas}${text}${inputs}</div>`;
   }
 
   function draw() {
     if (!root || !root.isConnected) return;
-    const head = `<div class="r-head"><h2>Research</h2><span class="seg r-seg" role="group" aria-label="Research views"><button data-r-tab="signals" aria-current="${tab === 'signals'}">Signals</button><button data-r-tab="searches" aria-current="${tab === 'searches'}">Searches</button></span></div>`;
+    const head = `<div class="r-head"><h2>Research</h2><span class="seg r-seg" role="group" aria-label="Research views"><button data-r-tab="signals" aria-current="${tab === 'signals'}">Signals</button><button data-r-tab="ideas" aria-current="${tab === 'ideas'}">Ideas</button><button data-r-tab="searches" aria-current="${tab === 'searches'}">Searches</button></span></div>`;
     const err = error ? `<div class="r-fail" role="alert">Could not read saved research: ${e(error)}</div>` : '';
-    root.innerHTML = detailId ? err + vPost() : head + err + (tab === 'signals' ? vSignals() : vSearches());
+    root.innerHTML = detailId ? err + vPost() : head + err + (tab === 'signals' ? vSignals() : tab === 'ideas' ? vIdeas() : vSearches());
   }
 
   function mount(app) {
     app.innerHTML = '<div id="research-root" style="display:grid;gap:16px"></div>'; root = app.firstChild; draw();
-    if (detailId) return; (tab === 'signals' ? loadList : loadSearches)();
+    if (detailId) return; LOAD[tab]();
   }
   function readForm() { const fd = new FormData(root.querySelector('#r-form')); for (const k of Object.keys(DEFAULTS)) F[k] = String(fd.get(k) ?? DEFAULTS[k]); }
 
   document.addEventListener('click', ev => {
     if (!root || !root.contains(ev.target)) return; const b = ev.target.closest('button'); if (!b) return; const d = b.dataset;
-    if (d.rTab) { tab = d.rTab; draw(); (tab === 'signals' ? loadList : loadSearches)(); }
+    if (d.rTab) { tab = d.rTab; draw(); LOAD[tab](); }
     else if (d.rOpen) openPost(d.rOpen);
-    else if (d.rBack) { detailId = null; detail = null; draw(); if (!data) loadList(); const again = returnTo && root.querySelector(`[data-r-open="${CSS.escape(returnTo)}"]`); if (again) { const h = again.closest('details'); if (h) h.open = true; again.focus(); } }
+    else if (d.rBack) { detailId = null; detail = null; draw(); const refocus = () => { const again = returnTo && root.querySelector(`[data-r-open="${CSS.escape(returnTo)}"]`); if (again) { const h = again.closest('details'); if (h) h.open = true; again.focus(); } }; if (tab !== 'signals' || !data) LOAD[tab]().then(refocus); else refocus(); }
     else if (d.rReset) { F = { ...DEFAULTS }; loadList(); }
     else if (d.rShow) { F = { ...DEFAULTS, search: d.rShow, window: 'all' }; tab = 'signals'; data = null; draw(); loadList(); }
-    else if (d.rCopy !== undefined) copyText(d.rCopy).then(() => toast('Copied. Paste it into Claude Code and add your topic.'), () => toast('Copy was blocked; select the text instead'));
+    else if (d.rSave) act({ type: 'save-idea', postId: detailId, angle: root.querySelector('#r-angle').value }, '#r-angle');
+    else if (d.rAngle) act({ type: 'set-angle', ideaId: detail.idea.id, angle: root.querySelector('#r-angle').value }, '[data-r-angle]');
+    else if (d.rExport) act({ type: 'export-idea', ideaId: detail.idea.id }, '[data-r-copy]');
+    else if (d.rRemove) { removeAsk = true; draw(); root.querySelector('[data-r-removeno]').focus(); }
+    else if (d.rRemoveno) { removeAsk = false; draw(); root.querySelector('[data-r-remove]').focus(); }
+    else if (d.rRemoveyes) act({ type: 'remove-idea', ideaId: detail.idea.id }, '#r-angle');
+    else if (d.rCopybrief) copyText(detail.brief).then(() => toast('Brief copied'), () => toast('Copy was blocked'));
+    else if (d.rBriefof !== undefined) copyText(ideas[Number(d.rBriefof)].brief).then(() => toast('Brief copied'), () => toast('Copy was blocked'));
+    else if (d.rPipeline) load(true).then(() => open(d.rPipeline));
+    else if (d.rCopy !== undefined) copyText(d.rCopy).then(() => toast(d.rToast || 'Copied. Paste it into Claude Code and add your topic.'), () => toast('Copy was blocked; select the text instead'));
     else if (d.rCopytranscript) copyText(detail.transcriptText).then(() => toast('Transcript copied'), () => toast('Copy was blocked; select the text instead'));
   });
   document.addEventListener('submit', ev => { if (ev.target.id === 'r-form') { ev.preventDefault(); readForm(); loadList(); } });

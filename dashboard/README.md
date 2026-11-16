@@ -139,10 +139,10 @@ reads the saved record back; the page moves on only if the record is there.
 These write to the project's `reel.json`, the candidate's `qa.json` and `QA.md`, and `renders/final.mp4` (the
 previous final is archived by the script), all through the two scripts.
 
-## Research (store, importer and read-only page)
+## Research (store, importer, page and saved ideas)
 
 Research on Instagram, YouTube and TikTok is kept in `reels-data/research/` (gitignored). The dashboard server
-does not write there and cannot call Signal Room, whose login lives in Claude Code. Claude runs the research
+writes one file there, `ideas.json` (your saved ideas), and cannot call Signal Room, whose login lives in Claude Code. Claude runs the research
 (the `research-signals` skill, which builds the batch from raw results with `build-batch.mjs`),
 writes one batch file, and this command merges it:
 
@@ -156,7 +156,7 @@ The whole batch is checked first. If anything is wrong it lists every problem, e
 | --- | --- |
 | `posts/<platform>-<id>.json` | One post per platform and native id: link, format, duration, creator, caption, transcript, provenance, measurements. YouTube file names carry the id in hex, because YouTube ids are case-sensitive and Windows file names are not; the real id is `nativeId` inside. |
 | `searches.jsonl` | One line per imported batch: the query, each source run with its status, error and ordered results. |
-| `ideas.json` | Saved ideas and notes (stage 4). The importer never writes to it. |
+| `ideas.json` | Saved ideas: the post, your angle, and any export record. Written by the Research page only. The importer never writes to it. |
 | `inbox/` | Where batch files are put. The importer reads the file it is given and leaves it in place. |
 | `sources/<batchId>/` | What `build-batch.mjs` built the batch from: the draft and the last30free output files. Kept so a copied number can be checked. |
 | `archive/` | Earlier stores set aside by hand. Nothing reads it. |
@@ -231,8 +231,9 @@ The whole batch is checked first. If anything is wrong it lists every problem, e
 
 ### The Research page
 
-Research in the main navigation, with two views. It only reads; the routes are `GET /api/research`,
-`/api/research/searches` and `/api/research/post`. Saving ideas and handing off to production are not built yet.
+Research in the main navigation, with three views: Signals, Ideas and Searches. The read routes are
+`GET /api/research`, `/api/research/searches`, `/api/research/post` and `/api/research/ideas`. Saved ideas and the
+short-form export go through `POST /api/research/action`, on this PC only.
 
 - **Signals.** Filters search what is already saved (saved search, words in the saved text, platform, format,
   publication date, sort). They never run a new search; the page shows the Claude Code command for that.
@@ -250,8 +251,31 @@ Research in the main navigation, with two views. It only reads; the routes are `
   only when a transcript does. "Original records" shows the kept builder inputs for that post.
 - **Searches.** Every imported search with each run's result, failure text and notes.
 
-Tests: `node --test tests/research.test.mjs tests/research-view.test.mjs tests/research-signals.test.mjs`.
-Browser check with screenshots (headless, sends no actions): `node dashboard/dev/check-research.mjs`.
+### Saved ideas, Copy brief and the short-form export
+
+- **Save idea** is on every post's page, with or without a transcript. One idea per post: a second click changes
+  nothing. Your angle (up to 2,000 characters) can be edited at any time and is shown in its own panel, above a
+  "Source evidence" heading. An idea can be removed until it has been exported.
+- **Copy brief** works for every saved idea, long-form included. It carries the source link, platform and format,
+  your angle under its own heading, the measurements, and each text under what it is: search excerpt, caption or
+  description, transcript (the first 250 words when longer). Long-form has no production workflow connected yet,
+  so the brief is its only handoff.
+- **Export to the script workflow** appears only when the post is verified short-form and has a real full
+  transcript, a source link and a duration. A caption or a search excerpt is not a transcript. Otherwise the page
+  lists what is missing.
+- The export writes `Instagram_transcript/research-<platform>-<id>.md`: a `## Reel:` heading, `Source:`,
+  `Duration: Ns`, one `Stats:` line, your angle on a `Note from Mits:` line, a blank line, then the spoken words.
+  `rewrite-reels` and `check_reel.py` treat the note as your direction, never as source speech.
+- It never overwrites. A different file with that name is refused; an identical one (an interrupted export) is
+  adopted. A second export of the same idea writes nothing. The idea records the file, time, post and source link.
+- After export the page shows the file, the `/rewrite-reels` command, and a Pipeline link when a pipeline item
+  actually holds that file. Changing your angle afterwards is flagged; the exported file is left as it was.
+- A phone on the home network can read ideas but cannot save, edit or export them. Production approvals and the
+  phone's existing permissions are unchanged.
+
+Tests: `node --test tests/research.test.mjs tests/research-view.test.mjs tests/research-signals.test.mjs tests/research-ideas.test.mjs`.
+Browser checks with screenshots (headless): `node dashboard/dev/check-research.mjs` reads the real store and sends
+no actions; `node dashboard/dev/check-ideas.mjs` saves and exports inside a throwaway folder only.
 
 ## Rules it follows
 

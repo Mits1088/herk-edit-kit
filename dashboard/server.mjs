@@ -11,6 +11,7 @@ import { applyAction, readManifests, updateManifest, liveAfterUpload } from './l
 import { probeQueue, queueMission, runUpload, checkUpload, classifyUpload, approvalPrompt, approvalCommand, revisionPrompt } from './lib/jobs.mjs';
 import { loadPreflight } from './lib/workflow.mjs';
 import { researchList, researchSearches, researchPost } from './lib/research-view.mjs';
+import { readIdeas, ideaInfo, ideasView, ideaAction } from './lib/ideas.mjs';
 const STATIC = { '/research.js': 'text/javascript; charset=utf-8', '/research.css': 'text/css; charset=utf-8' };
 await loadPreflight(loadConfig()); // the Gate B report comes from the Reel Studio script itself
 
@@ -113,11 +114,13 @@ export function createServer(cfg) {
       if (req.method === 'GET' && u.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
       if (req.method === 'GET' && u.pathname === '/api/state') return send(res, 200, { ...buildState(cfg), remote });
       if (req.method === 'GET' && u.pathname === '/api/item') { const d = itemDetail(cfg, buildState(cfg), u.searchParams.get('id')); return d ? send(res, 200, d) : send(res, 404, { error: 'Unknown project' }); }
-      // Research is read-only here: these routes only read reels-data/research/. New research runs in Claude Code.
+      // Research: these GET routes only read reels-data/research/. New research runs in Claude Code. Saved ideas
+      // and the short-form export go through POST /api/research/action below, on the PC only.
       if (req.method === 'GET' && STATIC[u.pathname]) return send(res, 200, readFileSync(join(import.meta.dirname, 'public', u.pathname.slice(1))), STATIC[u.pathname]);
-      if (req.method === 'GET' && u.pathname === '/api/research') return send(res, 200, researchList(cfg, Object.fromEntries(u.searchParams)));
+      if (req.method === 'GET' && u.pathname === '/api/research') return send(res, 200, { ...researchList(cfg, Object.fromEntries(u.searchParams)), ideaPosts: readIdeas(cfg).map(i => i.postId), remote });
       if (req.method === 'GET' && u.pathname === '/api/research/searches') return send(res, 200, { searches: researchSearches(cfg) });
-      if (req.method === 'GET' && u.pathname === '/api/research/post') { const d = researchPost(cfg, u.searchParams.get('id'), u.searchParams.get('q')); return d ? send(res, 200, d) : send(res, 404, { error: 'Unknown post' }); }
+      if (req.method === 'GET' && u.pathname === '/api/research/post') { const d = researchPost(cfg, u.searchParams.get('id'), u.searchParams.get('q')); return d ? send(res, 200, { ...d, ...ideaInfo(cfg, d, readIdeas(cfg).find(i => i.postId === d.id), buildState(cfg).items), remote }) : send(res, 404, { error: 'Unknown post' }); }
+      if (req.method === 'GET' && u.pathname === '/api/research/ideas') return send(res, 200, { ideas: ideasView(cfg, buildState(cfg).items), remote });
       if (req.method === 'GET' && u.pathname === '/file') {
         const f = safeFile(cfg, u.searchParams.get('p')) || (remote ? null : linkedMedia(cfg, u.searchParams.get('p'))); if (!f) return send(res, 404, { error: 'Not available' });
         const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || ''); const head = { 'content-type': f.type, 'accept-ranges': 'bytes', 'cache-control': 'no-store' };
@@ -130,12 +133,15 @@ export function createServer(cfg) {
         }
         res.writeHead(200, { ...head, 'content-length': f.size }); return createReadStream(f.full).pipe(res);
       }
-      if (req.method === 'POST' && u.pathname === '/api/action') {
+      if (req.method === 'POST' && (u.pathname === '/api/action' || u.pathname === '/api/research/action')) {
+        const research = u.pathname === '/api/research/action';
         const origin = req.headers.origin;
         if (origin && origin !== 'http://' + req.headers.host) return send(res, 403, { error: 'Cross-site request refused' });
         if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'JSON only' });
         let body = ''; req.on('data', c => { body += c; if (body.length > 65536) req.destroy(); });
-        req.on('end', () => { let parsed; try { parsed = JSON.parse(body); } catch { return send(res, 400, { error: 'Bad request' }); } if (remote && !REMOTE_ACTIONS.includes((parsed || {}).type)) return send(res, 403, { error: 'Do this one on the PC. The phone can only record what you published.' }); handleAction(cfg, parsed).then(message => send(res, 200, { ok: true, message }), e => send(res, 400, { error: e.message })); });
+        req.on('end', () => { let parsed; try { parsed = JSON.parse(body); } catch { return send(res, 400, { error: 'Bad request' }); } if (remote && (research || !REMOTE_ACTIONS.includes((parsed || {}).type))) return send(res, 403, { error: 'Do this one on the PC. The phone can only record what you published.' });
+          if (research) { try { return send(res, 200, { ok: true, ...ideaAction(cfg, parsed) }); } catch (e) { return send(res, 400, { error: e.message }); } }
+          handleAction(cfg, parsed).then(message => send(res, 200, { ok: true, message }), e => send(res, 400, { error: e.message })); });
         return;
       }
       send(res, 404, { error: 'Not found' });

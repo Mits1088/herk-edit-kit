@@ -27,7 +27,7 @@ export function loadConfig(overrides = {}) {
     projectsDir: join(root, 'video-projects'),
     rawMedia: join(root, 'raw-media'),
     contentDir: join(root, 'reels-data', 'content'), // the only folder the dashboard writes to
-    researchDir: join(root, 'reels-data', 'research'), // written only by dashboard/research-import.mjs
+    researchDir: join(root, 'reels-data', 'research'), // written by dashboard/research-import.mjs; ideas.json in it by lib/ideas.mjs
     uploadsDir: process.env.DASH_UPLOADS || 'D:/Uploads',
     approver: process.env.DASH_APPROVER || 'Mits', // the name written into hook and candidate approvals
     // The real Reel Studio scripts, found from this file's own place in the repo (not from the data root).
