@@ -10,6 +10,8 @@ import { buildState, itemDetail } from './lib/state.mjs';
 import { applyAction, readManifests, updateManifest, liveAfterUpload } from './lib/manifest.mjs';
 import { probeQueue, queueMission, runUpload, checkUpload, classifyUpload, approvalPrompt, approvalCommand, revisionPrompt } from './lib/jobs.mjs';
 import { loadPreflight } from './lib/workflow.mjs';
+import { researchList, researchSearches, researchPost } from './lib/research-view.mjs';
+const STATIC = { '/research.js': 'text/javascript; charset=utf-8', '/research.css': 'text/css; charset=utf-8' };
 await loadPreflight(loadConfig()); // the Gate B report comes from the Reel Studio script itself
 
 // One action from the page. Records it, then hands on any follow-up work: an upload for an approved PDF,
@@ -111,6 +113,11 @@ export function createServer(cfg) {
       if (req.method === 'GET' && u.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
       if (req.method === 'GET' && u.pathname === '/api/state') return send(res, 200, { ...buildState(cfg), remote });
       if (req.method === 'GET' && u.pathname === '/api/item') { const d = itemDetail(cfg, buildState(cfg), u.searchParams.get('id')); return d ? send(res, 200, d) : send(res, 404, { error: 'Unknown project' }); }
+      // Research is read-only here: these routes only read reels-data/research/. New research runs in Claude Code.
+      if (req.method === 'GET' && STATIC[u.pathname]) return send(res, 200, readFileSync(join(import.meta.dirname, 'public', u.pathname.slice(1))), STATIC[u.pathname]);
+      if (req.method === 'GET' && u.pathname === '/api/research') return send(res, 200, researchList(cfg, Object.fromEntries(u.searchParams)));
+      if (req.method === 'GET' && u.pathname === '/api/research/searches') return send(res, 200, { searches: researchSearches(cfg) });
+      if (req.method === 'GET' && u.pathname === '/api/research/post') { const d = researchPost(cfg, u.searchParams.get('id'), u.searchParams.get('q')); return d ? send(res, 200, d) : send(res, 404, { error: 'Unknown post' }); }
       if (req.method === 'GET' && u.pathname === '/file') {
         const f = safeFile(cfg, u.searchParams.get('p')) || (remote ? null : linkedMedia(cfg, u.searchParams.get('p'))); if (!f) return send(res, 404, { error: 'Not available' });
         const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || ''); const head = { 'content-type': f.type, 'accept-ranges': 'bytes', 'cache-control': 'no-store' };

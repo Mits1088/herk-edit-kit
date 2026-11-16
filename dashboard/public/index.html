@@ -98,6 +98,7 @@ table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;
 .ev{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:none;border:0;padding:3px 0;text-align:left}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,520px);z-index:20}
 </style>
+<link rel="stylesheet" href="/research.css">
 </head>
 <body>
 <div class="wrap">
@@ -106,6 +107,7 @@ table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;
   <main id="app"></main>
 </div>
 <div id="toast" role="status" hidden></div>
+<script src="/research.js"></script>
 <script>
 let S = null, view = 'attention', cur = null, tab = 'scripts', detail = null, showAll = false, pubOpen = null, liveOpen = false;
 const $ = s => document.querySelector(s);
@@ -155,7 +157,7 @@ function resPill(it){ const g=it.resource.gate; if(it.resource.state!=='live'&&(
   const r=RES[it.resource.state]||['unkp','PDF unknown']; return r[0]?`<span class="pill ${r[0]}">${r[1]}${it.resource.keyword?' · '+esc(it.resource.keyword):''}</span>`:`<span class="track"><span class="nr">${r[1]}</span></span>`; }
 
 function renderNav(){ const n=S.items.filter(i=>i.active).reduce((a,i)=>a+i.needs.filter(x=>x.group!=='Unlinked video').length,0);
-  $('#nav').innerHTML=[['attention',`Needs me <span class="count">${n}</span>`],['pipeline','Pipeline'],['schedule','Schedule']].map(([k,l])=>`<button data-view="${k}" aria-current="${view===k&&!cur}">${l}</button>`).join(''); }
+  $('#nav').innerHTML=[['attention',`Needs me <span class="count">${n}</span>`],['pipeline','Pipeline'],['schedule','Schedule'],['research','Research']].map(([k,l])=>`<button data-view="${k}" aria-current="${view===k&&!cur}">${l}</button>`).join(''); }
 
 function vAttention(){ const all=S.items.filter(i=>i.active).flatMap(i=>i.needs.map(n=>({...n,it:i})));
   const list=g=>{ const a=all.filter(x=>x.group===g); return a.length?a.map(x=>`<button class="task" data-open="${x.it.id}" data-tab="${x.tab}"><strong>${esc(x.label)}</strong><span class="go">${esc(x.go)}</span><span class="sub">${esc(x.it.title)} · ${esc(x.why)}</span></button>`).join(''):'<p class="sub">Nothing waiting here.</p>'; };
@@ -338,7 +340,7 @@ function vProject(){ const it=cur; const i=idx(it); const dots=new Set(it.needs.
   ${it.unknowns.length?`<div class="unknown"><strong>Not recorded</strong><ul>${it.unknowns.map(u=>`<li>${esc(u)}</li>`).join('')}</ul></div>`:''}
   <div class="tabs">${tabs.map(([k,l])=>`<button data-tab-go="${k}" aria-current="${tab===k}">${l}${dots.has(k)?'<span class="dot" title="Needs you"></span>':''}</button>`).join('')}</div>${body}`; }
 
-function render(){ if(!S) return; renderNav(); const tick=document.getElementById('hooktick'), was=tick&&tick.checked; $('#app').innerHTML = cur ? vProject() : view==='pipeline' ? vPipeline() : view==='schedule' ? vSchedule() : vAttention();
+function render(){ if(!S) return; renderNav(); if(view==='research'&&!cur){ if(!document.getElementById('research-root')) Research.mount($('#app')); return; } const tick=document.getElementById('hooktick'), was=tick&&tick.checked; $('#app').innerHTML = cur ? vProject() : view==='pipeline' ? vPipeline() : view==='schedule' ? vSchedule() : vAttention();
   const t2=document.getElementById('hooktick'); if(t2&&was) t2.checked=true; probeStudio(); }
 
 document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset;

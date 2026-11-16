@@ -38,6 +38,7 @@ For one stage, load the matching local skill:
 | Install HyperFrames catalog blocks | `hyperframes-registry` |
 | Rewrite Reel transcripts into scripts and captions (drop files in `Instagram_transcript/`) | `rewrite-reels` |
 | Approve a finished script and build its comment-keyword guide | `approve-reel` |
+| Research a topic on Instagram, YouTube and TikTok into the Command Centre store | `research-signals` |
 
 Before a creative session read `MOTION_PHILOSOPHY.md` and the project's DESIGN.md.
 The philosophy's fast sizzle pacing is a style reference. Give educational speech

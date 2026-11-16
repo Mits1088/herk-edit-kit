@@ -28,6 +28,7 @@ the ClaudeClaw mission list when ClaudeClaw is running.
 ## What it writes
 
 Only `reels-data/content/`: one `<id>.json` per project you act on, and `history.jsonl`. Both are gitignored.
+(The separate importer command writes `reels-data/research/`; see "Research store" below.)
 A manifest is created the first time you tick a task, link a file or project, or hide a project.
 
 Phase 1 actions never write to scripts, video projects, `raw-media/`, Uploads, `resources.md` or `links.json`.
@@ -137,6 +138,120 @@ reads the saved record back; the page moves on only if the record is there.
 
 These write to the project's `reel.json`, the candidate's `qa.json` and `QA.md`, and `renders/final.mp4` (the
 previous final is archived by the script), all through the two scripts.
+
+## Research (store, importer and read-only page)
+
+Research on Instagram, YouTube and TikTok is kept in `reels-data/research/` (gitignored). The dashboard server
+does not write there and cannot call Signal Room, whose login lives in Claude Code. Claude runs the research
+(the `research-signals` skill, which builds the batch from raw results with `build-batch.mjs`),
+writes one batch file, and this command merges it:
+
+```
+node dashboard/research-import.mjs reels-data/research/inbox/<batch>.json [--dry-run]
+```
+
+The whole batch is checked first. If anything is wrong it lists every problem, exits 1 and changes nothing.
+
+| File | Holds |
+| --- | --- |
+| `posts/<platform>-<id>.json` | One post per platform and native id: link, format, duration, creator, caption, transcript, provenance, measurements. YouTube file names carry the id in hex, because YouTube ids are case-sensitive and Windows file names are not; the real id is `nativeId` inside. |
+| `searches.jsonl` | One line per imported batch: the query, each source run with its status, error and ordered results. |
+| `ideas.json` | Saved ideas and notes (stage 4). The importer never writes to it. |
+| `inbox/` | Where batch files are put. The importer reads the file it is given and leaves it in place. |
+| `sources/<batchId>/` | What `build-batch.mjs` built the batch from: the draft and the last30free output files. Kept so a copied number can be checked. |
+| `archive/` | Earlier stores set aside by hand. Nothing reads it. |
+
+### Batch format
+
+```json
+{
+  "schema": 1,
+  "batchId": "2026-11-17-n8n",
+  "retrievedAt": "2026-11-17T09:00:00Z",
+  "search": { "query": "n8n", "windowDays": 30 },
+  "runs": [
+    { "provider": "signal-room", "lane": "instagram_short_form", "status": "ok", "results": ["instagram:3968528610867647341"] },
+    { "provider": "last30free", "lane": "tiktok_hashtag", "status": "error", "error": "TikTok search failed: timeout", "note": "#n8n", "results": [] }
+  ],
+  "posts": [
+    {
+      "platform": "instagram", "id": "3968528610867647341", "provider": "signal-room",
+      "url": "https://www.instagram.com/p/DcTC77TvZNt/", "format": "short",
+      "creator": { "handle": "creator", "name": "Creator" },
+      "title": "…", "caption": "…", "publishedAt": "2026-08-21T10:00:00Z", "durationSeconds": 51.4,
+      "transcript": { "text": "spoken words", "origin": "signal-room", "capturedAt": "2026-08-23T00:00:00Z" },
+      "observation": {
+        "measuredAt": "2026-08-22T10:17:39Z",
+        "metrics": { "plays": 24090, "likes": 469, "saves": null },
+        "outlier": { "metric": "reach_per_follower", "value": 1.05, "percentile": 100, "cohortSize": 20 }
+      }
+    }
+  ]
+}
+```
+
+- **Lanes:** `instagram_short_form`, `youtube_short_form`, `youtube_long_form` (Signal Room), `youtube_discovery`,
+  `tiktok_hashtag` (last30free). Instagram is accepted from Signal Room only and TikTok from last30free only.
+  Nothing else has a lane, so X, Hacker News and Reddit cannot be imported.
+- **Ids** are the platform's own: Instagram numeric media id (not the link shortcode), YouTube 11-character video
+  id, TikTok numeric video id. `results` are `platform:id`, best match first; they are the top matches from that
+  search, not everything that exists. Every post must appear in a run of its own provider.
+- **Times** are UTC, `YYYY-MM-DDTHH:MM:SSZ`. `retrievedAt` is when we fetched. `observation.measuredAt` is when the
+  source measured, `null` when it does not say; it is never guessed from the retrieval time. For a last30free live
+  fetch the two are the same moment, so the batch may set `measuredAt` equal to `retrievedAt`.
+- **Unknown stays unknown:** use `null` (or leave the key out) for a metric, date, duration or transcript you do not
+  have. `format` is `short`, `long` or `unknown`. Metrics allowed: views, plays, reach, likes, comments, shares,
+  saves, followers.
+- **Excerpts** (optional `excerpts: [{ kind: "hook" or "snippet", text, complete? }]`) are the text a search returned
+  around its match, word for word. They are kept with their source and batch, and are never a transcript. Set
+  `complete: false` when only part of the returned text was copied.
+- **Transcript** means spoken words; `origin` is `signal-room`, `subtitles` or `whisper`. A caption goes in
+  `caption`. A transcript identical to the caption is rejected.
+- **Evidence stays separate:** `outlier` (performance relative to the creator or cohort) is accepted from Signal
+  Room only, `discoveryScore` (engagement at fetch) from last30free only. They are stored as different fields on
+  different measurements and are never combined.
+- A post found by both sources is listed once per provider; it becomes one stored post with two provenance entries.
+
+### What an import does
+
+- One stored post per platform and native id. A later retrieval can correct a field; a missing field never blanks one.
+- One measurement is one source, one measured time (known or unknown) and one set of values. An exact repeat adds
+  nothing, so repeating an undated result creates no history. Equal counts at two known times stay two
+  measurements. An undated measurement is never merged into a dated one, and its date is never filled in from a
+  later result. Stored measurements are never edited apart from their "last retrieved" time.
+- The same batch again changes nothing. The same `batchId` with different contents is refused.
+- A failed run is logged with its error. Posts a batch does not mention are not opened, so a failure or an
+  omission leaves them as they were.
+- `growth(post, provider, metric)` in `lib/research.mjs` returns a figure only from two dated measurements of that
+  metric by that one source; otherwise it returns nothing.
+- `matchText` / `matchPost` filter retrieved text. Bare words are whole words and must all appear ("AI" is not in
+  "said"; "MCP" is not "MCP50"), and a bare word also accepts one plural s ("MCP" finds "MCPs"). `"Quoted words"`
+  are exact: together, in order, with no plural added. Case is ignored, and the result says whether the
+  transcript, title or caption matched.
+
+### The Research page
+
+Research in the main navigation, with two views. It only reads; the routes are `GET /api/research`,
+`/api/research/searches` and `/api/research/post`. Saving ideas and handing off to production are not built yet.
+
+- **Signals.** Filters search what is already saved (saved search, words in the saved text, platform, format,
+  publication date, sort). They never run a new search; the page shows the Claude Code command for that.
+- **Date window.** Enforced on the stored publication date, 30 days by default. Older posts sit under each list
+  as collapsed "historical references". A post with no publication date is listed apart and never counts as recent.
+- **One list per platform and format,** never merged. Each row carries source badges (Signal Room: tracked
+  creators; last30free: discovery).
+- **Freshness.** "Measured N days ago" comes from the source's measurement time and is marked stale after 7 days;
+  "Measurement time unknown" when the source gave none. Publication and import dates are shown separately.
+- **Raw engagement and creator outlier are separate columns.** `bounded_velocity_signal` is shown as "Not ranked":
+  it changed between two calls for the same video, so it is left out of sorting and growth.
+- **Growth** appears only from two dated measurements of one count by one source; otherwise "Growth unavailable".
+- **A post's page** shows where it was found (search, run, source, position), every measurement, the matched
+  words in place, and the saved text by kind: search excerpt, caption, full transcript. "Copy transcript" exists
+  only when a transcript does. "Original records" shows the kept builder inputs for that post.
+- **Searches.** Every imported search with each run's result, failure text and notes.
+
+Tests: `node --test tests/research.test.mjs tests/research-view.test.mjs tests/research-signals.test.mjs`.
+Browser check with screenshots (headless, sends no actions): `node dashboard/dev/check-research.mjs`.
 
 ## Rules it follows
 
