@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { titleFrom, reviewFrom, parseApproved, parseGenerated, parseYoutube, parseResources } from './parse.mjs';
+import { titleFrom, reviewFrom, parseApproved, parseGenerated, parseYoutube, parseResources, parseDraft } from './parse.mjs';
 import { readManifests } from './manifest.mjs';
 import { createHash } from 'node:crypto';
 import { approvalCommand, approvalPrompt, revisionPrompt, videoRevisionPrompt, classifyUpload } from './jobs.mjs';
@@ -115,10 +115,17 @@ export function buildState(cfg, now = new Date()) {
       if (ins.length === mine.length) mine.forEach((it, k) => { it.files.source = rel(cfg, join(cfg.inputsDir, b, ins[k])); it.sourceMatch = 'by order in the batch'; });
       continue;
     }
-    const worked = ls(join(cfg.workOutDir, b)).length > 0;
+    // Working drafts (reels-data/outputs/<batch>/reel-NN-*.md) are the rewriter's output before the review exports
+    // anything. A draft is a real stage of its own: it is not an export, and its absence from the export folder
+    // says nothing about the batch being dropped.
+    const work = ls(join(cfg.workOutDir, b)); const worked = work.length > 0;
     ls(join(cfg.inputsDir, b)).forEach((f, k) => {
-      const p = join(cfg.inputsDir, b, f); const id = `${b.slice(6)}-${String(k + 1).padStart(2, '0')}`;
-      items.set(id, { id, batch: b, reel: k + 1, title: titleFrom(read(p) || '', f.replace(/\.\w+$/, '')), rewriting: true, notExported: worked, files: { source: rel(cfg, p) } });
+      const nn = String(k + 1).padStart(2, '0'); const p = join(cfg.inputsDir, b, f); const id = `${b.slice(6)}-${nn}`;
+      const ver = n => Number((n.match(/^reel-\d\d-v(\d+)-/i) || [])[1] || 1);
+      const draft = work.filter(n => new RegExp(`^reel-${nn}-.+\\.md$`, 'i').test(n)).sort((x, y) => ver(x) - ver(y)).pop();
+      const files = { source: rel(cfg, p) }; let review;
+      if (draft) { files.draft = rel(cfg, join(cfg.workOutDir, b, draft)); review = parseDraft(read(join(cfg.workOutDir, b, draft)) || '').review; }
+      items.set(id, { id, batch: b, reel: k + 1, title: titleFrom(read(p) || '', f.replace(/\.\w+$/, '')), rewriting: true, notExported: worked, review, files });
     });
   }
 
@@ -259,7 +266,15 @@ export function buildState(cfg, now = new Date()) {
     if (p && !p.approval && p.finalExists) unknowns.push('renders/final.mp4 exists but no approval is recorded');
 
     if (it.isSource) { stage = 'source'; who = 'You'; need('Production', 'Start the rewrite', 'Open source', 'scripts', 'Transcript received, not yet rewritten'); }
-    else if (it.rewriting && !p) { stage = 'rewrite'; note = it.notExported ? 'Working output exists but no scripts were exported; status unknown' : 'Inputs are batched and no scripts are exported yet. Files cannot show whether a job is running now'; if (it.notExported) unknowns.push(note); }
+    else if (it.rewriting && !p) {
+      stage = 'rewrite';
+      if (it.files.draft) {
+        if (it.review === 'PENDING REVIEW') { who = 'You'; note = 'Drafts awaiting review'; need('Production', 'Drafts awaiting review', 'Open drafts', 'scripts', 'Both versions are written. The independent review has not run yet'); }
+        else if (it.review === 'READY TO RECORD' || it.review === 'REVIEW REQUIRED') note = `Drafts reviewed (${it.review}); the final scripts are not exported yet`;
+        else { note = 'Drafts written; their review status is not recorded'; unknowns.push(note); }
+      } else if (it.notExported) { note = 'Working files exist, but no draft was found for this reel'; unknowns.push(note); }
+      else note = 'Inputs are batched and no scripts are exported yet. Files cannot show whether a job is running now';
+    }
     else if (!it.files.approved && !p) { stage = 'choose'; who = 'You'; if (man.decision) need('Production', `Finish approving Version ${man.decision.version}`, 'Open', 'scripts', 'Your choice is recorded; the approved file has not been written yet'); else need('Production', 'Choose Version A or B', 'Compare scripts', 'scripts', `Review status: ${it.review || 'Unknown'}`); }
     else if (!p) {
       who = 'You';
@@ -353,9 +368,12 @@ export function buildState(cfg, now = new Date()) {
     if (!born && it.files.source) { try { born = statSync(join(cfg.root, it.files.source)).mtime; } catch { /* unknown age */ } }
     const ageDays = born ? (now - born) / 864e5 : 0;
     const early = !p && !it.files.approved;
-    const dormant = man.activity !== 'active' && early && (ageDays > (stage === 'rewrite' ? 3 : cfg.recentDays) || !!it.notExported);
+    // Drafts awaiting review get the normal waiting period; only age makes them dormant. The wording says what the
+    // files show: nothing here can tell whether work was dropped.
+    const drafted = stage === 'rewrite' && !!it.files.draft, waiting = drafted && it.review === 'PENDING REVIEW';
+    const dormant = man.activity !== 'active' && early && (ageDays > (stage === 'rewrite' && !waiting ? 3 : cfg.recentDays) || (!!it.notExported && !waiting));
     if (dormant && stage === 'rewrite' && !it.notExported) { note = 'Inputs only: no scripts were exported for this batch'; }
-    if (dormant) { needs.length = 0; unknowns.push(stage === 'rewrite' ? 'This batch was never exported; it may have been abandoned' : 'No version was approved; it may have been set aside'); }
+    if (dormant) { needs.length = 0; unknowns.push(drafted ? 'No final scripts were exported for these drafts; the files cannot show why' : stage === 'rewrite' ? 'No scripts were exported for this batch; the files cannot show why' : 'No version was approved; it may have been set aside'); }
 
     const recent = !it.ig || (it.ig.at ? (now - new Date(it.ig.at)) < cfg.recentDays * 864e5 : stage !== 'done') || (folder === 'instagram' && stage !== 'done');
     out.push({
@@ -388,6 +406,7 @@ export function itemDetail(cfg, state, id) {
   const it = state.items.find(i => i.id === id); if (!it) return null;
   const f = it.files; const out = { id };
   if (f.source) out.source = { file: f.source, text: read(join(cfg.root, f.source)) || '', match: it.sourceMatch };
+  if (!f.generated && f.draft) out.generated = { file: f.draft, draft: true, ...parseDraft(read(join(cfg.root, f.draft)) || '') };
   if (f.generated) { const g = parseGenerated(read(join(cfg.root, f.generated)) || '', f.generated); out.generated = { file: f.generated, ...g }; }
   if (f.approved) { const a = parseApproved(read(join(cfg.root, f.approved)) || '', f.approved); out.approved = { file: f.approved, ...a, youtubeParts: parseYoutube(a.youtube) }; }
   return out;

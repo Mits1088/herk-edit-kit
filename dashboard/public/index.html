@@ -28,7 +28,7 @@ p{margin:0}
 .nav,.tabs{display:flex;flex-wrap:wrap;gap:6px}
 button,select{font:inherit;color:inherit}
 button{cursor:pointer}
-button:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .nav button,.tabs button{border:1px solid var(--line);background:var(--surface);padding:7px 13px;border-radius:999px;font-weight:500}
 .nav button[aria-current="true"],.tabs button[aria-current="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .count{display:inline-block;min-width:20px;text-align:center;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--you-bg);color:var(--you);font-size:12px;font-weight:600}
@@ -67,7 +67,9 @@ summary{cursor:pointer;padding:6px 0} .two{display:grid;grid-template-columns:re
 .legend{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;color:var(--muted)}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:0;background:var(--surface);padding:5px 11px;font-size:13px;font-weight:500} .seg button[aria-current="true"]{background:var(--ink);color:var(--bg)}
-.back{background:none;border:0;padding:0;color:var(--accent);font-weight:600}
+.back{background:none;border:0;padding:0;color:var(--accent);font-weight:600;display:inline-flex;align-items:center}
+.back::before{content:"←";margin-right:6px}
+.from{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--you);margin-left:6px;vertical-align:middle}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px;min-width:0}
 .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:start}
@@ -96,6 +98,17 @@ table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;
 .day{display:grid;grid-template-columns:170px 1fr;gap:6px 16px;padding:12px 0;border-top:1px solid var(--line)}
 @media (max-width:560px){.day{grid-template-columns:1fr}}
 .ev{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:none;border:0;padding:3px 0;text-align:left}
+/* phone: every control is a 44px target, and the four views fit one row */
+@media (max-width:760px){
+  .nav{display:grid;grid-template-columns:repeat(4,auto);gap:4px;width:100%} .nav button{padding:7px 6px;font-size:14px;white-space:nowrap}
+  .nav .count{margin-left:4px}
+  .nav button,.tabs button,.btn,.btn.small,.seg button,.back,.ev,select,.inp,summary{min-height:44px}
+  .btn,.btn.small,.seg button{display:inline-flex;align-items:center;justify-content:center}
+  summary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+  input[type=checkbox]{width:22px;height:22px;flex:none}
+}
+@media (max-width:560px){.ev strong,.ev .sub{flex-basis:100%}.ev{padding:6px 0}} /* status, then title, then date: the same shape on every row */
+@media (max-width:350px){.nav{grid-template-columns:repeat(2,1fr)}}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,520px);z-index:20}
 </style>
 <link rel="stylesheet" href="/research.css">
@@ -157,7 +170,7 @@ function resPill(it){ const g=it.resource.gate; if(it.resource.state!=='live'&&(
   const r=RES[it.resource.state]||['unkp','PDF unknown']; return r[0]?`<span class="pill ${r[0]}">${r[1]}${it.resource.keyword?' · '+esc(it.resource.keyword):''}</span>`:`<span class="track"><span class="nr">${r[1]}</span></span>`; }
 
 function renderNav(){ const n=S.items.filter(i=>i.active).reduce((a,i)=>a+i.needs.filter(x=>x.group!=='Unlinked video').length,0);
-  $('#nav').innerHTML=[['attention',`Needs me <span class="count">${n}</span>`],['pipeline','Pipeline'],['schedule','Schedule'],['research','Research']].map(([k,l])=>`<button data-view="${k}" aria-current="${view===k&&!cur}">${l}</button>`).join(''); }
+  $('#nav').innerHTML=[['attention',`Needs me <span class="count">${n}</span>`],['pipeline','Pipeline'],['schedule','Schedule'],['research','Research']].map(([k,l])=>`<button data-view="${k}" aria-current="${view===k}">${l}</button>`).join(''); }
 
 function vAttention(){ const all=S.items.filter(i=>i.active).flatMap(i=>i.needs.map(n=>({...n,it:i})));
   const list=g=>{ const a=all.filter(x=>x.group===g); return a.length?a.map(x=>`<button class="task" data-open="${x.it.id}" data-tab="${x.tab}"><strong>${esc(x.label)}</strong><span class="go">${esc(x.go)}</span><span class="sub">${esc(x.it.title)} · ${esc(x.why)}</span></button>`).join(''):'<p class="sub">Nothing waiting here.</p>'; };
@@ -206,12 +219,17 @@ function tScripts(it){ const d=detail;
   if(!d) return `<div class="panel"><p class="sub">Loading scripts…</p></div>`;
   const src=d.source?`<div><h3>Source transcript</h3><p class="mono">${esc(d.source.file)}${d.source.match?' · matched '+esc(d.source.match):''}</p><div class="script">${esc(d.source.text)}</div></div>`:'';
   const g=d.generated; const canApprove=it.stage==='choose'&&it.batch&&it.reel;
-  const col=(v,t)=>t?`<div><div class="row"><h3>Version ${v}</h3>${it.version===v?'<span class="pill ok">Approved</span>':''}${canApprove&&!it.decision?`<button class="btn small primary" data-decide="${v}">Approve Version ${v}</button>`:''}${it.decision&&it.decision.version===v?'<span class="pill you">Your choice</span>':''}</div><div class="script">${esc(t)}</div></div>`:'';
-  return `<div class="panel"><div class="row"><h3>Scripts</h3><span class="pill ${it.review==='READY TO RECORD'?'ok':it.review==='REVIEW REQUIRED'?'you':'unkp'}">${esc(it.review||'Status unknown')}</span></div>
-  ${g?`<p class="mono">${esc(g.file)}</p>`:'<p class="sub">No exported scripts for this item.</p>'}
+  const col=(v,t)=>t?`<div><div class="row"><h3>Version ${v}${g.draft?' (draft)':''}</h3>${it.version===v?'<span class="pill ok">Approved</span>':''}${canApprove&&!it.decision?`<button class="btn small primary" data-decide="${v}">Approve Version ${v}</button>`:''}${it.decision&&it.decision.version===v?'<span class="pill you">Your choice</span>':''}</div><div class="script">${esc(t)}</div></div>`:'';
+  return `<div class="panel"><div class="row"><h3>${g&&g.draft?'Draft scripts':'Scripts'}</h3><span class="pill ${it.review==='READY TO RECORD'?'ok':it.review==='REVIEW REQUIRED'||it.review==='PENDING REVIEW'?'you':'unkp'}">${esc(it.review==='PENDING REVIEW'?'Awaiting review':it.review||'Status unknown')}</span>${g&&g.draft?'<span class="pill wait">Not exported</span>':''}</div>
+  ${g&&g.draft?draftNote(it):''}
+  ${g?`<p class="mono">${esc(g.file)}</p>`:'<p class="sub">No scripts have been written for this item yet.</p>'}
   <div class="grid3">${src}${g?col('A',g.versionA)+col('B',g.versionB):''}</div>
   ${d.approved?`<dl class="kv"><dt>Approved file</dt><dd class="mono">${esc(d.approved.file)}</dd></dl>`:canApprove?(it.decision?decisionBox(it):`<p class="sub">Approving records your choice and hands the work to the approve-reel skill, which saves the approved file and builds any PDF guide. Nothing is uploaded.${it.review==='REVIEW REQUIRED'?' This reel is marked REVIEW REQUIRED, so the skill will show what needs checking and stop unless you tell it to approve anyway.':''}</p>`):''}
   ${it.stage==='source'?`<p class="sub">Start the rewrite in Claude Code:</p>${cmd('/rewrite-reels')}`:''}</div>`; }
+// Working drafts: written by the rewriter, not yet through the independent review that exports the final scripts.
+function draftNote(it){ if(it.review==='PENDING REVIEW') return `<div class="info">These are working drafts. The independent review has not run, so there is nothing to approve yet. The review marks each reel READY TO RECORD or REVIEW REQUIRED and exports the final scripts; choosing Version A or B comes after that.</div>
+  <p class="sub">To run the review, paste this into Claude Code:</p>${cmd(`Run the review for ${it.batch}: the reel-reviewer review pass, reel-rewriter to apply the review changes, then the reel-reviewer final pass.`)}`;
+  return `<div class="unknown">These drafts ${it.review==='READY TO RECORD'||it.review==='REVIEW REQUIRED'?'were reviewed ('+esc(it.review)+'), but':'exist, but'} no final scripts were exported to instagram_scripts_output, so a version cannot be chosen here.</div>`; }
 function tResource(it){ const r=it.resource; const p=RES[r.state]||['unkp','Unknown'];
   return `<div class="panel"><div class="row"><h3>Resource${r.keyword?' for keyword '+esc(r.keyword):''}</h3>${p[0]?`<span class="pill ${p[0]}">${p[1]}</span>`:`<span class="track"><span class="nr">${p[1]}</span></span>`}</div>
   ${r.note?`<p>${esc(r.note)}</p>`:''}
@@ -307,7 +325,7 @@ function tPublish(it){ const d=detail, a=d&&d.approved, pl=it.platforms, p=it.pr
   return `<div class="grid3">${ig}${later('yt','YouTube Shorts',y?(y.title||y.description?copyBox('Title',y.title)+copyBox('Description',y.description)+copyBox('Tags',y.tags):copyBox('YouTube Shorts text',a.youtube)):'')}${later('tt','TikTok',a?copyBox('TikTok caption',a.tiktok):'')}</div>`; }
 
 /* ---- approvals (phase 2) ---- */
-let fbOpen = false, studio = {};
+let fbOpen = false, studio = {}, ret = null; // ret: the row a project was opened from, and how far the list was scrolled
 // Is HyperFrames Studio answering at the recorded preview address? The page cannot know whether you watched it, only whether it can be watched now.
 function probeStudio(){ const u=cur&&cur.project&&cur.project.hook&&cur.project.opening&&cur.project.opening.url; if(!u||tab!=='video'||studio[u]) return; studio[u]='checking';
   fetch(u,{mode:'no-cors',cache:'no-store'}).then(()=>{studio[u]='up';},()=>{studio[u]='down';}).then(()=>{ if(cur&&tab==='video'&&!document.querySelector('textarea:focus')) render(); }); }
@@ -334,8 +352,9 @@ function gateText(r){ if(!r.pdf) return 'No PDF yet'; return {approved:'Approved
 function vProject(){ const it=cur; const i=idx(it); const dots=new Set(it.needs.map(n=>n.tab));
   const tabs=[['scripts','Scripts'],['resource','Resource'],['recording','Recording'],['video','Video'],['publish','Publish']];
   const body={scripts:tScripts,resource:tResource,recording:tRecording,video:tVideo,publish:tPublish}[tab](it); const [who,txt]=nextAct(it); const w=WHO[who];
-  return `<div class="row" style="justify-content:space-between"><button class="back" data-view="${view}">Back to ${view==='attention'?'Needs me':view==='pipeline'?'Pipeline':view==='research'?'Research':'Schedule'}</button><button class="btn small" data-hide="${it.hidden?0:1}" title="Only the dashboard's own note changes. No file is deleted.">${it.hidden?'Put back in the dashboard':'Remove from the dashboard'}</button></div>
-  <div class="sec-head"><div><h2>${esc(it.title)}</h2><div class="mono">${esc(it.id)}${it.batch?' · '+esc(it.batch):''}${it.version?' · version '+it.version:''}${it.project?' · video-projects/'+esc(it.project.slug):''}</div></div></div>
+  const rp=(it.files.source||'').match(/(?:^|\/)research-(instagram|tiktok|youtube)-([^\/]+)\.md$/); const rid=rp?rp[1]+'-'+(rp[1]==='youtube'?[...new TextEncoder().encode(rp[2])].map(b=>b.toString(16).padStart(2,'0')).join(''):rp[2]):null;
+  return `<div class="row" style="justify-content:space-between"><button class="back" data-back="1">Back to ${view==='attention'?'Needs me':view==='pipeline'?'Pipeline':view==='research'?'Research':'Schedule'}</button><button class="btn small" data-hide="${it.hidden?0:1}" title="Only the dashboard's own note changes. No file is deleted.">${it.hidden?'Put back in the dashboard':'Remove from the dashboard'}</button></div>
+  <div class="sec-head"><div><h2>${esc(it.title)}</h2><div class="mono">${esc(it.id)}${it.batch?' · '+esc(it.batch):''}${it.version?' · version '+it.version:''}${it.project?' · video-projects/'+esc(it.project.slug):''}</div>${rid?`<div class="from" style="margin-top:6px"><span>Started from a saved research idea.</span><button class="btn small" data-research="${esc(rid)}">Open the idea in Research</button></div>`:''}</div></div>
   ${track(it)}<div class="pn"><span class="pill ${w[0]}">${w[1]}</span><span>${esc(txt)}</span></div>
   ${it.unknowns.length?`<div class="unknown"><strong>Not recorded</strong><ul>${it.unknowns.map(u=>`<li>${esc(u)}</li>`).join('')}</ul></div>`:''}
   <div class="tabs">${tabs.map(([k,l])=>`<button data-tab-go="${k}" aria-current="${tab===k}">${l}${dots.has(k)?'<span class="dot" title="Needs you"></span>':''}</button>`).join('')}</div>${body}`; }
@@ -344,8 +363,10 @@ function render(){ if(!S) return; renderNav(); if(view==='research'&&!cur){ if(!
   const t2=document.getElementById('hooktick'); if(t2&&was) t2.checked=true; probeStudio(); }
 
 document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset;
-  if(d.view){ view=d.view; cur=null; pubOpen=null; liveOpen=false; render(); }
-  else if(d.open){ open(d.open,d.tab); }
+  if(d.view){ view=d.view; cur=null; ret=null; pubOpen=null; liveOpen=false; render(); }
+  else if(d.back){ const r=ret; cur=null; ret=null; pubOpen=null; liveOpen=false; render(); if(r&&view!=='research'){ const row=[...document.querySelectorAll('[data-open]')].find(x=>x.dataset.open===r.id&&(x.dataset.tab||'')===r.tab)||document.querySelector(`[data-open="${CSS.escape(r.id)}"]`); if(row){ const h=row.closest('details'); if(h) h.open=true; row.focus({preventScroll:true}); } window.scrollTo(0,r.y); } }
+  else if(d.research){ view='research'; cur=null; ret=null; render(); Research.open(d.research); }
+  else if(d.open){ ret={id:d.open,tab:d.tab||'',y:window.scrollY}; open(d.open,d.tab); }
   else if(d.tabGo){ tab=d.tabGo; render(); }
   else if(d.all!==undefined){ showAll=d.all==='2'?'hidden':d.all==='1'; render(); }
   else if(d.activity){ act({id:d.id,type:'activity',activity:d.activity},d.activity==='set-aside'?'Moved to All. You can move it back to Active anytime.':'Moved to Active'); }

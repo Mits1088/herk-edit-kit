@@ -19,7 +19,7 @@
   const WINDOW = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months', all: 'any date' };
   const DEFAULTS = { search: '', q: '', platform: '', format: '', window: '30', sort: 'published' };
 
-  let root = null, tab = 'signals', F = { ...DEFAULTS }, data = null, searches = null, ideas = null, detail = null, detailId = null, error = null, returnTo = null, removeAsk = false, busy = false;
+  let root = null, tab = 'signals', F = { ...DEFAULTS }, data = null, searches = null, ideas = null, detail = null, detailId = null, error = null, returnTo = null, returnY = 0, removeAsk = false, busy = false;
   const get = async url => { const r = await fetch(url); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; };
 
   async function loadList() { error = null; try { data = await get('/api/research?' + new URLSearchParams(F)); } catch (x) { error = x.message; } draw(); }
@@ -35,7 +35,7 @@
   }
   async function loadSearches() { error = null; try { searches = (await get('/api/research/searches')).searches; } catch (x) { error = x.message; } draw(); }
   async function openPost(id) {
-    returnTo = id; detailId = id; detail = null; removeAsk = false; draw(); window.scrollTo(0, 0);
+    returnTo = id; returnY = window.scrollY; detailId = id; detail = null; removeAsk = false; draw(); window.scrollTo(0, 0);
     try { detail = await get('/api/research/post?' + new URLSearchParams({ id, q: F.q || F.search })); } catch (x) { error = x.message; detailId = null; }
     draw(); const h = root && root.querySelector('#r-title'); if (h) h.focus();
   }
@@ -99,7 +99,7 @@
   // ---- Ideas ----
   const PF = p => `${PLATFORM[p.platform]} · ${FORMAT[p.format]}`;
   function ideaState(x) {
-    if (x.exported) return ['ok', 'Exported to the script workflow', `${x.exported.file} · ${when(x.exported.at)}`];
+    if (x.exported) return ['ok', 'Exported to the script workflow', x.exported.pipelineStatus ? `In Pipeline: ${x.exported.pipelineStatus}` : `${x.exported.file} · ${when(x.exported.at)}`];
     if (x.handoff.ok) return ['you', 'Ready to export', 'Short-form with a full transcript, a source link and a duration.'];
     return ['wait', 'Brief only', x.handoff.reasons.join(' ')];
   }
@@ -112,7 +112,7 @@
       return `<section class="panel" aria-label="Idea: ${e(x.post.title || 'Untitled post')}"><div class="r-head"><div><button class="r-open" data-r-open="${e(x.post.id)}">${e(x.post.title || 'Untitled post')}</button><span class="r-tags"><span class="r-tag">${e(PF(x.post))}</span><span class="r-tag">${EVIDENCE[x.post.evidence]}</span></span></div><span class="pill ${cls}">${label}</span></div>
         <div><p class="r-kind">Your angle</p>${x.idea.angle ? `<div class="r-angle">${e(x.idea.angle)}</div>` : '<p class="sub">No angle written yet.</p>'}</div>
         <p class="sub">${e(why)}</p>
-        <div class="row"><button class="btn small" data-r-open="${e(x.post.id)}" aria-label="Open idea and evidence: ${e(x.post.title || 'Untitled post')}">Open idea and evidence</button><button class="btn small" data-r-briefof="${i}">Copy brief</button></div></section>`;
+        <div class="row"><button class="btn small" data-r-open="${e(x.post.id)}" aria-label="Open idea and evidence: ${e(x.post.title || 'Untitled post')}">Open idea and evidence</button><button class="btn small" data-r-briefof="${i}">Copy brief</button>${x.exported && x.exported.pipelineId ? `<button class="btn small" data-r-pipeline="${e(x.exported.pipelineId)}" aria-label="Open in Pipeline: ${e(x.post.title || 'Untitled post')}">Open in Pipeline</button>` : ''}</div></section>`;
     }).join('') + '</div>';
   }
 
@@ -127,7 +127,7 @@
     if (x) hand = `<p>Exported ${when(x.at)} as <span class="mono">${e(x.file)}</span>. ${x.waiting ? 'The file is waiting in Instagram_transcript.' : 'The file is no longer in the drop folder: the script workflow has taken it, or it was moved.'}</p>
       ${x.angleChanged ? '<p class="r-warn">You changed your angle after exporting. The exported file still carries the earlier one.</p>' : ''}
       <div class="row"><span class="sub">Start the scripts in Claude Code:</span><code class="mono">${e(x.command)}</code><button class="btn small" data-r-copy="${e(x.command)}" data-r-toast="Copied. Paste it into Claude Code.">Copy command</button></div>
-      ${x.pipelineId ? `<div class="row"><button class="btn small" data-r-pipeline="${e(x.pipelineId)}">Open “${e(x.pipelineTitle)}” in Pipeline</button></div>` : '<p class="sub">No Pipeline item is linked to this file yet.</p>'}`;
+      ${x.pipelineId ? `<div class="row">${x.pipelineStatus ? `<span>In Pipeline: <strong>${e(x.pipelineStatus)}</strong></span>` : ''}<button class="btn small" data-r-pipeline="${e(x.pipelineId)}">Open “${e(x.pipelineTitle)}” in Pipeline</button></div>` : '<p class="sub">No Pipeline item is linked to this file yet.</p>'}`;
     else if (h.ok) hand = `<div class="row"><button class="btn primary" data-r-export="1">Export to the script workflow</button><span class="sub">Writes one transcript file into Instagram_transcript, with your angle on its own “Note from Mits” line. Nothing else changes, and an existing file is never replaced.</span></div>`;
     else hand = `<p>Not available for this post:</p><ul class="r-reasons">${h.reasons.map(r => `<li>${e(r)}</li>`).join('')}</ul>`;
     return `<section class="panel r-idea" aria-label="Your idea"><div class="r-head"><h3>Your idea</h3><span class="pill ok">Saved</span></div>${intro}${field}
@@ -153,7 +153,7 @@
   // ---- one post ----
   const segs = a => a.map(x => (x.m ? `<mark>${e(x.t)}</mark>` : e(x.t))).join('');
   function vPost() {
-    const back = `<div><button class="back" data-r-back="1">Back to results</button></div>`;
+    const back = `<div><button class="back" data-r-back="1">Back to ${tab === 'ideas' ? 'Ideas' : tab === 'searches' ? 'Searches' : 'Signals'}</button></div>`;
     if (!detail) return `${back}<p class="sub">Loading the saved post…</p>`;
     const d = detail, q = d.query;
     const facts = `<section class="panel" aria-label="Post"><dl class="kv">
@@ -203,7 +203,7 @@
     if (!root || !root.contains(ev.target)) return; const b = ev.target.closest('button'); if (!b) return; const d = b.dataset;
     if (d.rTab) { tab = d.rTab; draw(); LOAD[tab](); }
     else if (d.rOpen) openPost(d.rOpen);
-    else if (d.rBack) { detailId = null; detail = null; draw(); const refocus = () => { const again = returnTo && root.querySelector(`[data-r-open="${CSS.escape(returnTo)}"]`); if (again) { const h = again.closest('details'); if (h) h.open = true; again.focus(); } }; if (tab !== 'signals' || !data) LOAD[tab]().then(refocus); else refocus(); }
+    else if (d.rBack) { detailId = null; detail = null; draw(); const refocus = () => { const again = returnTo && root.querySelector(`[data-r-open="${CSS.escape(returnTo)}"]`); if (again) { const h = again.closest('details'); if (h) h.open = true; again.focus({ preventScroll: true }); } window.scrollTo(0, returnY); }; if (tab !== 'signals' || !data) LOAD[tab]().then(refocus); else refocus(); }
     else if (d.rReset) { F = { ...DEFAULTS }; loadList(); }
     else if (d.rShow) { F = { ...DEFAULTS, search: d.rShow, window: 'all' }; tab = 'signals'; data = null; draw(); loadList(); }
     else if (d.rSave) act({ type: 'save-idea', postId: detailId, angle: root.querySelector('#r-angle').value }, '#r-angle');
@@ -221,5 +221,5 @@
   document.addEventListener('submit', ev => { if (ev.target.id === 'r-form') { ev.preventDefault(); readForm(); loadList(); } });
   document.addEventListener('change', ev => { if (root && ev.target.closest && ev.target.closest('#r-form') && ev.target.tagName === 'SELECT') { readForm(); loadList().then(() => { const s = root.querySelector('#' + CSS.escape(ev.target.id)); if (s) s.focus(); }); } });
 
-  window.Research = { mount };
+  window.Research = { mount, open: openPost };
 })();

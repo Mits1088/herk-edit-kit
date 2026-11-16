@@ -81,7 +81,7 @@ export function ideaInfo(cfg, d, idea, items = []) {
   if (ex) {
     const waiting = existsSync(join(cfg.root, ex.file));
     const item = items.find(i => i.files && i.files.source && basename(i.files.source) === basename(ex.file));
-    exported = { file: ex.file, at: ex.at, waiting, pipelineId: item ? item.id : null, pipelineTitle: item ? item.title : null, angleChanged: sha(oneLine(idea.angle)) !== ex.angleSha, command: '/rewrite-reels' };
+    exported = { file: ex.file, at: ex.at, waiting, pipelineId: item ? item.id : null, pipelineTitle: item ? item.title : null, pipelineStatus: item ? (item.needs[0] || {}).label || item.note || null : null, angleChanged: sha(oneLine(idea.angle)) !== ex.angleSha, command: '/rewrite-reels' };
   }
   return { idea: idea || null, handoff: h, brief: idea ? briefText(d, idea) : null, exported };
 }

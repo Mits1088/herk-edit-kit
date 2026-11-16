@@ -78,6 +78,17 @@ export function parseGenerated(text, file) {
   };
 }
 
+// A working draft in reels-data/outputs/<batch>/: Markdown with bold headings such as "**VERSION A — Faithful Rewrite**"
+// and a "- Publication status:" line. It is the rewriter's output before the independent review exports anything.
+export function parseDraft(text) {
+  const t = String(text || '').replace(/\r/g, ''); const secs = [];
+  for (const line of t.split('\n')) { const m = line.match(/^\*\*([A-Z][^*a-z]*[A-Z])(?:\s+[—-]\s+[^*]*)?\*\*\s*$/); if (m) secs.push({ name: m[1].trim(), body: [] }); else if (secs.length) secs[secs.length - 1].body.push(line); }
+  const find = re => ((secs.find(s => re.test(s.name)) || {}).body || []).join('\n').trim();
+  const st = (t.match(/^[-*\s]*Publication status:\**\s*(.+)$/im) || [])[1] || '';
+  return { review: /READY TO RECORD/i.test(st) ? 'READY TO RECORD' : /REVIEW REQUIRED/i.test(st) ? 'REVIEW REQUIRED' : /PENDING REVIEW/i.test(st) ? 'PENDING REVIEW' : 'Unknown',
+    versionA: find(/^VERSION A\b/), versionB: find(/^VERSION B\b/), comparison: find(/^FINAL COMPARISON$/), other: [] };
+}
+
 // YouTube Shorts section: Title, Description and Tags, copied separately.
 export function parseYoutube(body) {
   const t = String(body || '').replace(/\*\*/g, '');

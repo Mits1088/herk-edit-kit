@@ -285,6 +285,22 @@ no actions; `node dashboard/dev/check-ideas.mjs` saves and exports inside a thro
 - A link proposed by ig-insights is offered, never applied. A proposed Instagram post is not "published".
 - A video project with no linked script is listed separately until you link or hide it.
 - Scripts never approved after 14 days, and batches never exported, are shown under All, not Needs me.
+- Working drafts in `reels-data/outputs/<batch>/reel-NN-*.md` are read as drafts, never as exported scripts. While
+  their `Publication status` is PENDING REVIEW the item reads "Drafts awaiting review" under Needs me, for 14 days.
+  Drafts cannot be approved; choosing Version A or B starts once the review exports to `instagram_scripts_output/`.
+- A source file moved to `Instagram_transcript/processed/`, or a batch with no export, is never described as
+  abandoned. The page says what the files show and that they cannot show why.
+
+### Navigation
+
+- The view a project was opened from stays marked in the navigation. Back returns to the same filter, scroll
+  position and row, on Needs me, Pipeline, Schedule and Research alike.
+- A project whose source came from a saved research idea links back to that idea; the idea and the Ideas list show
+  its Pipeline status and link forward to the project.
+- On a phone every control is at least 44px tall and the four views sit on one row.
+
+Browser checks (headless): `node dashboard/dev/check-nav.mjs` runs the above in a throwaway folder;
+`node dashboard/dev/shots.mjs <label>` photographs every view on the real data without sending an action.
 
 ## Settings (environment variables)
 
