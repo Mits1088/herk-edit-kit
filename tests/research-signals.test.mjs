@@ -118,3 +118,34 @@ test('newer last30free output: every fetched post kept, its own collection time,
   const ys = b.runs.find(r => r.lane === 'youtube_shorts_feed');
   assert.deepEqual(ys.results, ['youtube:If5q9eJ66EU']); assert.equal(b.posts.find(x => x.id === 'If5q9eJ66EU').format, 'short');
 });
+
+test('a video found by both YouTube searches is one entry: Shorts kept, the newer measurement kept whole', () => {
+  const item = (url, at, views, score) => ({ source: 'youtube', source_id: 'If5q9eJ66EU', url, title: 'n8n in 30s', text: 'n8n in 30s', author: 'Chan', created_at: '2026-11-15T10:00:00Z',
+    score, score_formula: 'l30-youtube-v1', collected_at: at, in_window: true, metrics: { views, likes: 5, comments: 1 }, raw: { duration: 30, followers: 9 } });
+  const out = it => ({ results: { youtube: { status: 'ok', counts: { fetched: 1 } } }, merged: { items: [it] }, fetched: { count: 1, items: [it] } });
+  const first = item('https://www.youtube.com/watch?v=If5q9eJ66EU', '2026-11-16T21:00:00Z', 100, 3.1); // discovery: format unknown
+  const later = item('https://www.youtube.com/shorts/If5q9eJ66EU', '2026-11-16T21:10:00Z', 200, 4.2); // Shorts feed: a known Short
+  const b = buildBatch(base({ signalRoom: { lanes: [] }, last30free: { youtube: { file: 'yt' }, youtubeShorts: { file: 'ys' } } }), io({ yt: out(first), ys: out(later) }));
+  assert.deepEqual(validateBatch(b), []);
+  const posts = b.posts.filter(p => p.id === 'If5q9eJ66EU');
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].format, 'short'); assert.match(posts[0].url, /\/shorts\//);
+  assert.deepEqual([posts[0].observation.measuredAt, posts[0].observation.metrics.views, posts[0].observation.discoveryScore], ['2026-11-16T21:10:00Z', 200, 4.2]);
+  assert.deepEqual(b.runs.map(r => r.results), [['youtube:If5q9eJ66EU'], ['youtube:If5q9eJ66EU']]); // both searches still list it
+  // and the other way round: the older measurement arriving second does not replace the newer one
+  const b2 = buildBatch(base({ signalRoom: { lanes: [] }, last30free: { youtube: { file: 'ys' }, youtubeShorts: { file: 'yt' } } }), io({ yt: out(first), ys: out(later) }));
+  const p2 = b2.posts.find(p => p.id === 'If5q9eJ66EU');
+  assert.deepEqual([p2.format, p2.observation.metrics.views, p2.observation.discoveryScore], ['short', 200, 4.2]);
+});
+
+test('a partial paid run is imported with its results, its reason and its cost', () => {
+  const it = { source: 'tiktok', source_id: '7708502162103438612', url: 'https://www.tiktok.com/@a/video/7708502162103438612', title: 't', text: 't', author: 'a', created_at: '2026-11-15T10:00:00Z',
+    score: 1, score_formula: 'l30-tiktok-v1', collected_at: '2026-11-16T21:00:00Z', in_window: true, metrics: { views: 10 }, raw: {} };
+  const reason = 'TikTok Apify run RUN123 ended ABORTED; stop confirmed; 1 results it had already produced were kept';
+  const tt = { results: { tiktok: { status: 'partial', error: reason, counts: { fetched: 1 }, cost: { run_id: 'RUN123', status: 'ABORTED', charged_usd: 0.19 } } }, merged: { items: [it] }, fetched: { count: 1, items: [it] } };
+  const b = buildBatch(base({ signalRoom: { lanes: [] }, last30free: { tiktok: { file: 'tt' } } }), io({ tt }));
+  assert.deepEqual(validateBatch(b), []);
+  const run = b.runs[0];
+  assert.deepEqual([run.status, run.partial, run.results, run.cost.status], ['ok', reason, ['tiktok:7708502162103438612'], 'ABORTED']);
+  assert.match(run.note, /^PARTIAL: /);
+});

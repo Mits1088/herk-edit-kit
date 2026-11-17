@@ -337,8 +337,16 @@ short-form export go through `POST /api/research/action`, on this PC only.
   publication date, sort). They never run a new search; the page shows the Claude Code command for that.
 - **Date window.** Enforced on the stored publication date, 30 days by default. Older posts sit under each list
   as collapsed "historical references". A post with no publication date is listed apart and never counts as recent.
-- **One list per platform and format,** never merged. Each row carries source badges (Signal Room: tracked
-  creators; last30free: discovery).
+- **Short-form first.** Short-form, Long-form (and Format unknown, when any) are tabs. Each tab is one table across
+  platforms, filtered by topic (saved search, default all), platform, publication date and words, and sorted by
+  average views per day unless chosen otherwise. It shows the top 50 after filtering and sorting, with Show more.
+  Posts that leave the window or the top 50 stay stored. A search's posts include those it fetched and kept
+  without reporting them.
+- **Metrics.** Views, average views per day (views over the post's age when measured; under a day counts as one),
+  likes, comments, shares, engagement rate ((likes + comments) / views), share rate (shares / views), the original
+  last30free score, growth and last checked. Every number in a row comes from one measurement; a dash means the
+  source did not give it. The score is compared within one platform only, so sorting by score needs a platform.
+- Each row carries source badges (Signal Room: tracked creators; last30free: discovery).
 - **Freshness.** "Measured N days ago" comes from the source's measurement time and is marked stale after 7 days;
   "Measurement time unknown" when the source gave none. Publication and import dates are shown separately.
 - **Raw engagement and creator outlier are separate columns.** `bounded_velocity_signal` is shown as "Not ranked":

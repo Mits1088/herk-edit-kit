@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 const { loadConfig } = await import('../dashboard/lib/config.mjs');
 const { importBatch, validateBatch, readPosts, readPost, readSearches, growth, matchText, matchPost, postKey } = await import('../dashboard/lib/research.mjs');
 
@@ -345,4 +346,42 @@ test('posts fetched but not reported are stored, and a run keeps its counts and 
   assert.deepEqual([o.measuredBasis, o.scoreFormula], ['collection', 'l30-tiktok-v1']);
   const run = readSearches(cfg)[0].runs[0];
   assert.deepEqual([run.counts, run.cost, run.fetchedOnly], [{ fetched: 2, outside_window: 1 }, cost, [`tiktok:${OLD}`]]);
+});
+
+test('the JSON migration links a measurement only to searches that provably saw it', () => {
+  const cfg = fixture(); const dir = cfg.researchDir; const ref = `tiktok:${TT}`;
+  const run = results => ({ provider: 'last30free', lane: 'tiktok_hashtag', status: 'ok', results });
+  const searches = [['m1', DAY1, [ref]], ['m2', DAY2, [ref]], ['m3', DAY3, [ref]], ['m4', DAY3, []]].map(([batchId, retrievedAt, results]) =>
+    ({ batchId, sha256: batchId, retrievedAt, importedAt: retrievedAt, search: { query: 'n8n', windowDays: 30 }, runs: [run(results)], posts: results.length }));
+  // seen in m1 and m3; m2 returned the post with a different measurement; m4 shares m3's time but did not return it
+  const obs = (views, first, last) => ({ provider: 'last30free', measuredAt: first, metrics: { views }, firstRetrievedAt: first, lastRetrievedAt: last });
+  const post = { id: postKey('tiktok', TT), platform: 'tiktok', nativeId: TT, url: tiktok().url, format: 'short', creator: { handle: 'someone' }, title: 't', caption: null,
+    publishedAt: '2026-11-01T17:34:44Z', durationSeconds: 5, transcript: null, firstRetrievedAt: DAY1, lastRetrievedAt: DAY3,
+    provenance: [{ provider: 'last30free', firstRetrievedAt: DAY1, lastRetrievedAt: DAY3, batches: ['m1', 'm2', 'm3'] }],
+    observations: [obs(100, DAY1, DAY3), obs(150, DAY2, DAY2)] };
+  mkdirSync(join(dir, 'posts'), { recursive: true });
+  writeFileSync(join(dir, 'posts', post.id + '.json'), JSON.stringify(post));
+  writeFileSync(join(dir, 'searches.jsonl'), searches.map(s => JSON.stringify(s)).join('\n') + '\n');
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, '..', 'dashboard', 'dev', 'migrate-json-to-sqlite.mjs')], { env: { ...process.env, DASH_ROOT: cfg.root }, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const db = new DatabaseSync(join(dir, 'research.sqlite'), { readOnly: true });
+  const links = db.prepare('SELECT o.views, s.batch_id FROM observation_sightings s JOIN observations o ON o.id = s.observation_id ORDER BY o.views, s.batch_id').all().map(x => [x.views, x.batch_id]);
+  db.close();
+  // 100 is linked to m1 and m3 (its first and last sightings) but not m2, which falls between them and returned 150;
+  // m4 shares m3's time but never returned the post.
+  assert.deepEqual(links, [[100, 'm1'], [100, 'm3'], [150, 'm2']]);
+  assert.deepEqual(readPost(cfg, post.id), post);
+});
+
+test('the migration leaves a link unknown when two searches that returned the post share its time', () => {
+  const cfg = fixture(); const dir = cfg.researchDir; const ref = `tiktok:${TT}`;
+  const s = (batchId) => ({ batchId, sha256: batchId, retrievedAt: DAY1, importedAt: DAY1, search: { query: 'n8n' }, runs: [{ provider: 'last30free', lane: 'tiktok_hashtag', status: 'ok', results: [ref] }], posts: 1 });
+  const post = { id: postKey('tiktok', TT), platform: 'tiktok', nativeId: TT, url: tiktok().url, format: 'short', creator: {}, title: null, caption: null, publishedAt: null, durationSeconds: null, transcript: null,
+    firstRetrievedAt: DAY1, lastRetrievedAt: DAY1, provenance: [{ provider: 'last30free', firstRetrievedAt: DAY1, lastRetrievedAt: DAY1, batches: ['a', 'b'] }],
+    observations: [{ provider: 'last30free', measuredAt: DAY1, metrics: { views: 1 }, firstRetrievedAt: DAY1, lastRetrievedAt: DAY1 }] };
+  mkdirSync(join(dir, 'posts'), { recursive: true }); writeFileSync(join(dir, 'posts', post.id + '.json'), JSON.stringify(post));
+  writeFileSync(join(dir, 'searches.jsonl'), [s('a'), s('b')].map(x => JSON.stringify(x)).join('\n'));
+  assert.equal(spawnSync(process.execPath, [join(import.meta.dirname, '..', 'dashboard', 'dev', 'migrate-json-to-sqlite.mjs')], { env: { ...process.env, DASH_ROOT: cfg.root } }).status, 0);
+  const db = new DatabaseSync(join(dir, 'research.sqlite'), { readOnly: true });
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM observation_sightings').get().n, 0); db.close();
 });

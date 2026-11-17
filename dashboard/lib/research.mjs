@@ -115,6 +115,8 @@ export function validateBatch(b) {
     if (!optStr(r.note)) bad(`${at}.note must be text`);
     if (r.counts != null && !(isObj(r.counts) && Object.values(r.counts).every(v => Number.isInteger(v) && v >= 0))) bad(`${at}.counts must map names to whole numbers`);
     if (r.cost != null && !isObj(r.cost)) bad(`${at}.cost must be an object`);
+    // partial: the run's results are real but incomplete (a paid run failed or was stopped); the reason is kept.
+    if (r.partial != null && (typeof r.partial !== 'string' || !r.partial.trim() || r.status !== 'ok')) bad(`${at}.partial must be the reason text, on an ok run`);
     if (!Array.isArray(r.results)) return bad(`${at}.results must be a list of "platform:id", best match first`);
     if (r.fetchedOnly != null && !Array.isArray(r.fetchedOnly)) return bad(`${at}.fetchedOnly must be a list of "platform:id"`);
     if (r.status === 'error' && (r.results.length || (r.fetchedOnly || []).length)) bad(`${at}: a failed run cannot list results`);

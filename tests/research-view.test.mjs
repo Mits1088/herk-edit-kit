@@ -37,74 +37,76 @@ function store() {
   ]));
   return cfg;
 }
-const group = (l, label) => l.groups.find(g => g.label === label);
 const ids = rows => rows.map(r => r.nativeId);
+// Every row the view returns for both main formats (and the undated list when the window allows it).
+const every = (cfg, f = {}, now = NOW) => ['short', 'long'].flatMap(format => { const l = researchList(cfg, { window: 'all', ...f, format }, now); return [...l.rows, ...l.undatedRows]; });
 
-test('the publication window is enforced locally: older posts are historical, an unknown date is never recent', () => {
+test('the publication window is enforced locally: older posts are not listed, an unknown date is never recent', () => {
   const cfg = store();
-  const d30 = researchList(cfg, {}, NOW); // default window is 30 days
-  assert.equal(d30.filters.window, '30');
-  const insta = group(d30, 'Instagram');
-  assert.deepEqual(insta.recent, []); assert.deepEqual(ids(insta.historical).sort(), [A, B].sort()); assert.deepEqual(ids(insta.undated), [C]);
-  assert.deepEqual(d30.totals, { posts: 7, searches: 1, lastRetrievedAt: AT, shown: 7, recent: 4, historical: 2, undated: 1 });
-  // a wider window brings dated posts in, but never the undated one
-  const year = researchList(cfg, { window: '365' }, NOW);
-  assert.deepEqual(ids(group(year, 'Instagram').recent).sort(), [A, B].sort()); assert.deepEqual(ids(group(year, 'Instagram').undated), [C]);
-  const all = researchList(cfg, { window: 'all' }, NOW);
-  assert.equal(all.totals.historical, 0); assert.deepEqual(ids(group(all, 'Instagram').undated), [C]);
+  const d30 = researchList(cfg, {}, NOW); // defaults: short-form, last 30 days, sorted by average views per day
+  assert.deepEqual([d30.filters.window, d30.filters.format, d30.filters.sort, d30.filters.limit], ['30', 'short', 'speed', 50]);
+  assert.deepEqual(d30.formats, { short: 4, long: 3, unknown: 0 });
+  assert.deepEqual(ids(d30.rows), ['7708502162103438612']);
+  assert.deepEqual(d30.totals, { posts: 7, searches: 1, lastRetrievedAt: AT, shown: 4, recent: 1, historical: 2, undated: 1 });
+  // a wider window brings dated posts in, but never the undated one; "any date" lists it separately
+  assert.deepEqual(ids(researchList(cfg, { window: '365', platform: 'instagram' }, NOW).rows).sort(), [A, B].sort());
+  assert.deepEqual(researchList(cfg, { window: '365', platform: 'instagram' }, NOW).undatedRows, []);
+  const all = researchList(cfg, { window: 'all', platform: 'instagram' }, NOW);
+  assert.equal(all.totals.historical, 0); assert.deepEqual(ids(all.undatedRows), [C]);
   // windows and ages count calendar days in Europe/London, not 24-hour blocks: on 17 Nov, 10 Nov is 7 days ago
-  assert.equal(researchList(cfg, { window: '7' }, NOW).totals.recent, 4);
-  assert.equal(researchList(cfg, { window: '7' }, new Date('2026-11-19T00:30:00Z')).totals.recent, 3); // 12 Nov is 7 days ago, 10 Nov is 9
-  assert.equal(researchList(cfg, { window: '7' }, new Date('2026-11-20T00:30:00Z')).totals.recent, 2);
+  assert.equal(researchList(cfg, { window: '7', format: 'long' }, NOW).totals.recent, 3);
+  assert.equal(researchList(cfg, { window: '7', format: 'long' }, new Date('2026-11-19T00:30:00Z')).totals.recent, 2); // 12 Nov is 7 days ago, 10 Nov is 9
+  assert.equal(researchList(cfg, { window: '7', format: 'long' }, new Date('2026-11-20T00:30:00Z')).totals.recent, 1);
   // 14 Nov 22:20 is "2 days ago" on 16 Nov at any hour, and "yesterday" only on the 15th
-  const age = at => group(researchList(cfg, { window: 'all' }, new Date(at)), 'YouTube long-form').recent.find(r => r.nativeId === 'ynEEbqKQSaY').publishedAgeDays;
+  const age = at => researchList(cfg, { window: 'all', format: 'long' }, new Date(at)).rows.find(r => r.nativeId === 'ynEEbqKQSaY').publishedAgeDays;
   assert.deepEqual([age('2026-11-16T00:05:00Z'), age('2026-11-16T21:40:00Z'), age('2026-11-15T23:59:00Z'), age('2026-11-14T23:00:00Z')], [2, 2, 1, 0]);
   // the calendar is London's: 23:30 UTC on a summer date is already the next day there
   importBatch(cfg, batch('bst', '2026-07-02T09:00:00Z', 'bst', [tt('7708502162103438999', { publishedAt: '2026-06-30T23:30:00Z', observation: null })]));
-  assert.equal(group(researchList(cfg, { search: 'bst', window: 'all' }, new Date('2026-07-01T23:30:00Z')), 'TikTok').recent[0].publishedAgeDays, 1); // 1 Jul to 2 Jul in London
-  assert.equal(researchList(cfg, { window: 'nonsense' }, NOW).filters.window, '30');
+  assert.equal(researchList(cfg, { search: 'bst', window: 'all' }, new Date('2026-07-01T23:30:00Z')).rows[0].publishedAgeDays, 1); // 1 Jul to 2 Jul in London
+  assert.equal(researchList(cfg, { window: 'nonsense', format: 'nonsense', sort: 'nonsense' }, NOW).filters.window, '30');
 });
 
 test('filters search the saved text: platform, format, saved search, whole words and exact phrases', () => {
   const cfg = store();
-  assert.deepEqual(researchList(cfg, { platform: 'tiktok', window: 'all' }, NOW).groups.map(g => g.label), ['TikTok']);
-  assert.deepEqual(researchList(cfg, { format: 'long', window: 'all' }, NOW).groups.map(g => g.label), ['YouTube long-form']);
-  assert.equal(researchList(cfg, { search: 'N8N', window: 'all' }, NOW).totals.shown, 7);
+  assert.deepEqual(researchList(cfg, { platform: 'tiktok', window: 'all' }, NOW).rows.map(r => r.platform), ['tiktok']);
+  assert.ok(researchList(cfg, { format: 'long', window: 'all' }, NOW).rows.every(r => r.platform === 'youtube' && r.format === 'long'));
+  const n8n = researchList(cfg, { search: 'N8N', window: 'all' }, NOW);
+  assert.equal(n8n.formats.short + n8n.formats.long, 7);
   assert.equal(researchList(cfg, { search: 'something else', window: 'all' }, NOW).totals.shown, 0);
   const q = researchList(cfg, { q: '"better at n8n"', window: 'all' }, NOW);
-  assert.deepEqual(q.groups.flatMap(g => [...g.recent, ...g.historical, ...g.undated]).map(r => [r.nativeId, r.match.fields]), [[A, ['transcript', 'excerpt']]]);
+  assert.deepEqual(q.rows.map(r => [r.nativeId, r.match.fields]), [[A, ['transcript', 'excerpt']]]);
   assert.equal(researchList(cfg, { q: 'n8', window: 'all' }, NOW).totals.shown, 0); // not a substring search
   // with only a saved search chosen, a post whose saved text lacks the word is still listed, and says so
-  const row = group(researchList(cfg, { search: 'n8n', window: 'all' }, NOW), 'YouTube long-form').recent.find(r => r.nativeId === 'li2czuMTx6I');
+  const row = researchList(cfg, { search: 'n8n', window: 'all', format: 'long' }, NOW).rows.find(r => r.nativeId === 'li2czuMTx6I');
   assert.deepEqual(row.match, { query: 'n8n', matched: false, fields: [] });
 });
 
 test('evidence, freshness and provenance are reported as they are', () => {
-  const cfg = store(); const l = researchList(cfg, { search: 'n8n', window: 'all' }, NOW);
-  const row = id => l.groups.flatMap(g => [...g.recent, ...g.historical, ...g.undated]).find(r => r.nativeId === id);
+  const cfg = store(); const rows = every(cfg, { search: 'n8n' }); const row = id => rows.find(r => r.nativeId === id);
   assert.equal(row(A).evidence, 'transcript'); assert.equal(row(B).evidence, 'excerpt'); assert.equal(row(C).evidence, 'none'); assert.equal(row('7708502162103438612').evidence, 'caption');
   // measurement freshness is separate from publication and import dates
   assert.deepEqual([row(A).engagement.measuredAt, row(A).engagement.ageDays, row(A).engagement.stale], ['2026-08-16T16:54:05Z', 93, true]);
   assert.deepEqual([row(B).engagement.measuredAt, row(B).engagement.ageDays, row(B).engagement.stale], [null, null, null]); // unknown stays unknown
-  assert.equal(row(C).engagement, null); assert.equal(row(C).publishedAgeDays, null);
+  assert.equal(row(C).engagement, null); assert.equal(row(C).metrics, null); assert.equal(row(C).publishedAgeDays, null);
   // a dated count is preferred over an undated one from the other source
   const both = row('ynEEbqKQSaY');
   assert.deepEqual([both.engagement.value, both.engagement.provider, both.engagement.stale], [162056, 'last30free', false]);
+  assert.deepEqual([both.metrics.views, both.metrics.provider], [162056, 'last30free']);
   assert.deepEqual(both.providers.sort(), ['last30free', 'signal-room']);
-  assert.deepEqual(both.runs.map(r => [r.lane, r.provider, r.rank, r.of]), [['youtube_long_form', 'signal-room', 1, 3], ['youtube_discovery', 'last30free', 1, 1]]);
+  assert.deepEqual(both.runs.map(r => [r.lane, r.provider, r.rank, r.of, r.kept]), [['youtube_long_form', 'signal-room', 1, 3, false], ['youtube_discovery', 'last30free', 1, 1, false]]);
 });
 
-test('rankings: the unstable signal is never ranked, outlier and raw engagement are separate, growth needs dated pairs', () => {
+test('rankings: the unstable signal is never ranked, outlier and views are separate, growth needs dated pairs', () => {
   const cfg = store();
-  const long = s => group(researchList(cfg, { sort: s, window: 'all' }, NOW), 'YouTube long-form').recent;
+  const long = s => researchList(cfg, { sort: s, window: 'all', format: 'long' }, NOW).rows;
   assert.deepEqual(ids(long('outlier')), ['li2czuMTx6I', 'XoCg5QrOiLQ', 'ynEEbqKQSaY']); // 1.07, 0.19, then the unranked one, despite its 90.4
   assert.deepEqual(long('outlier')[2].outlier, { metric: 'bounded_velocity_signal', label: 'bounded velocity signal', value: 90.4, rankable: false, measuredAt: null });
-  assert.deepEqual(ids(long('engagement')), ['ynEEbqKQSaY', 'li2czuMTx6I', 'XoCg5QrOiLQ']);
+  assert.deepEqual(ids(long('views')), ['ynEEbqKQSaY', 'li2czuMTx6I', 'XoCg5QrOiLQ']);
   assert.deepEqual(ids(long('published')), ['ynEEbqKQSaY', 'XoCg5QrOiLQ', 'li2czuMTx6I']);
-  assert.ok(researchList(cfg, { window: 'all' }, NOW).groups.every(g => [...g.recent, ...g.undated].every(r => r.growth === null))); // nothing has two dated measurements yet
+  assert.ok(every(cfg).every(r => r.growth === null)); // nothing has two dated measurements yet
   // a second dated measurement from the same source gives growth; one from another source would not
   importBatch(cfg, batch('b2', '2026-11-18T09:00:00Z', 'n8n', [yt('ynEEbqKQSaY', 'last30free', { observation: { measuredAt: '2026-11-18T09:00:00Z', metrics: { views: 170056 }, discoveryScore: 12 } })]));
-  const g = group(researchList(cfg, { window: 'all' }, new Date('2026-11-18T12:00:00Z')), 'YouTube long-form').recent.find(r => r.nativeId === 'ynEEbqKQSaY').growth;
+  const g = researchList(cfg, { window: 'all', format: 'long' }, new Date('2026-11-18T12:00:00Z')).rows.find(r => r.nativeId === 'ynEEbqKQSaY').growth;
   assert.deepEqual([g.provider, g.metric, g.delta, g.days], ['last30free', 'views', 8000, 1]);
 });
 
@@ -113,10 +115,68 @@ test('a failed source run stays visible and removes nothing', () => {
   importBatch(cfg, batch('b2', '2026-11-18T09:00:00Z', 'n8n', [ig(A)], [{ provider: 'last30free', lane: 'tiktok_hashtag', status: 'error', error: 'TikTok search failed: timeout', results: [] }]));
   const l = researchList(cfg, { window: 'all' }, new Date('2026-11-18T12:00:00Z'));
   assert.deepEqual(l.failures.map(f => [f.query, f.laneLabel, f.error]), [['n8n', 'TikTok hashtag', 'TikTok search failed: timeout']]);
-  assert.equal(group(l, 'TikTok').recent.length, 1); // the earlier TikTok find is still there
+  assert.equal(l.rows.filter(r => r.platform === 'tiktok').length, 1); // the earlier TikTok find is still there
   const s = researchSearches(cfg);
   assert.deepEqual(s.map(x => x.batchId), ['b2', 'b1']);
-  assert.deepEqual(s[0].runs.find(r => r.lane === 'tiktok_hashtag'), { lane: 'tiktok_hashtag', laneLabel: 'TikTok hashtag', provider: 'last30free', status: 'error', error: 'TikTok search failed: timeout', note: null, results: 0 });
+  assert.deepEqual(s[0].runs.find(r => r.lane === 'tiktok_hashtag'), { lane: 'tiktok_hashtag', laneLabel: 'TikTok hashtag', provider: 'last30free', status: 'error', error: 'TikTok search failed: timeout', note: null, results: 0, kept: 0, partial: null, counts: null, cost: null });
+});
+
+const TT2 = id => tt(id, { observation: { measuredAt: AT, measuredBasis: 'collection', metrics: { views: 1000, likes: 100, comments: 50, shares: 20 }, discoveryScore: 9.1, scoreFormula: 'l30-tiktok-v1' }, publishedAt: '2026-11-15T09:00:00Z' });
+
+test('metrics come from one measurement: views, average views per day, rates, score and last checked', () => {
+  const cfg = store();
+  importBatch(cfg, batch('m1', AT, 'metrics', [TT2('7708502162103438100')]));
+  const r = researchList(cfg, { search: 'metrics' }, NOW).rows[0];
+  assert.deepEqual(r.metrics, { provider: 'last30free', viewMetric: 'views', views: 1000, likes: 100, comments: 50, shares: 20, saves: null,
+    avgViewsPerDay: 500, engagementRate: 0.15, shareRate: 0.02, measuredAt: AT, measuredBasis: 'collection', retrievedAt: AT });
+  assert.deepEqual(r.score, { value: 9.1, formula: 'l30-tiktok-v1', platform: 'tiktok', measuredAt: AT });
+  // a newer measurement without shares: the row shows the newer one whole, shares unknown, never the older share count
+  importBatch(cfg, batch('m2', '2026-11-17T10:00:00Z', 'metrics', [tt('7708502162103438100', { observation: { measuredAt: '2026-11-17T10:00:00Z', metrics: { views: 1200, likes: 110 }, discoveryScore: 9.3 }, publishedAt: '2026-11-15T09:00:00Z' })]));
+  const r2 = researchList(cfg, { search: 'metrics' }, NOW).rows[0];
+  assert.deepEqual([r2.metrics.views, r2.metrics.shares, r2.metrics.shareRate, r2.metrics.engagementRate, r2.score.value], [1200, null, null, null, 9.3]);
+  // a post measured within its first day counts one day, so a few hours do not inflate the average
+  importBatch(cfg, batch('m3', AT, 'young', [tt('7708502162103438200', { publishedAt: '2026-11-17T06:00:00Z', observation: { measuredAt: AT, metrics: { views: 600 } } })]));
+  assert.equal(researchList(cfg, { search: 'young' }, NOW).rows[0].metrics.avgViewsPerDay, 600);
+});
+
+test('score sorts only within one platform; the list is the top 50 with more on request', () => {
+  const cfg = store();
+  const posts = Array.from({ length: 60 }, (_, i) => tt(String(7708502162103440000n + BigInt(i)), { observation: { measuredAt: AT, metrics: { views: 1000 + i } }, publishedAt: '2026-11-16T09:00:00Z' }));
+  importBatch(cfg, batch('many', AT, 'many', posts));
+  const mixed = researchList(cfg, { sort: 'score' }, NOW);
+  assert.deepEqual([mixed.scoreNeedsPlatform, mixed.sortedBy], [true, 'speed']);
+  const one = researchList(cfg, { sort: 'score', platform: 'tiktok' }, NOW);
+  assert.deepEqual([one.scoreNeedsPlatform, one.sortedBy], [false, 'score']);
+  const top = researchList(cfg, { search: 'many', sort: 'views' }, NOW);
+  assert.deepEqual([top.rows.length, top.more, top.totals.recent, top.rows[0].metrics.views], [50, 10, 60, 1059]);
+  const next = researchList(cfg, { search: 'many', sort: 'views', limit: '100' }, NOW);
+  assert.deepEqual([next.rows.length, next.more], [60, 0]);
+});
+
+test('posts fetched but not reported belong to their search, and their original records are found', () => {
+  const cfg = store(); const KEPT = '7708502162103438300', SHORT = 'If5q9eJ66EU', REEL = '3802204658396629799';
+  const kept = tt(KEPT, { publishedAt: '2026-08-01T00:00:00Z' });
+  const short = yt(SHORT, 'last30free', { url: `https://www.youtube.com/shorts/${SHORT}`, format: 'short', observation: { measuredAt: AT, metrics: { views: 5 } } });
+  const reel = ig(REEL, { provider: 'last30free', observation: { measuredAt: AT, metrics: { views: 7 } } });
+  importBatch(cfg, { schema: 1, batchId: 'k1', retrievedAt: AT, search: { query: 'kept', windowDays: 30 }, posts: [tt('7708502162103438612'), kept, short, reel], runs: [
+    { provider: 'last30free', lane: 'tiktok_hashtag', status: 'ok', results: ['tiktok:7708502162103438612'], fetchedOnly: [`tiktok:${KEPT}`], counts: { fetched: 2 }, partial: 'TikTok Apify run R ended ABORTED; 2 results it had already produced were kept', cost: { run_id: 'R', status: 'ABORTED', charged_usd: 0.05 } },
+    { provider: 'last30free', lane: 'youtube_shorts_feed', status: 'ok', results: [`youtube:${SHORT}`] },
+    { provider: 'last30free', lane: 'instagram_search', status: 'ok', results: [`instagram:${REEL}`] }] });
+  const inSearch = every(cfg, { search: 'kept' }).map(r => r.nativeId).sort();
+  assert.deepEqual(inSearch, ['7708502162103438612', KEPT, REEL, SHORT].sort()); // the kept post is not lost under its own search
+  const k = every(cfg, { search: 'kept' }).find(r => r.nativeId === KEPT);
+  assert.deepEqual(k.runs.map(r => [r.batchId, r.kept, r.rank]), [['k1', true, null]]);
+  assert.deepEqual(researchList(cfg, { search: 'kept' }, NOW).partials.map(p => p.laneLabel), ['TikTok hashtag']);
+  const run = researchSearches(cfg)[0].runs[0];
+  assert.deepEqual([run.kept, run.partial.startsWith('TikTok Apify'), run.cost.charged_usd], [1, true, 0.05]);
+  // original records: the builder keeps instagram.json and youtubeShorts.json; "fetched" holds every returned record
+  const dir = join(cfg.researchDir, 'sources', 'k1'); mkdirSync(dir, { recursive: true });
+  const file = (source, id) => JSON.stringify({ results: {}, merged: { items: [] }, fetched: { items: [{ source, source_id: id, provider_record: { original: true } }] } });
+  writeFileSync(join(dir, 'instagram.json'), file('instagram', REEL)); writeFileSync(join(dir, 'youtubeShorts.json'), file('youtube', SHORT)); writeFileSync(join(dir, 'tiktok.json'), file('tiktok', KEPT));
+  for (const [id, name] of [[`instagram-${REEL}`, 'instagram.json'], [`youtube-${Buffer.from(SHORT).toString('hex')}`, 'youtubeShorts.json'], [`tiktok-${KEPT}`, 'tiktok.json']]) {
+    const rec = researchPost(cfg, id, '', NOW).builderInputs.find(b => b.batchId === 'k1').records;
+    assert.deepEqual(rec.map(x => [x.what, x.data.provider_record]), [[`Item, as written by last30free (${name})`, { original: true }]]);
+  }
 });
 
 test('a post detail keeps exact excerpts, says what is missing, and finds the original records', () => {

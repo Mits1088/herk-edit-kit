@@ -18,7 +18,6 @@ if (!existsSync(postsDir) && !existsSync(searchesFile)) fail(`No JSON store unde
 
 const posts = existsSync(postsDir) ? readdirSync(postsDir).filter(n => n.endsWith('.json')).map(n => JSON.parse(readFileSync(join(postsDir, n), 'utf8'))) : [];
 const searches = existsSync(searchesFile) ? readFileSync(searchesFile, 'utf8').split('\n').filter(l => l.trim()).map(l => JSON.parse(l)) : [];
-const retrievedAt = new Map(searches.map(s => [s.batchId, s.retrievedAt]));
 
 const db = openDb(cfg, { write: true });
 try {
@@ -27,12 +26,18 @@ try {
     for (const s of searches) saveSearch(db, s, postKey);
     for (const p of posts) {
       savePost(db, p);
-      // The JSON store did not record which batch saw which measurement. Link a measurement to the batches of its
-      // source whose retrieval time falls inside the measurement's first-to-last retrieval window.
+      // The JSON store did not record which batch saw which measurement. Link one only on exact evidence: the
+      // batch's own runs from that source returned this post, and the batch's retrieval time is the measurement's
+      // first or last retrieval time (and no other such batch shares that time). A batch in between proves
+      // nothing (it may have returned a different measurement), so it is left unlinked.
       for (const o of p.observations) {
-        const { id } = db.prepare('SELECT id FROM observations WHERE post_key = ? AND first_retrieved_at = ? AND last_retrieved_at = ? AND provider = ? AND ord = ?').get(p.id, o.firstRetrievedAt, o.lastRetrievedAt, o.provider, p.observations.indexOf(o));
-        const pv = p.provenance.find(x => x.provider === o.provider);
-        for (const b of pv ? pv.batches : []) { const at = retrievedAt.get(b); if (at && at >= o.firstRetrievedAt && at <= o.lastRetrievedAt) db.prepare('INSERT OR IGNORE INTO observation_sightings (observation_id, batch_id) VALUES (?, ?)').run(id, b); }
+        const { id } = db.prepare('SELECT id FROM observations WHERE post_key = ? AND ord = ?').get(p.id, p.observations.indexOf(o));
+        const ref = `${p.platform}:${p.nativeId}`;
+        const returned = searches.filter(s => (s.runs || []).some(r => r.provider === o.provider && [...(r.results || []), ...(r.fetchedOnly || [])].includes(ref)));
+        for (const at of new Set([o.firstRetrievedAt, o.lastRetrievedAt])) {
+          const hits = returned.filter(s => s.retrievedAt === at);
+          if (hits.length === 1) db.prepare('INSERT OR IGNORE INTO observation_sightings (observation_id, batch_id) VALUES (?, ?)').run(id, hits[0].batchId);
+        }
       }
     }
   });

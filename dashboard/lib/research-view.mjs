@@ -1,8 +1,11 @@
 // Read-only view of the research store for the Research page. It never writes.
+// The page (docs/plans/research-database/PLAN.md, "What the page does"): short-form first, one table per format
+// across platforms, the top 50 after filtering and sorting (more on request), metrics up front.
 // Rules it applies: the publication-date window is enforced here, on stored dates; an unknown date is never
-// "recent"; measurement freshness is reported apart from publication and import dates; creator outliers and raw
-// engagement are separate columns; an unstable outlier signal is shown but never ranked; growth comes only from
-// two dated measurements by one source.
+// "recent"; every metric in a row comes from one measurement (never mixed); a missing input makes a metric
+// unavailable, never 0; the original score is compared within one platform only; creator outliers and raw
+// engagement are separate; an unstable outlier signal is shown but never ranked; growth comes only from two dated
+// measurements by one source.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPosts, readSearches, growth, matchPost, highlight } from './research.mjs';
@@ -16,7 +19,9 @@ const UNSTABLE = ['bounded_velocity_signal'];
 const PRIMARY = { instagram: ['plays', 'views'], youtube: ['views'], tiktok: ['views'] };
 const STALE_DAYS = 7; // only decides when a measurement is labelled "stale" on the page
 const WINDOWS = ['7', '30', '90', '365', 'all'];
-const SORTS = ['published', 'engagement', 'outlier'];
+// speed = average views per day. score compares only within one platform, so it needs a platform filter.
+const SORTS = ['speed', 'views', 'published', 'engagement', 'shares', 'growth', 'score', 'outlier'];
+const PAGE = 50;
 // Ages are calendar days in the dashboard's timezone (Europe/London unless DASH_TZ says otherwise), so a post from
 // the evening of the 14th is "2 days ago" on the 16th, whatever the hour.
 let TZ = 'Europe/London';
@@ -26,10 +31,43 @@ const ref = p => `${p.platform}:${p.nativeId}`;
 const words = t => (t.trim() ? t.trim().split(/\s+/).length : 0);
 
 // Every run that returned this post: which search, which source, and where it ranked among that run's top matches.
+// A post the run fetched and kept without reporting it (older, undated, past the limit) is listed with kept: true.
 function runsOf(post, searches) {
   const out = [];
-  for (const s of searches) for (const r of s.runs || []) { const i = (r.results || []).indexOf(ref(post)); if (i >= 0) out.push({ batchId: s.batchId, query: s.search.query, retrievedAt: s.retrievedAt, lane: r.lane, laneLabel: LANE_LABEL[r.lane] || r.lane, provider: r.provider, rank: i + 1, of: r.results.length, note: r.note || null }); }
+  for (const s of searches) for (const r of s.runs || []) {
+    const base = { batchId: s.batchId, query: s.search.query, retrievedAt: s.retrievedAt, lane: r.lane, laneLabel: LANE_LABEL[r.lane] || r.lane, provider: r.provider, note: r.note || null };
+    const i = (r.results || []).indexOf(ref(post));
+    if (i >= 0) out.push({ ...base, rank: i + 1, of: r.results.length, kept: false });
+    else if ((r.fetchedOnly || []).includes(ref(post))) out.push({ ...base, rank: null, of: r.results.length, kept: true });
+  }
   return out;
+}
+const memberOf = r => [...(r.results || []), ...(r.fetchedOnly || [])];
+
+// The metrics row: every number from ONE measurement (the newest dated one with a view count, else the newest
+// undated one), so counts from different measurements are never mixed.
+function metricsOf(post) {
+  const primary = o => PRIMARY[post.platform].find(k => typeof o.metrics[k] === 'number');
+  const counted = (post.observations || []).filter(primary);
+  const dated = counted.filter(o => o.measuredAt).sort((a, b) => Date.parse(b.measuredAt) - Date.parse(a.measuredAt));
+  const o = dated[0] || counted.filter(x => !x.measuredAt).sort((a, b) => (a.lastRetrievedAt < b.lastRetrievedAt ? 1 : -1))[0];
+  if (!o) return null;
+  const m = o.metrics; const num = v => (typeof v === 'number' ? v : null);
+  const views = m[primary(o)], likes = num(m.likes), comments = num(m.comments), shares = num(m.shares);
+  // Average views per day up to that measurement: the post's age when it was measured. Under a day counts as one.
+  const ageAtMeasure = o.measuredAt && post.publishedAt ? (Date.parse(o.measuredAt) - Date.parse(post.publishedAt)) / 86400e3 : null;
+  return {
+    provider: o.provider, viewMetric: primary(o), views, likes, comments, shares, saves: num(m.saves),
+    avgViewsPerDay: ageAtMeasure != null && ageAtMeasure >= 0 ? views / Math.max(1, ageAtMeasure) : null,
+    engagementRate: views > 0 && likes != null && comments != null ? (likes + comments) / views : null,
+    shareRate: views > 0 && shares != null ? shares / views : null,
+    measuredAt: o.measuredAt, measuredBasis: o.measuredBasis || null, retrievedAt: o.lastRetrievedAt,
+  };
+}
+// The original last30free score from the newest last30free measurement, with its formula (comparable within a platform).
+function scoreOf(post) {
+  const o = (post.observations || []).filter(x => x.discoveryScore != null).sort((a, b) => ((a.measuredAt || a.lastRetrievedAt) < (b.measuredAt || b.lastRetrievedAt) ? 1 : -1))[0];
+  return o ? { value: o.discoveryScore, formula: o.scoreFormula || null, platform: post.platform, measuredAt: o.measuredAt } : null;
 }
 
 function summarise(post, searches, now) {
@@ -54,13 +92,14 @@ function summarise(post, searches, now) {
     firstRetrievedAt: post.firstRetrievedAt, lastRetrievedAt: post.lastRetrievedAt, providers: (post.provenance || []).map(p => p.provider),
     evidence, transcript: post.transcript ? { origin: post.transcript.origin, provider: post.transcript.provider, capturedAt: post.transcript.capturedAt, words: words(post.transcript.text) } : null,
     excerptCount: (post.excerpts || []).length, hasCaption: !!post.caption,
-    engagement, outlier, growth: grow, runs: runsOf(post, searches),
+    engagement, outlier, growth: grow, runs: runsOf(post, searches), metrics: metricsOf(post), score: scoreOf(post),
   };
 }
 
 function cleanFilters(f = {}) {
   const pick = (v, list, d) => (list.includes(v) ? v : d);
-  return { search: String(f.search || '').trim(), q: String(f.q || '').trim().slice(0, 200), platform: pick(f.platform, ['instagram', 'youtube', 'tiktok'], ''), format: pick(f.format, ['short', 'long', 'unknown'], ''), window: pick(f.window, WINDOWS, '30'), sort: pick(f.sort, SORTS, 'published') };
+  const limit = Math.min(1000, Math.max(PAGE, Math.ceil((Number(f.limit) || PAGE) / PAGE) * PAGE));
+  return { search: String(f.search || '').trim(), q: String(f.q || '').trim().slice(0, 200), platform: pick(f.platform, ['instagram', 'youtube', 'tiktok'], ''), format: pick(f.format, ['short', 'long', 'unknown'], 'short'), window: pick(f.window, WINDOWS, '30'), sort: pick(f.sort, SORTS, 'speed'), limit };
 }
 
 export function researchList(cfg, filters, now = new Date()) {
@@ -68,48 +107,64 @@ export function researchList(cfg, filters, now = new Date()) {
   const searches = readSearches(cfg).sort((a, b) => (a.retrievedAt < b.retrievedAt ? 1 : -1));
   const queries = [...new Set(searches.map(s => s.search.query))];
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
-  const inSearch = f.search ? new Set(searches.filter(s => same(s.search.query, f.search)).flatMap(s => (s.runs || []).flatMap(r => r.results || []))) : null;
+  // A saved search's posts: what it reported and what it fetched and kept.
+  const inSearch = f.search ? new Set(searches.filter(s => same(s.search.query, f.search)).flatMap(s => (s.runs || []).flatMap(memberOf))) : null;
   // The text filter is checked on the saved text. With only a saved search chosen, its query is used to show what matched.
   const matchQuery = f.q || f.search;
   const windowDays = f.window === 'all' ? null : Number(f.window);
-  const rows = [];
+  const rows = []; const formats = { short: 0, long: 0, unknown: 0 };
   for (const post of posts) {
     if (inSearch && !inSearch.has(ref(post))) continue;
     if (f.platform && post.platform !== f.platform) continue;
-    if (f.format && post.format !== f.format) continue;
     const match = matchQuery ? matchPost(post, matchQuery) : null;
     if (f.q && !match.matched) continue;
+    formats[post.format] = (formats[post.format] || 0) + 1; // so each format tab can say how many it holds
+    if (post.format !== f.format) continue;
     const row = summarise(post, searches, now);
     row.match = match ? { query: matchQuery, matched: match.matched, fields: Object.keys(match.fields) } : null;
     // An unknown publication date is never counted as recent.
     row.bucket = !post.publishedAt ? 'undated' : windowDays === null || row.publishedAgeDays <= windowDays ? 'recent' : 'historical';
     rows.push(row);
   }
-  const last = v => (v == null ? -Infinity : v);
-  const order = {
-    published: (a, b) => last(b.publishedAt && Date.parse(b.publishedAt)) - last(a.publishedAt && Date.parse(a.publishedAt)),
-    engagement: (a, b) => last(b.engagement && b.engagement.value) - last(a.engagement && a.engagement.value),
-    outlier: (a, b) => last(b.outlier && b.outlier.rankable ? b.outlier.value : null) - last(a.outlier && a.outlier.rankable ? a.outlier.value : null),
-  }[f.sort];
-  const groups = GROUPS.map(([key, label]) => {
-    const mine = rows.filter(r => `${r.platform}:${r.format}` === key).sort(order);
-    return { key, label, recent: mine.filter(r => r.bucket === 'recent'), historical: mine.filter(r => r.bucket === 'historical'), undated: mine.filter(r => r.bucket === 'undated') };
-  }).filter(g => g.recent.length + g.historical.length + g.undated.length);
-  // Failed source runs in the latest search for each topic shown, so a gap is never mistaken for "nothing found".
-  const failures = [];
+  // Score is compared within one platform only: without a platform filter it cannot order a mixed list.
+  const scoreNeedsPlatform = f.sort === 'score' && !f.platform;
+  const sortBy = scoreNeedsPlatform ? 'speed' : f.sort;
+  const last = v => (v == null || Number.isNaN(v) ? -Infinity : v);
+  const key = {
+    speed: r => r.metrics && r.metrics.avgViewsPerDay, views: r => r.metrics && r.metrics.views,
+    published: r => r.publishedAt && Date.parse(r.publishedAt), engagement: r => r.metrics && r.metrics.engagementRate,
+    shares: r => r.metrics && r.metrics.shareRate, growth: r => r.growth && r.growth.perDay,
+    score: r => r.score && r.score.value, outlier: r => (r.outlier && r.outlier.rankable ? r.outlier.value : null),
+  }[sortBy];
+  const order = (a, b) => last(key(b)) - last(key(a)) || last(b.publishedAt && Date.parse(b.publishedAt)) - last(a.publishedAt && Date.parse(a.publishedAt));
+  const recent = rows.filter(r => r.bucket === 'recent').sort(order);
+  // Failed and partial source runs in the latest search for each topic shown, so a gap is never mistaken for "nothing found".
+  const failures = [], partials = [];
   for (const q of queries) {
     if (f.search && !same(q, f.search)) continue;
     const s = searches.find(x => x.search.query === q);
-    for (const r of s.runs || []) if (r.status === 'error') failures.push({ query: q, batchId: s.batchId, retrievedAt: s.retrievedAt, lane: r.lane, laneLabel: LANE_LABEL[r.lane] || r.lane, provider: r.provider, error: r.error });
+    for (const r of s.runs || []) {
+      const at = { query: q, batchId: s.batchId, retrievedAt: s.retrievedAt, lane: r.lane, laneLabel: LANE_LABEL[r.lane] || r.lane, provider: r.provider };
+      if (r.status === 'error') failures.push({ ...at, error: r.error });
+      else if (r.partial) partials.push({ ...at, reason: r.partial });
+    }
   }
-  const count = k => groups.reduce((n, g) => n + g[k].length, 0);
-  return { generatedAt: now.toISOString(), filters: f, queries, groups, failures, totals: { posts: posts.length, searches: searches.length, lastRetrievedAt: searches[0] ? searches[0].retrievedAt : null, shown: rows.length, recent: count('recent'), historical: count('historical'), undated: count('undated') }, staleDays: STALE_DAYS };
+  return {
+    generatedAt: now.toISOString(), filters: f, sortedBy: sortBy, scoreNeedsPlatform, queries, formats,
+    rows: recent.slice(0, f.limit), more: Math.max(0, recent.length - f.limit),
+    // Posts with no publication date are never in a date window: listed only when the window is "any date".
+    undatedRows: f.window === 'all' ? rows.filter(r => r.bucket === 'undated').sort(order) : [],
+    failures, partials,
+    totals: { posts: posts.length, searches: searches.length, lastRetrievedAt: searches[0] ? searches[0].retrievedAt : null, shown: rows.length, recent: recent.length, historical: rows.filter(r => r.bucket === 'historical').length, undated: rows.filter(r => r.bucket === 'undated').length },
+    staleDays: STALE_DAYS, pageSize: PAGE,
+  };
 }
 
 export function researchSearches(cfg) {
   return readSearches(cfg).sort((a, b) => (a.retrievedAt < b.retrievedAt ? 1 : -1)).map(s => ({
     batchId: s.batchId, query: s.search.query, windowDays: s.search.windowDays ?? null, retrievedAt: s.retrievedAt, importedAt: s.importedAt || null, posts: s.posts,
-    runs: (s.runs || []).map(r => ({ lane: r.lane, laneLabel: LANE_LABEL[r.lane] || r.lane, provider: r.provider, status: r.status, error: r.error || null, note: r.note || null, results: (r.results || []).length })),
+    runs: (s.runs || []).map(r => ({ lane: r.lane, laneLabel: LANE_LABEL[r.lane] || r.lane, provider: r.provider, status: r.status, error: r.error || null, note: r.note || null, results: (r.results || []).length,
+      kept: (r.fetchedOnly || []).length, partial: r.partial || null, counts: r.counts || null, cost: r.cost || null })),
   }));
 }
 
@@ -124,8 +179,15 @@ function builderInputs(cfg, post) {
       const m = (sr.matches || []).find(x => String(x.externalId) === post.nativeId); if (m) entry.records.push({ what: 'Search match, as copied from Signal Room', data: m });
       const d = [...(sr.instagramDetails || []), ...(sr.videoDetails || [])].find(x => String(x.externalId || x.id) === post.nativeId); if (d) entry.records.push({ what: 'Item detail, as copied from Signal Room', data: d });
     } else {
-      const file = read(post.platform === 'tiktok' ? 'tiktok.json' : 'youtube.json');
-      const it = file && file.merged ? (file.merged.items || []).find(x => String(x.source_id) === post.nativeId) : null; if (it) entry.records.push({ what: 'Item, as written by last30free', data: it });
+      // Every kept last30free file for this platform (the builder names them after the draft keys). "fetched" holds
+      // every returned record with the provider's original row; older files only have the reported "merged" list.
+      const files = { tiktok: ['tiktok.json'], instagram: ['instagram.json'], youtube: ['youtube.json', 'youtubeShorts.json'] }[post.platform] || [];
+      for (const name of files) {
+        const file = read(name); if (!file) continue;
+        const find = list => (list || []).find(x => String(x.source_id) === post.nativeId);
+        const it = find(file.fetched && file.fetched.items) || find(file.merged && file.merged.items);
+        if (it) entry.records.push({ what: `Item, as written by last30free (${name})`, data: it });
+      }
     }
     out.push(entry);
   }

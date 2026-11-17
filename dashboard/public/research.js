@@ -17,7 +17,7 @@
   const FIELD = { transcript: 'transcript', excerpt: 'search excerpt', title: 'title', caption: 'caption' };
   const EVIDENCE = { transcript: 'Full transcript', excerpt: 'Search excerpt only', caption: 'Caption only', none: 'Title only' };
   const WINDOW = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months', all: 'any date' };
-  const DEFAULTS = { search: '', q: '', platform: '', format: '', window: '30', sort: 'published' };
+  const DEFAULTS = { search: '', q: '', platform: '', format: 'short', window: '30', sort: 'speed', limit: '50' };
 
   let root = null, tab = 'signals', F = { ...DEFAULTS }, data = null, searches = null, ideas = null, detail = null, detailId = null, error = null, returnTo = null, returnY = 0, removeAsk = false, busy = false;
   const get = async url => { const r = await fetch(url); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; };
@@ -59,42 +59,55 @@
     return `${EVIDENCE[r.evidence]}${line ? `<span class="sub">${line}</span>` : ''}`;
   }
   const publishedCell = r => r.publishedAt ? `${day(r.publishedAt)}<span class="sub">${ago(r.publishedAgeDays)}</span>` : '<span class="r-warn">Date unknown</span>';
+  const pct = v => (v == null ? null : `${(v * 100).toLocaleString('en-GB', { maximumFractionDigits: v < 0.001 ? 3 : 1 })}%`);
+  const big = v => (v == null ? null : v >= 1e6 ? `${(v / 1e6).toLocaleString('en-GB', { maximumFractionDigits: 1 })}M` : v >= 1e4 ? `${Math.round(v / 1e3).toLocaleString('en-GB')}K` : Math.round(v).toLocaleString('en-GB'));
+  const cell = (v, label) => `<td class="num" data-label="${label}">${v == null ? '<span class="sub" title="Not given by the source">–</span>' : v}</td>`;
+  function checkedCell(m) {
+    if (!m) return '<td data-label="Last checked"><span class="sub">Not measured</span></td>';
+    if (!m.measuredAt) return `<td data-label="Last checked"><span class="r-warn">Time unknown</span><span class="sub">retrieved ${day(m.retrievedAt)}</span></td>`;
+    const age = Math.max(0, Math.round((Date.now() - Date.parse(m.measuredAt)) / 864e5));
+    return `<td class="nowrap" data-label="Last checked"><span class="${age > data.staleDays ? 'r-warn' : ''}">${ago(age)}</span><span class="sub">${e(SOURCE[m.provider])}${m.measuredBasis === 'file-mtime' ? ' · file time' : ''}</span></td>`;
+  }
+  const growthMini = r => r.growth ? `${r.growth.delta >= 0 ? '+' : ''}${big(r.growth.delta)}<span class="sub">${day(r.growth.from.at)} → ${day(r.growth.to.at)}</span>` : null;
   function table(rows, caption) {
-    return `<div class="r-frame"><table class="r-table r-list"><caption class="sub" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">${e(caption)}</caption>
-    <thead><tr><th scope="col">Post</th><th scope="col">Published</th><th scope="col">Evidence saved</th><th scope="col">Raw engagement</th><th scope="col">Creator outlier</th><th scope="col">Growth</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td class="post" data-label="Post"><button class="r-open" data-r-open="${e(r.id)}">${e(r.title || 'Untitled post')}</button>
-      <span class="sub">${e(r.creator.handle ? '@' + String(r.creator.handle).replace(/^@/, '') : r.creator.name || 'Creator unknown')} · ${dur(r.durationSeconds)}</span>${tags(r, data.ideaPosts.includes(r.id))}</td>
-      <td class="nowrap" data-label="Published">${publishedCell(r)}</td><td data-label="Evidence saved">${evidenceCell(r)}</td>
-      <td data-label="Raw engagement">${engagementCell(r)}</td><td data-label="Creator outlier">${outlierCell(r)}</td><td data-label="Growth">${growthCell(r)}</td></tr>`).join('')}
+    return `<div class="r-frame"><table class="r-table r-list r-metrics"><caption class="sub" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">${e(caption)}</caption>
+    <thead><tr><th scope="col">Post</th><th scope="col">Published</th><th scope="col" class="num">Views</th><th scope="col" class="num" title="Views divided by the post's age when it was measured">Avg views/day</th><th scope="col" class="num">Likes</th><th scope="col" class="num">Comments</th><th scope="col" class="num">Shares</th><th scope="col" class="num" title="(likes + comments) ÷ views">Engagement</th><th scope="col" class="num" title="shares ÷ views">Share rate</th><th scope="col" class="num" title="last30free's original score; compare within one platform">Score</th><th scope="col" class="num" title="Since the previous measurement by the same source">Growth</th><th scope="col">Last checked</th></tr></thead><tbody>
+    ${rows.map(r => { const m = r.metrics || {}; return `<tr><td class="post" data-label="Post"><button class="r-open" data-r-open="${e(r.id)}">${e(r.title || 'Untitled post')}</button>
+      <span class="sub">${e(PLATFORM[r.platform])} · ${e(r.creator.handle ? '@' + String(r.creator.handle).replace(/^@/, '') : r.creator.name || 'Creator unknown')} · ${dur(r.durationSeconds)}</span>${tags(r, data.ideaPosts.includes(r.id))}${r.match && !r.match.matched ? `<span class="sub">“${e(r.match.query)}” not found in the saved text</span>` : ''}</td>
+      <td class="nowrap" data-label="Published">${publishedCell(r)}</td>
+      ${cell(big(m.views), 'Views')}${cell(big(m.avgViewsPerDay), 'Avg views/day')}${cell(big(m.likes), 'Likes')}${cell(big(m.comments), 'Comments')}${cell(big(m.shares), 'Shares')}
+      ${cell(pct(m.engagementRate), 'Engagement')}${cell(pct(m.shareRate), 'Share rate')}${cell(r.score ? `${n(r.score.value)}<span class="sub">${e(PLATFORM[r.score.platform])}</span>` : null, 'Score')}
+      ${cell(growthMini(r), 'Growth')}${checkedCell(r.metrics)}</tr>`; }).join('')}
     </tbody></table></div>`;
   }
 
   // ---- Signals ----
+  const SORT = { speed: 'Avg views/day', views: 'Views', published: 'Newest published', engagement: 'Engagement rate', shares: 'Share rate', growth: 'Growth', score: 'Score (one platform)', outlier: 'Creator outlier' };
   function vSignals() {
     if (!data) return '<p class="sub">Loading saved research…</p>';
     const t = data.totals, f = data.filters, win = WINDOW[f.window];
     if (!t.posts && !t.searches) return `${note()}<div class="panel"><h3>No research is saved yet</h3><p>Run a search in Claude Code. Its results appear here once the importer has stored them.</p></div>`;
     const opt = (v, l, cur) => `<option value="${e(v)}" ${v === cur ? 'selected' : ''}>${e(l)}</option>`;
-    const filters = `<form class="r-filters" id="r-form" aria-label="Filter saved research">
-      <div class="r-field"><label for="r-search">Saved search</label><select id="r-search" name="search">${opt('', 'All saved searches', f.search)}${data.queries.map(q => opt(q, q, f.search)).join('')}</select></div>
-      <div class="r-field wide full"><label for="r-q">Words in the saved text</label><input id="r-q" name="q" type="search" value="${e(f.q)}" placeholder='n8n, or "claude code" for an exact phrase' autocomplete="off"></div>
+    const tabs = `<span class="seg r-seg" role="group" aria-label="Format">${[['short', 'Short-form'], ['long', 'Long-form'], ['unknown', 'Format unknown']].filter(([k]) => k !== 'unknown' || data.formats.unknown || f.format === 'unknown')
+      .map(([k, l]) => `<button data-r-format="${k}" aria-current="${f.format === k}">${l} <span class="count">${data.formats[k] || 0}</span></button>`).join('')}</span>`;
+    const filters = `<form class="r-filters" id="r-form" aria-label="Filter saved research"><input type="hidden" name="format" value="${e(f.format)}">
+      <div class="r-field"><label for="r-search">Topic (saved search)</label><select id="r-search" name="search">${opt('', 'All topics', f.search)}${data.queries.map(q => opt(q, q, f.search)).join('')}</select></div>
       <div class="r-field"><label for="r-platform">Platform</label><select id="r-platform" name="platform">${opt('', 'All platforms', f.platform)}${Object.entries(PLATFORM).map(([k, l]) => opt(k, l, f.platform)).join('')}</select></div>
-      <div class="r-field"><label for="r-format">Format</label><select id="r-format" name="format">${opt('', 'All formats', f.format)}${Object.entries(FORMAT).map(([k, l]) => opt(k, l, f.format)).join('')}</select></div>
       <div class="r-field"><label for="r-window">Published</label><select id="r-window" name="window">${Object.entries(WINDOW).map(([k, l]) => opt(k, l[0].toUpperCase() + l.slice(1), f.window)).join('')}</select></div>
-      <div class="r-field"><label for="r-sort">Sort each list by</label><select id="r-sort" name="sort">${opt('published', 'Newest published', f.sort)}${opt('engagement', 'Raw engagement', f.sort)}${opt('outlier', 'Creator outlier', f.sort)}</select></div>
+      <div class="r-field"><label for="r-sort">Sort by</label><select id="r-sort" name="sort">${Object.entries(SORT).map(([k, l]) => opt(k, l, f.sort)).join('')}</select></div>
+      <div class="r-field wide full"><label for="r-q">Words in the saved text</label><input id="r-q" name="q" type="search" value="${e(f.q)}" placeholder='n8n, or "claude code" for an exact phrase' autocomplete="off"></div>
       <div class="r-actions"><button class="btn primary" type="submit">Filter saved research</button><button class="btn" type="button" data-r-reset="1">Reset filters</button>
-      <span class="sub">${f.sort === 'outlier' ? 'Creator outlier compares a post with its own creator. Posts with only an unstable signal, or none, sort last.' : f.sort === 'engagement' ? 'Raw engagement is a plain count. It is not adjusted for audience size or age.' : 'Lists are never merged across platforms or formats.'}</span></div></form>`;
+      <span class="sub">${data.scoreNeedsPlatform ? '<span class="r-warn">Scores are only comparable within one platform: choose a platform to sort by score. Sorted by average views per day instead.</span>' : f.sort === 'outlier' ? 'Creator outlier compares a post with its own creator. Posts with only an unstable signal, or none, sort last.' : 'Every number in a row comes from one measurement. A dash means the source did not give it.'}</span></div></form>`;
     // One quiet line per search, so a gap is not read as "nothing found". The exact errors live on the Searches tab.
     const byQuery = new Map(); for (const x of data.failures) { if (!byQuery.has(x.query)) byQuery.set(x.query, { at: x.retrievedAt, lanes: [] }); byQuery.get(x.query).lanes.push(x.laneLabel); }
-    const fails = [...byQuery].map(([q, v]) => `<p class="r-gap" role="status">Latest “${e(q)}” search (${when(v.at)}): ${e(v.lanes.join(', '))} did not run, so ${v.lanes.length === 1 ? 'that source has' : 'those sources have'} no new results. <button class="r-link" data-r-tab="searches">See why</button></p>`).join('');
-    const summary = `<p class="r-summary" role="status"><strong>${t.recent}</strong> ${f.window === 'all' ? 'saved posts with a publication date' : `published in the ${win}`}${f.window === 'all' ? '' : ` · <strong>${t.historical}</strong> older, kept as historical references`}${t.undated ? ` · <strong>${t.undated}</strong> with no publication date` : ''}. ${t.shown} of ${t.posts} saved posts match these filters.</p>`;
-    const groups = data.groups.map(g => {
-      const lead = g.recent.length ? table(g.recent, `${g.label}, published in the ${win}`) : `<p class="sub">No saved ${e(g.label)} post was published in the ${win}.</p>`;
-      const hist = g.historical.length ? `<details class="r-hist"><summary>${g.historical.length} historical ${g.historical.length === 1 ? 'reference' : 'references'}, published before the ${win}</summary><p class="sub">Outside the date filter. Kept for reference; not current results.</p>${table(g.historical, `${g.label}, historical references`)}</details>` : '';
-      const und = g.undated.length ? `<details class="r-hist"><summary>${g.undated.length} with no publication date</summary><p class="sub">The source gave no date, so these are never counted as recent.</p>${table(g.undated, `${g.label}, publication date unknown`)}</details>` : '';
-      return `<section class="r-group" aria-label="${e(g.label)}"><h3>${e(g.label)} <span class="sub">${g.recent.length} in the ${win}. Top matches from the saved searches, not everything that exists.</span></h3>${lead}${hist}${und}</section>`;
-    }).join('');
-    return `${note()}${filters}${fails}${summary}${groups || '<div class="panel"><p>No saved post matches these filters.</p></div>'}`;
+    const fails = [...byQuery].map(([q, v]) => `<p class="r-gap" role="status">Latest “${e(q)}” search (${when(v.at)}): ${e(v.lanes.join(', '))} did not run, so ${v.lanes.length === 1 ? 'that source has' : 'those sources have'} no new results. <button class="r-link" data-r-tab="searches">See why</button></p>`).join('')
+      + data.partials.map(x => `<p class="r-gap" role="status">Latest “${e(x.query)}” search: ${e(x.laneLabel)} returned partial results (its paid run stopped early); what it returned is included. <button class="r-link" data-r-tab="searches">See why</button></p>`).join('');
+    const hidden = [t.historical ? `${t.historical} published before the ${win}` : '', t.undated && f.window !== 'all' ? `${t.undated} with no publication date` : ''].filter(Boolean);
+    const summary = `<p class="r-summary" role="status"><strong>${t.recent}</strong> ${FORMAT[f.format].toLowerCase()} ${t.recent === 1 ? 'post' : 'posts'} ${f.window === 'all' ? 'with a publication date' : `published in the ${win}`}, sorted by ${e(SORT[data.sortedBy].toLowerCase())}${data.rows.length < t.recent ? `, top ${data.rows.length} shown` : ''}.${hidden.length ? ` Not listed: ${hidden.join(' and ')}${f.window !== 'all' ? ` <button class="r-link" data-r-window="all">Show any date</button>` : ''}.` : ''} Saved posts stay stored when they leave this view.</p>`;
+    const list = data.rows.length ? table(data.rows, `${FORMAT[f.format]}, ${win}`) : `<div class="panel"><p>No saved ${FORMAT[f.format].toLowerCase()} post matches these filters${f.window === 'all' ? '' : ` in the ${win}`}.</p></div>`;
+    const more = data.more ? `<div class="row"><button class="btn" data-r-more="1">Show ${Math.min(data.pageSize, data.more)} more</button><span class="sub">${data.more} more match these filters.</span></div>` : '';
+    const und = data.undatedRows.length ? `<details class="r-hist"><summary>${data.undatedRows.length} with no publication date</summary><p class="sub">The source gave no date, so these are never counted as recent.</p>${table(data.undatedRows, 'Publication date unknown')}</details>` : '';
+    return `${note()}<div class="r-head">${tabs}</div>${filters}${fails}${summary}${list}${more}${und}`;
   }
   const note = () => `<div class="r-note"><span>These filters search research already saved on this PC. They do not run a new search.</span><span>New research runs in Claude Code:</span><code>/research-signals &lt;topic&gt;</code><button class="btn small" data-r-copy="/research-signals ">Copy command</button></div>`;
 
@@ -148,7 +161,8 @@
       <dl class="kv"><dt>Retrieved</dt><dd>${when(s.retrievedAt)}</dd><dt>Imported</dt><dd>${s.importedAt ? when(s.importedAt) : 'Not recorded'}</dd><dt>Window asked for</dt><dd>${s.windowDays ? 'last ' + s.windowDays + ' days (the page filters by date itself)' : 'Not recorded'}</dd><dt>Posts stored</dt><dd>${s.posts}</dd><dt>Batch</dt><dd class="mono">${e(s.batchId)}</dd></dl>
       <div class="r-frame"><table class="r-table"><thead><tr><th scope="col">Run</th><th scope="col">Source</th><th scope="col">Result</th><th scope="col">Notes from the run</th></tr></thead><tbody>
       ${s.runs.map(r => `<tr><td data-label="Run">${e(r.laneLabel)}</td><td data-label="Source">${e(SOURCE[r.provider])}<span class="sub">${e(SOURCE_KIND[r.provider])}</span></td>
-        <td data-label="Result">${r.status === 'ok' ? `<span class="pill ok">${r.results} top ${r.results === 1 ? 'match' : 'matches'}</span>` : `<span class="pill bad">Failed</span><span class="sub">${e(r.error)}</span>`}</td>
+        <td data-label="Result">${r.status === 'ok' ? `<span class="pill ${r.partial ? 'wait' : 'ok'}">${r.partial ? 'Partial: ' : ''}${r.results} top ${r.results === 1 ? 'match' : 'matches'}</span>${r.kept ? `<span class="sub">+ ${r.kept} more fetched and kept</span>` : ''}${r.partial ? `<span class="sub">${e(r.partial)}</span>` : ''}` : `<span class="pill bad">Failed</span><span class="sub">${e(r.error)}</span>`}
+          ${r.cost ? `<span class="sub">${r.cost.charged_usd != null ? `Apify charge $${Number(r.cost.charged_usd).toFixed(3)}` : 'Apify charge unknown'}${r.cost.status ? ` · run ${e(r.cost.status)}` : ''}${r.cost.stop && !r.cost.stop.confirmed ? ' · stop not confirmed' : ''}</span>` : ''}</td>
         <td data-label="Notes from the run">${r.note ? e(r.note) : '<span class="sub">None</span>'}</td></tr>`).join('')}</tbody></table></div></section>`).join('');
   }
 
@@ -163,7 +177,7 @@
       <dt>Published</dt><dd>${d.publishedAt ? `${when(d.publishedAt)} · ${ago(d.publishedAgeDays)}` : '<span class="r-warn">Unknown: the source gave no date</span>'}</dd><dt>Duration</dt><dd>${dur(d.durationSeconds)}</dd>
       <dt>First imported</dt><dd>${when(d.firstRetrievedAt)}</dd><dt>Last seen in a search</dt><dd>${when(d.lastRetrievedAt)}</dd><dt>Source link</dt><dd><a href="${e(d.url)}" target="_blank" rel="noopener noreferrer">${e(d.url)}</a></dd></dl></section>`;
     const found = `<section class="panel" aria-label="Where it was found"><h3>Where it was found</h3>${d.runs.length ? `<div class="r-frame"><table class="r-table"><thead><tr><th scope="col">Search</th><th scope="col">Run</th><th scope="col">Source</th><th scope="col">Position</th><th scope="col">Retrieved</th></tr></thead><tbody>
-      ${d.runs.map(r => `<tr><td data-label="Search">“${e(r.query)}”<span class="sub mono">${e(r.batchId)}</span></td><td data-label="Run">${e(r.laneLabel)}</td><td data-label="Source">${e(SOURCE[r.provider])}<span class="sub">${e(SOURCE_KIND[r.provider])}</span></td><td data-label="Position">${r.rank} of ${r.of} top matches</td><td data-label="Retrieved">${when(r.retrievedAt)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="sub">No search run on record lists this post.</p>'}</section>`;
+      ${d.runs.map(r => `<tr><td data-label="Search">“${e(r.query)}”<span class="sub mono">${e(r.batchId)}</span></td><td data-label="Run">${e(r.laneLabel)}</td><td data-label="Source">${e(SOURCE[r.provider])}<span class="sub">${e(SOURCE_KIND[r.provider])}</span></td><td data-label="Position">${r.kept ? 'Fetched and kept, not in the top matches' : `${r.rank} of ${r.of} top matches`}</td><td data-label="Retrieved">${when(r.retrievedAt)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="sub">No search run on record lists this post.</p>'}</section>`;
     const growthLine = d.growth ? `<p>${d.growth.delta >= 0 ? '+' : ''}${n(d.growth.delta)} ${e(d.growth.metric)} between ${when(d.growth.from.at)} and ${when(d.growth.to.at)}, both measured by ${e(SOURCE[d.growth.provider])}.</p>` : '<p><strong>Growth unavailable.</strong> <span class="sub">It needs two dated measurements of the same count from the same source.</span></p>';
     const meas = `<section class="panel" aria-label="Measurements"><h3>Measurements</h3><p class="sub">Raw counts and creator-relative signals are separate. A measurement time comes from the source; the retrieval time is when this PC fetched it.</p>
       ${d.observations.length ? `<div class="r-frame"><table class="r-table"><thead><tr><th scope="col">Source</th><th scope="col">Measured</th><th scope="col">Retrieved</th><th scope="col">Raw counts</th><th scope="col">Creator outlier</th><th scope="col">Discovery score</th></tr></thead><tbody>
@@ -199,7 +213,8 @@
     app.innerHTML = '<div id="research-root" style="display:grid;gap:16px"></div>'; root = app.firstChild; draw();
     if (detailId) return; LOAD[tab]();
   }
-  function readForm() { const fd = new FormData(root.querySelector('#r-form')); for (const k of Object.keys(DEFAULTS)) F[k] = String(fd.get(k) ?? DEFAULTS[k]); }
+  // A filter change starts again from the top 50.
+  function readForm() { const fd = new FormData(root.querySelector('#r-form')); for (const k of Object.keys(DEFAULTS)) F[k] = String(fd.get(k) ?? DEFAULTS[k]); F.limit = DEFAULTS.limit; }
 
   document.addEventListener('click', ev => {
     if (!root || !root.contains(ev.target)) return; const b = ev.target.closest('button'); if (!b) return; const d = b.dataset;
@@ -207,6 +222,9 @@
     else if (d.rOpen) openPost(d.rOpen);
     else if (d.rBack) { detailId = null; detail = null; draw(); const refocus = () => { const again = returnTo && root.querySelector(`[data-r-open="${CSS.escape(returnTo)}"]`); if (again) { const h = again.closest('details'); if (h) h.open = true; again.focus({ preventScroll: true }); } window.scrollTo(0, returnY); }; if (tab !== 'signals' || !data) LOAD[tab]().then(refocus); else refocus(); }
     else if (d.rReset) { F = { ...DEFAULTS }; loadList(); }
+    else if (d.rFormat) { F = { ...F, format: d.rFormat, limit: DEFAULTS.limit }; loadList(); }
+    else if (d.rWindow) { F = { ...F, window: d.rWindow, limit: DEFAULTS.limit }; loadList(); }
+    else if (d.rMore) { const y = window.scrollY; F = { ...F, limit: String(Number(F.limit) + data.pageSize) }; loadList().then(() => window.scrollTo(0, y)); }
     else if (d.rShow) { F = { ...DEFAULTS, search: d.rShow, window: 'all' }; tab = 'signals'; data = null; draw(); loadList(); }
     else if (d.rSave) act({ type: 'save-idea', postId: detailId, angle: root.querySelector('#r-angle').value }, '#r-angle');
     else if (d.rAngle) act({ type: 'set-angle', ideaId: detail.idea.id, angle: root.querySelector('#r-angle').value }, '[data-r-angle]');

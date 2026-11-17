@@ -22,6 +22,13 @@
 .r-list{table-layout:fixed}
 .r-list th:nth-child(1){width:33%}.r-list th:nth-child(2){width:11%}.r-list th:nth-child(3){width:14%}.r-list th:nth-child(4){width:17%}.r-list th:nth-child(5){width:14%}.r-list th:nth-child(6){width:11%}
 .r-table td.nowrap{white-space:nowrap}
+.r-frame:has(> .r-metrics){overflow-x:auto}
+/* The metrics table: post first, then right-aligned numbers. It scrolls sideways inside its frame on narrow desktops. */
+.r-metrics{table-layout:auto;min-width:1100px}
+.r-metrics th:nth-child(n){width:auto}
+.r-metrics th:first-child{width:26%;min-width:240px}
+.r-metrics th.num,.r-metrics td.num{text-align:right;white-space:nowrap}
+.r-metrics td.num .sub{text-align:right}
 .r-table .sub{display:block;margin-top:2px}
 .r-open{background:none;border:0;padding:0;text-align:left;font-weight:600;color:var(--ink);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;overflow-wrap:anywhere}
 .r-open:hover{text-decoration-color:var(--accent);color:var(--accent)}
@@ -60,7 +67,7 @@
 @media (max-width:760px){
   .r-field,.r-field.wide{grid-column:span 6}.r-field.full{grid-column:1/-1}
   .r-field select,.r-field input,.r-actions .btn{height:44px}
-  .r-note .btn,.r-detail .btn,.r-ideas .btn,.seg.r-seg button,#research-root .back{min-height:44px}
+  .r-note .btn,.r-detail .btn,.r-ideas .btn,.seg.r-seg button,#research-root .back,#research-root .r-link{min-height:44px}
   .r-open{display:inline-block;padding:10px 0;min-height:44px}
   .r-hist>summary{padding:12px 0}
   /* a table row becomes a labelled card */
@@ -73,3 +80,4 @@
   .r-table td::before{content:attr(data-label);position:absolute;left:0;top:5px;width:118px;font-size:13px;font-weight:500;color:var(--muted)}
   .r-table td.post{padding-left:0}.r-table td.post::before{content:none}
 }
+@media (max-width:760px){.r-metrics{min-width:0}.r-metrics th.num,.r-metrics td.num{text-align:left}.r-metrics td.num .sub{text-align:left}}
