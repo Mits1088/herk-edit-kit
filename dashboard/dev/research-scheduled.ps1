@@ -10,7 +10,10 @@ if ($Topic -notmatch '^[A-Za-z0-9][A-Za-z0-9 _-]{0,40}$') { Write-Error 'Topic: 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $logs = Join-Path $root 'reels-data\research\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
 $stamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHHmmssZ'); $slug = ($Topic.ToLower() -replace '[^a-z0-9]+', '-')
-$log = Join-Path $logs "$stamp-$slug.log"; $runs = Join-Path $logs 'runs.jsonl'; $searches = Join-Path $root 'reels-data\research\searches.jsonl'
+$log = Join-Path $logs "$stamp-$slug.log"; $runs = Join-Path $logs 'runs.jsonl'
+# The store is research.sqlite; the importer reports how many searches it holds and the latest one.
+$node = (Get-Command node -ErrorAction Stop).Source
+function StoreStatus { & $node (Join-Path $root 'dashboard\research-import.mjs') --status | ConvertFrom-Json }
 function Note($t) { Add-Content -Path $log -Value ("[{0}] {1}" -f (Get-Date).ToUniversalTime().ToString('HH:mm:ssZ'), $t) -Encoding utf8 }
 function Finish($code, $outcome, $extra) {
   $rec = [ordered]@{ at = $stamp; topic = $Topic; exit = $code; outcome = $outcome; log = "reels-data/research/logs/$stamp-$slug.log" }
@@ -23,7 +26,7 @@ function Finish($code, $outcome, $extra) {
 try { $lock = [IO.File]::Open((Join-Path $logs 'run.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
 catch { Note 'Another research run holds the lock. Nothing was started.'; Finish 2 'skipped: another run is active' $null }
 
-$before = if (Test-Path $searches) { @(Get-Content $searches).Count } else { 0 }
+$before = (StoreStatus).searches
 $work = Join-Path $root "tmp\research-run\$stamp-$slug"; New-Item -ItemType Directory -Force $work | Out-Null
 $prompt = @"
 Run the research-signals skill for the topic: $Topic
@@ -54,10 +57,10 @@ $j = $null; try { $j = $out | ConvertFrom-Json } catch { Note "Output was not JS
 if ($j) { Note "claude: is_error=$($j.is_error) turns=$($j.num_turns) cost_usd=$($j.total_cost_usd) denials=$(@($j.permission_denials).Count)"; foreach ($d in @($j.permission_denials)) { Note "permission denied: $($d.tool_name) $(($d.tool_input | ConvertTo-Json -Compress -Depth 4))" }; Add-Content -Path $log -Value "`n--- report ---`n$($j.result)" -Encoding utf8 }
 
 # What the importer recorded, lane by lane. A failed lane is listed, never hidden.
-$after = if (Test-Path $searches) { @(Get-Content $searches) } else { @() }
-$lanes = @(); if ($after.Count -gt $before) { $b = $after[-1] | ConvertFrom-Json; $lanes = @($b.runs | ForEach-Object { "$($_.provider)/$($_.lane)=$($_.status)" + $(if ($_.error) { " ($($_.error))" } else { '' }) }); Note "imported $($b.batchId): $($lanes -join '; ')" }
+$after = StoreStatus
+$lanes = @(); if ($after.searches -gt $before) { $b = $after.last; $lanes = @($b.runs | ForEach-Object { "$($_.provider)/$($_.lane)=$($_.status)" + $(if ($_.error) { " ($($_.error))" } else { '' }) }); Note "imported $($b.batchId): $($lanes -join '; ')" }
 $lock.Close()
 if ($p.ExitCode -ne 0 -or -not $j -or $j.is_error) { Finish 3 "failed: claude exit $($p.ExitCode)" @{ lanes = $lanes } }
-if ($after.Count -le $before) { Finish 4 'failed: no batch was imported' $null }
+if ($after.searches -le $before) { Finish 4 'failed: no batch was imported' $null }
 if (@($b.runs | Where-Object { $_.status -ne 'ok' }).Count) { Finish 5 'imported, with failed lanes' @{ batch = $b.batchId; lanes = $lanes } }
 Finish 0 'imported' @{ batch = $b.batchId; lanes = $lanes }

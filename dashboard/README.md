@@ -231,8 +231,9 @@ from its kept copy.
 
 ## Research (store, importer, page and saved ideas)
 
-Research on Instagram, YouTube and TikTok is kept in `reels-data/research/` (gitignored). The dashboard server
-writes one file there, `ideas.json` (your saved ideas), and cannot call Signal Room, whose login lives in Claude Code. Claude runs the research
+Research on Instagram, YouTube and TikTok is kept in `reels-data/research/` (gitignored), in one SQLite database,
+`research.sqlite` (built-in `node:sqlite`; Node 22.13 or later, tested on 24.22). The dashboard server opens it
+read-only and writes one file there, `ideas.json` (your saved ideas), and cannot call Signal Room, whose login lives in Claude Code. Claude runs the research
 (the `research-signals` skill, which builds the batch from raw results with `build-batch.mjs`),
 writes one batch file, and this command merges it:
 
@@ -244,12 +245,11 @@ The whole batch is checked first. If anything is wrong it lists every problem, e
 
 | File | Holds |
 | --- | --- |
-| `posts/<platform>-<id>.json` | One post per platform and native id: link, format, duration, creator, caption, transcript, provenance, measurements. YouTube file names carry the id in hex, because YouTube ids are case-sensitive and Windows file names are not; the real id is `nativeId` inside. |
-| `searches.jsonl` | One line per imported batch: the query, each source run with its status, error and ordered results. |
+| `research.sqlite` | Every post (one per platform and native id: link, format, duration, creator, caption, transcript), its sources, every measurement, excerpts, and one record per imported search with each run's status, error and ordered results. Written only by the importer, one transaction per batch. Schema: `dashboard/lib/research-db.mjs`; plan: `docs/plans/research-database/PLAN.md`. Post keys are `<platform>-<id>`, with YouTube ids in hex because they are case-sensitive. |
 | `ideas.json` | Saved ideas: the post, your angle, and any export record. Written by the Research page only. The importer never writes to it. |
 | `inbox/` | Where batch files are put. The importer reads the file it is given and leaves it in place. |
 | `sources/<batchId>/` | What `build-batch.mjs` built the batch from: the draft and the last30free output files. Kept so a copied number can be checked. |
-| `archive/` | Earlier stores set aside by hand. Nothing reads it. |
+| `archive/` | Earlier stores set aside, including the JSON store from before SQLite (`<date>-before-sqlite/`). Nothing reads it. |
 
 ### Batch format
 
@@ -305,15 +305,18 @@ The whole batch is checked first. If anything is wrong it lists every problem, e
 ### What an import does
 
 - One stored post per platform and native id. A later retrieval can correct a field; a missing field never blanks one.
-- One measurement is one source, one measured time (known or unknown) and one set of values. An exact repeat adds
-  nothing, so repeating an undated result creates no history. Equal counts at two known times stay two
+- One measurement is one source, one measured time (known or unknown) and one set of values: every metric,
+  the score and every outlier field (its fingerprint). An exact repeat adds nothing, and the batch that saw it again
+  is linked to it, so repeating an undated result creates no history. Equal counts at two known times stay two
   measurements. An undated measurement is never merged into a dated one, and its date is never filled in from a
   later result. Stored measurements are never edited apart from their "last retrieved" time.
 - The same batch again changes nothing. The same `batchId` with different contents is refused.
 - A failed run is logged with its error. Posts a batch does not mention are not opened, so a failure or an
   omission leaves them as they were.
-- `growth(post, provider, metric)` in `lib/research.mjs` returns a figure only from two dated measurements of that
-  metric by that one source; otherwise it returns nothing.
+- `growth(post, provider, metric)` in `lib/research.mjs` compares the latest measurement with the latest earlier
+  one of that metric by that one source; otherwise it returns nothing.
+- The whole batch is written in one transaction. A dry run opens the database read-only and never creates it.
+- `node dashboard/research-import.mjs --status` prints how many searches are stored and the latest one, as JSON.
 - `matchText` / `matchPost` filter retrieved text. Bare words are whole words and must all appear ("AI" is not in
   "said"; "MCP" is not "MCP50"), and a bare word also accepts one plural s ("MCP" finds "MCPs"). `"Quoted words"`
   are exact: together, in order, with no plural added. Case is ignored, and the result says whether the
@@ -335,7 +338,9 @@ short-form export go through `POST /api/research/action`, on this PC only.
   "Measurement time unknown" when the source gave none. Publication and import dates are shown separately.
 - **Raw engagement and creator outlier are separate columns.** `bounded_velocity_signal` is shown as "Not ranked":
   it changed between two calls for the same video, so it is left out of sorting and growth.
-- **Growth** appears only from two dated measurements of one count by one source; otherwise "Growth unavailable".
+- **Growth** is since the previous measurement: the latest two distinct measured times of one count by one source,
+  shown with both dates; otherwise "Growth unavailable". A time taken from a file date or a backfilled run never
+  counts.
 - **A post's page** shows where it was found (search, run, source, position), every measurement, the matched
   words in place, and the saved text by kind: search excerpt, caption, full transcript. "Copy transcript" exists
   only when a transcript does. "Original records" shows the kept builder inputs for that post.

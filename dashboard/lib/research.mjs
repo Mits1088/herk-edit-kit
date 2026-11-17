@@ -1,9 +1,8 @@
 // Research store: posts found by research, their measurements over time, and the log of every search.
-// Writes only inside cfg.researchDir (reels-data/research/). It never opens ideas.json for writing.
+// Writes only cfg.researchDir/research.sqlite (lib/research-db.mjs). It never opens ideas.json for writing.
 // Batch format and rules: dashboard/README.md, "Research store".
-import { readFileSync, writeFileSync, renameSync, mkdirSync, appendFileSync, existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { openDb, withDb, transaction, loadPost, loadAllPosts, loadSearches, findSearch, savePost, saveSearch, fingerprint, countSearches } from './research-db.mjs';
 
 // lane -> [provider, platform]. Instagram comes from Signal Room only (paid Apify fetching stays off);
 // TikTok from last30free only. X, Hacker News and Reddit are outside this workflow, so they have no lane.
@@ -33,7 +32,6 @@ const optStr = v => v == null || typeof v === 'string';
 const canon = v => Array.isArray(v) ? `[${v.map(canon).join(',')}]`
   : isObj(v) ? `{${Object.keys(v).filter(k => v[k] != null).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',')}}`
   : JSON.stringify(v);
-const atomic = (target, text) => { const tmp = target + '.tmp'; writeFileSync(tmp, text); renameSync(tmp, target); };
 
 // YouTube ids are case-sensitive and Windows file names are not, so YouTube file names carry the id in hex.
 export const postKey = (platform, id) => `${platform}-${platform === 'youtube' ? Buffer.from(id).toString('hex') : id}`;
@@ -169,63 +167,60 @@ function mergePost(old, p, batch) {
   return post;
 }
 
-const postsDir = cfg => join(cfg.researchDir, 'posts');
-const searchesFile = cfg => join(cfg.researchDir, 'searches.jsonl');
+// Storage is SQLite (lib/research-db.mjs). These return the same objects the JSON store held.
+export function readSearches(cfg) { return withDb(cfg, {}, loadSearches); }
+export function readPosts(cfg) { return withDb(cfg, {}, loadAllPosts); }
+export function readPost(cfg, key) { return withDb(cfg, {}, db => loadPost(db, key)); }
+export const searchCount = countSearches;
 
-export function readSearches(cfg) {
-  if (!existsSync(searchesFile(cfg))) return [];
-  return readFileSync(searchesFile(cfg), 'utf8').split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
-}
-export function readPosts(cfg) {
-  let names = []; try { names = readdirSync(postsDir(cfg)); } catch { return []; }
-  return names.filter(n => n.endsWith('.json')).map(n => JSON.parse(readFileSync(join(postsDir(cfg), n), 'utf8')));
-}
-
-// Validates everything, works out every change in memory, and only then writes. Posts the batch does not
-// mention are never opened. A failed run or an omitted post therefore leaves earlier discoveries as they were.
+// Validates everything, works out every change in memory, and only then writes, in one transaction. Posts the
+// batch does not mention are never touched. A failed run or an omitted post therefore leaves earlier discoveries
+// as they were. A dry run opens the database read-only and never creates it.
 export function importBatch(cfg, batch, { dryRun = false } = {}) {
   const errors = validateBatch(batch);
   if (errors.length) { const e = new Error(`Batch rejected (${errors.length} problem${errors.length === 1 ? '' : 's'}). Nothing was changed.`); e.errors = errors; throw e; }
   const sha256 = createHash('sha256').update(canon(batch)).digest('hex');
   const failedRuns = batch.runs.filter(r => r.status === 'error').map(r => ({ lane: r.lane, error: r.error }));
-  const earlier = readSearches(cfg).find(s => s.batchId === batch.batchId);
-  if (earlier && earlier.sha256 !== sha256) throw new Error(`Batch id ${batch.batchId} was already imported with different contents. Nothing was changed. Give the new batch its own id.`);
-  if (earlier) return { batchId: batch.batchId, alreadyImported: true, dryRun, created: 0, updated: 0, unchanged: 0, observationsAdded: 0, failedRuns };
+  const db = openDb(cfg, { write: !dryRun });
+  try {
+    const work = () => {
+      const earlier = findSearch(db, batch.batchId);
+      if (earlier && earlier.sha256 !== sha256) throw new Error(`Batch id ${batch.batchId} was already imported with different contents. Nothing was changed. Give the new batch its own id.`);
+      if (earlier) return { batchId: batch.batchId, alreadyImported: true, dryRun, created: 0, updated: 0, unchanged: 0, observationsAdded: 0, failedRuns };
 
-  const next = new Map(), before = new Map();
-  for (const p of batch.posts) {
-    const key = postKey(p.platform, p.id);
-    if (!next.has(key)) {
-      const file = join(postsDir(cfg), key + '.json'); let old = null;
-      if (existsSync(file)) { try { old = JSON.parse(readFileSync(file, 'utf8')); } catch { throw new Error(`Stored post ${key}.json cannot be read. Nothing was changed; repair or move that file first.`); } }
-      before.set(key, old); next.set(key, old);
-    }
-    next.set(key, mergePost(next.get(key), p, batch));
-  }
-  const sum = { batchId: batch.batchId, alreadyImported: false, dryRun, created: 0, updated: 0, unchanged: 0, observationsAdded: 0, failedRuns };
-  const writes = [];
-  for (const [key, post] of next) {
-    const old = before.get(key);
-    sum.observationsAdded += post.observations.length - (old ? old.observations.length : 0);
-    if (!old) sum.created++; else if (JSON.stringify(old) === JSON.stringify(post)) { sum.unchanged++; continue; } else sum.updated++;
-    writes.push([join(postsDir(cfg), key + '.json'), JSON.stringify(post, null, 2) + '\n']);
-  }
-  if (dryRun) return sum;
-  mkdirSync(postsDir(cfg), { recursive: true });
-  for (const [file, text] of writes) atomic(file, text);
-  // Logged last: if a write above is interrupted, importing the same batch again finishes the job.
-  appendFileSync(searchesFile(cfg), JSON.stringify({ batchId: batch.batchId, sha256, retrievedAt: batch.retrievedAt, importedAt: new Date().toISOString(), search: batch.search, runs: batch.runs, posts: next.size }) + '\n');
-  return sum;
+      const next = new Map(), before = new Map(), sighted = new Map();
+      for (const p of batch.posts) {
+        const key = postKey(p.platform, p.id);
+        if (!next.has(key)) { const old = loadPost(db, key); before.set(key, old); next.set(key, old); sighted.set(key, []); }
+        next.set(key, mergePost(next.get(key), p, batch));
+        const o = observationOf(p); if (o) sighted.get(key).push(fingerprint(o));
+      }
+      const sum = { batchId: batch.batchId, alreadyImported: false, dryRun, created: 0, updated: 0, unchanged: 0, observationsAdded: 0, failedRuns };
+      for (const [key, post] of next) {
+        const old = before.get(key);
+        sum.observationsAdded += post.observations.length - (old ? old.observations.length : 0);
+        if (!old) sum.created++; else if (JSON.stringify(old) === JSON.stringify(post)) sum.unchanged++; else sum.updated++;
+      }
+      if (dryRun) return sum;
+      for (const [key, post] of next) savePost(db, post, batch.batchId, sighted.get(key));
+      saveSearch(db, { batchId: batch.batchId, sha256, retrievedAt: batch.retrievedAt, importedAt: new Date().toISOString(), search: batch.search, runs: batch.runs, posts: next.size }, postKey);
+      return sum;
+    };
+    return dryRun ? work() : transaction(db, work);
+  } finally { if (db) db.close(); }
 }
 
-// Growth of one metric, from one source's own dated measurements only. Null when there are not two of them:
+// Measurement times we do not trust for a trend: a file's modification time, or a backfilled run time.
+const UNTIMED = new Set(['file-mtime', 'backfill-run-time']);
+// Growth of one metric since the previous measurement, from one source's own dated measurements only: the latest
+// measurement against the latest one before it with an earlier time. Null when there are not two such times:
 // undated measurements and other sources' numbers are never used to invent a trend.
 export function growth(post, provider, metric) {
-  const obs = (post.observations || []).filter(o => o.provider === provider && o.measuredAt && typeof o.metrics[metric] === 'number')
+  const obs = (post.observations || []).filter(o => o.provider === provider && o.measuredAt && !UNTIMED.has(o.measuredBasis) && typeof o.metrics[metric] === 'number')
     .sort((a, b) => Date.parse(a.measuredAt) - Date.parse(b.measuredAt));
-  if (obs.length < 2) return null;
-  const a = obs[0], b = obs[obs.length - 1]; const days = (Date.parse(b.measuredAt) - Date.parse(a.measuredAt)) / 86400e3;
-  if (!(days > 0)) return null;
+  const b = obs[obs.length - 1]; const a = b && obs.filter(o => Date.parse(o.measuredAt) < Date.parse(b.measuredAt)).pop();
+  if (!a) return null;
+  const days = (Date.parse(b.measuredAt) - Date.parse(a.measuredAt)) / 86400e3;
   return { provider, metric, from: { at: a.measuredAt, value: a.metrics[metric] }, to: { at: b.measuredAt, value: b.metrics[metric] }, delta: b.metrics[metric] - a.metrics[metric], days, perDay: (b.metrics[metric] - a.metrics[metric]) / days };
 }
 

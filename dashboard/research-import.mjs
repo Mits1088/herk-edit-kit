@@ -1,10 +1,12 @@
-// Imports one research batch into reels-data/research/. Run: node dashboard/research-import.mjs <batch.json> [--dry-run]
+// Imports one research batch into reels-data/research/research.sqlite. Run: node dashboard/research-import.mjs <batch.json> [--dry-run]
 // The batch is checked in full before anything is written. Format: dashboard/README.md, "Research store".
+// node dashboard/research-import.mjs --status prints {"searches": n, "last": <latest search record or null>} as JSON.
 import { readFileSync } from 'node:fs';
 import { loadConfig } from './lib/config.mjs';
-import { importBatch } from './lib/research.mjs';
+import { importBatch, readSearches } from './lib/research.mjs';
 
 const args = process.argv.slice(2);
+if (args.includes('--status')) { const s = readSearches(loadConfig()); console.log(JSON.stringify({ searches: s.length, last: s.at(-1) ?? null })); process.exit(0); }
 const file = args.find(a => !a.startsWith('--'));
 if (!file) { console.error('Usage: node dashboard/research-import.mjs <batch.json> [--dry-run]'); process.exit(2); }
 let batch;

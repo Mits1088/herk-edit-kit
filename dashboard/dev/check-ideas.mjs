@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const { loadConfig } = await import('../lib/config.mjs');
 const { createServer, lanAddresses } = await import('../server.mjs');
-const { importBatch } = await import('../lib/research.mjs');
+const { importBatch, readPost } = await import('../lib/research.mjs');
 const { readIdeas } = await import('../lib/ideas.mjs');
 
 const out = join(import.meta.dirname, '..', '..', 'tmp', 'research-ui'); mkdirSync(out, { recursive: true });
@@ -139,7 +139,7 @@ for (const [name, w, h] of [['desk', 1280, 900], ['phone', 390, 844]]) {
   await page.keyboard.press('Enter'); await settle();
   ok(`${name}: "Keep it" keeps the idea`, readIdeas(cfg).length === 6 && await page.locator('[data-r-remove]').count() === 1);
   await page.click('[data-r-remove]'); await page.click('[data-r-removeyes]'); await page.waitForSelector('[data-r-save]'); await settle();
-  ok(`${name}: confirming removes the idea and leaves the post`, readIdeas(cfg).length === 5 && existsSync(join(cfg.researchDir, 'posts', 'instagram-3789920030163839258.json')));
+  ok(`${name}: confirming removes the idea and leaves the post`, readIdeas(cfg).length === 5 && !!readPost(cfg, 'instagram-3789920030163839258'));
   await page.click('[data-r-back]'); await page.waitForSelector('.r-ideas'); await settle();
   ok(`${name}: Back from an idea returns to the Ideas list`, await page.locator('.r-ideas > section').count() === 5);
 

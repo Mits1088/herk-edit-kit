@@ -30,7 +30,7 @@
     "seek-check": "node .claude/skills/create-reel/scripts/seek-check.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "devDependencies": {
     "docx": "^9.15.1",

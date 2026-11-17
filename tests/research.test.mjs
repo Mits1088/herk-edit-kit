@@ -8,7 +8,7 @@ import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 const { loadConfig } = await import('../dashboard/lib/config.mjs');
-const { importBatch, validateBatch, readPosts, readSearches, growth, matchText, matchPost, postKey } = await import('../dashboard/lib/research.mjs');
+const { importBatch, validateBatch, readPosts, readPost, readSearches, growth, matchText, matchPost, postKey } = await import('../dashboard/lib/research.mjs');
 
 const IDEAS = JSON.stringify({ ideas: [{ id: 'idea-1', post: 'instagram-3968528610867647341', angle: 'My angle: show the n8n build live', savedAt: '2026-11-16T20:00:00Z' }] }, null, 2);
 function fixture() {
@@ -23,8 +23,8 @@ function snapshot(cfg) {
   const out = {}; const walk = d => { for (const n of readdirSync(d)) { const f = join(d, n); if (statSync(f).isDirectory()) walk(f); else out[relative(cfg.researchDir, f)] = createHash('sha256').update(readFileSync(f)).digest('hex'); } };
   walk(cfg.researchDir); return out;
 }
-const postFile = (cfg, platform, id) => join(cfg.researchDir, 'posts', postKey(platform, id) + '.json');
-const read = (cfg, platform, id) => JSON.parse(readFileSync(postFile(cfg, platform, id), 'utf8'));
+const read = (cfg, platform, id) => readPost(cfg, postKey(platform, id));
+const stored = (cfg, platform, id) => JSON.stringify(read(cfg, platform, id));
 
 const IG = '3968528610867647341', YT = 'du4p-0nBMas', TT = '7703257820640152852';
 const ig = (extra = {}) => ({ platform: 'instagram', id: IG, provider: 'signal-room', url: 'https://www.instagram.com/p/DcTC77TvZNt/', format: 'short', creator: { handle: 'sample.creator', name: 'Sample Creator' }, title: 'Five free plugins', caption: 'Comment STAR for the setup. #claude', publishedAt: '2026-08-21T10:00:00Z', durationSeconds: 51.4, transcript: { text: 'If you are not using these five plugins you are missing out. Five, awesome MCPs.', origin: 'signal-room', capturedAt: '2026-08-23T00:00:00Z' }, observation: { measuredAt: '2026-08-22T10:17:39Z', metrics: { plays: 24090, likes: 469, comments: 393, shares: 276, saves: null }, outlier: { metric: 'reach_per_follower', value: 1.05, percentile: 100, cohortSize: 20 } }, ...extra });
@@ -143,6 +143,36 @@ test('growth needs two dated measurements of the same metric from the same sourc
   assert.equal(growth(igp, 'signal-room', 'saves'), null); // metric never known
 });
 
+test('growth is since the previous measurement: the latest two distinct times, with both dates', () => {
+  const cfg = fixture(); const at = (d, views) => ytDiscovery({ observation: { measuredAt: d, metrics: { views }, discoveryScore: 14 } });
+  importBatch(cfg, batch('g1', DAY1, [at(DAY1, 10000)]));
+  importBatch(cfg, batch('g2', DAY2, [at(DAY2, 12000)]));
+  importBatch(cfg, batch('g3', DAY3, [at(DAY3, 15000)]));
+  const g = growth(read(cfg, 'youtube', YT), 'last30free', 'views');
+  assert.deepEqual([g.from.at, g.from.value, g.to.at, g.to.value, g.delta, g.days], [DAY2, 12000, DAY3, 15000, 3000, 1]);
+  // a measurement whose time came from a file date or a backfilled run is shown but never makes a trend
+  const p = read(cfg, 'youtube', YT); p.observations.at(-1).measuredBasis = 'file-mtime';
+  assert.deepEqual([growth(p, 'last30free', 'views').from.at, growth(p, 'last30free', 'views').to.at], [DAY1, DAY2]);
+});
+
+test('measurements differing only in followers, reach, score or outlier evidence stay separate', () => {
+  const cfg = fixture(); const base = { measuredAt: null, metrics: { views: 10236, likes: 95 } };
+  importBatch(cfg, batch('f1', DAY1, [ytTracked({ observation: { ...base, metrics: { ...base.metrics, followers: 10 } } })]));
+  importBatch(cfg, batch('f2', DAY2, [ytTracked({ observation: { ...base, metrics: { ...base.metrics, followers: 20 } } })]));
+  importBatch(cfg, batch('f3', DAY3, [ytTracked({ observation: { ...base, metrics: { ...base.metrics, followers: 20 }, outlier: { metric: 'bounded_velocity_signal', value: 2, percentile: 50, cohortSize: 4 } } })]));
+  assert.equal(read(cfg, 'youtube', YT).observations.length, 3);
+  const cfg2 = fixture(); const d = (s) => ytDiscovery({ observation: { measuredAt: DAY1, metrics: { views: 11800 }, discoveryScore: s } });
+  importBatch(cfg2, batch('s1', DAY1, [d(10)])); importBatch(cfg2, batch('s2', DAY2, [d(20)]));
+  assert.deepEqual(read(cfg2, 'youtube', YT).observations.map(o => o.discoveryScore), [10, 20]);
+});
+
+test('a dry run on an empty store does not create the database', () => {
+  const cfg = fixture();
+  importBatch(cfg, batch('b1', DAY1, [ig()]), { dryRun: true });
+  assert.ok(!existsSync(join(cfg.researchDir, 'research.sqlite')));
+  assert.deepEqual(readPosts(cfg), []); assert.deepEqual(readSearches(cfg), []);
+});
+
 test('one post found by both sources is stored once, with both provenances and separate evidence', () => {
   const cfg = fixture();
   importBatch(cfg, batch('b1', DAY1, [ytTracked(), ytDiscovery()]));
@@ -159,7 +189,7 @@ test('one post found by both sources is stored once, with both provenances and s
   assert.equal(readPosts(cfg2).length, 1); assert.equal(read(cfg2, 'youtube', YT).provenance.length, 2); assert.equal(read(cfg2, 'youtube', YT).format, 'short');
 });
 
-test('YouTube ids that differ only by case get different files', () => {
+test('YouTube ids that differ only by case get different keys', () => {
   assert.notEqual(postKey('youtube', 'abcDEFghijk').toLowerCase(), postKey('youtube', 'ABCdefGHIJK').toLowerCase());
   assert.equal(postKey('instagram', IG), 'instagram-' + IG);
 });
@@ -201,15 +231,15 @@ test('a reused batch id with different contents is refused', () => {
 test('a failed source and an omitted post leave earlier discoveries as they were', () => {
   const cfg = fixture();
   importBatch(cfg, batch('b1', DAY1, [ig(), ytTracked(), tiktok()]));
-  const keep = { yt: readFileSync(postFile(cfg, 'youtube', YT), 'utf8'), tt: readFileSync(postFile(cfg, 'tiktok', TT), 'utf8') };
+  const keep = { yt: stored(cfg, 'youtube', YT), tt: stored(cfg, 'tiktok', TT) };
   // next day: TikTok fails, YouTube returns nothing, Instagram returns the same post unchanged
   const r = importBatch(cfg, batch('b2', DAY2, [ig()], [
     { provider: 'last30free', lane: 'tiktok_hashtag', status: 'error', error: 'TikTok search failed: timeout', results: [] },
     { provider: 'signal-room', lane: 'youtube_short_form', status: 'ok', results: [] },
   ]));
   assert.deepEqual(r.failedRuns, [{ lane: 'tiktok_hashtag', error: 'TikTok search failed: timeout' }]);
-  assert.equal(readFileSync(postFile(cfg, 'youtube', YT), 'utf8'), keep.yt);
-  assert.equal(readFileSync(postFile(cfg, 'tiktok', TT), 'utf8'), keep.tt);
+  assert.equal(stored(cfg, 'youtube', YT), keep.yt);
+  assert.equal(stored(cfg, 'tiktok', TT), keep.tt);
   assert.equal(readPosts(cfg).length, 3);
   assert.equal(readSearches(cfg)[1].runs.find(x => x.lane === 'tiktok_hashtag').error, 'TikTok search failed: timeout'); // the failure is on record
   // a later result with fields missing never blanks what is stored
