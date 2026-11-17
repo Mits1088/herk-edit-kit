@@ -149,3 +149,11 @@ test('a partial paid run is imported with its results, its reason and its cost',
   assert.deepEqual([run.status, run.partial, run.results, run.cost.status], ['ok', reason, ['tiktok:7708502162103438612'], 'ABORTED']);
   assert.match(run.note, /^PARTIAL: /);
 });
+
+test("Instagram's older '<media id>_<creator id>' ids become the plain media id, and stay reported", () => {
+  const it = { source: 'instagram', source_id: '3858554427658188501_74737900948', url: 'https://www.instagram.com/p/DWMVs73E7bV/', title: 'reel', text: 'reel', author: 'a', created_at: '2026-11-15T10:00:00Z',
+    score: 3, metrics: { views: 10, likes: 2 }, raw: { media_type: 'video', username: 'a' } };
+  const b = buildBatch(base({ signalRoom: { lanes: [] }, last30free: { instagram: { file: 'ig' } } }), io({ ig: { results: { instagram: { status: 'ok' } }, merged: { items: [it] } } }));
+  assert.deepEqual(validateBatch(b), []);
+  assert.deepEqual([b.posts[0].id, b.runs[0].results, b.runs[0].fetchedOnly], ['3858554427658188501', ['instagram:3858554427658188501'], undefined]);
+});

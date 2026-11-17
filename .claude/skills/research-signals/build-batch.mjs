@@ -67,13 +67,15 @@ function fromSignalRoom(m, sr) {
 // output has neither: the file's modification time stands in for the measurement time (measuredBasis
 // "file-mtime", never used for growth) and a 0 views, likes or followers is treated as unknown.
 // Whole seconds, rounded down, so a collection time can never read later than the batch's retrievedAt.
+// Instagram's older API ids are '<media id>_<creator id>'; the media id alone is the post's id everywhere else.
+const nativeId = (platform, sourceId) => (platform === 'instagram' ? String(sourceId).replace(/^(\d+)_\d+$/, '$1') : String(sourceId));
 const isoZ = v => (typeof v === 'string' && v ? new Date(v).toISOString().replace(/\.\d{3}Z$/, 'Z') : null);
 function fromLast30(it, platform, fileTime, subs, newer) {
   const raw = it.raw || {}; const m = it.metrics || {};
   const c = newer ? num : v => (num(v) > 0 ? v : null); // a count; older output wrote 0 for unknown
   const pos = v => (num(v) > 0 ? v : null); // durations: 0 is never real
   const collected = newer && it.collected_at ? isoZ(it.collected_at) : null;
-  const post = { platform, id: String(it.source_id), provider: 'last30free', url: it.url, title: it.title || null, publishedAt: isoZ(it.created_at), transcript: null };
+  const post = { platform, id: nativeId(platform, it.source_id), provider: 'last30free', url: it.url, title: it.title || null, publishedAt: isoZ(it.created_at), transcript: null };
   const observation = metrics => ({ measuredAt: collected || fileTime, measuredBasis: collected ? 'collection' : 'file-mtime', metrics,
     discoveryScore: num(it.score), ...(it.score_formula ? { scoreFormula: it.score_formula } : {}) });
   if (platform === 'tiktok') {
@@ -150,7 +152,7 @@ export function buildBatch(draft, io = { readJson: f => JSON.parse(readFileSync(
         const newer = !!out.fetched; const fileTime = io.mtime(src.file).toISOString().replace(/\.\d{3}Z$/, 'Z');
         const merged = (out.merged.items || []).filter(it => it.source === source);
         const all = newer ? out.fetched.items.filter(it => it.source === source) : merged;
-        const shown = new Set(merged.map(it => String(it.source_id)));
+        const shown = new Set(merged.map(it => nativeId(platform, it.source_id)));
         for (const it of all) {
           const post = fromLast30(it, platform, fileTime, subs, newer); const key = refOf(post);
           if (l30Posts.has(key)) { const merged = mergeL30(posts[l30Posts.get(key)], post); posts[l30Posts.get(key)] = merged; }
@@ -158,7 +160,7 @@ export function buildBatch(draft, io = { readJson: f => JSON.parse(readFileSync(
           (shown.has(post.id) ? reported : kept).push(post);
         }
         // reported keeps last30free's own order (best score first)
-        const order = new Map(merged.map((it, i) => [String(it.source_id), i])); reported.sort((a, b) => order.get(a.id) - order.get(b.id));
+        const order = new Map(merged.map((it, i) => [nativeId(platform, it.source_id), i])); reported.sort((a, b) => order.get(a.id) - order.get(b.id));
         tag = ((all.find(it => it.raw && it.raw.hashtag)) || { raw: {} }).raw.hashtag || '';
       }
     }
