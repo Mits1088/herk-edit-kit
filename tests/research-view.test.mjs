@@ -259,3 +259,13 @@ test('the CSV export is the whole filtered table, Excel-safe', async () => {
     assert.match(res.headers.get('content-disposition'), /^attachment; filename="research-short-\d{4}-\d{2}-\d{2}\.csv"$/); // a bad format never reaches the header
   } finally { srv.close(); }
 });
+
+test("an older Instagram record ('<media id>_<creator id>') is found for its normalised post", () => {
+  const cfg = store(); const REEL = '3858554427658188501';
+  importBatch(cfg, { schema: 1, batchId: 'old-ig', retrievedAt: AT, search: { query: 'old' }, posts: [ig(REEL, { provider: 'last30free', observation: { measuredAt: AT, metrics: { views: 7 } } })],
+    runs: [{ provider: 'last30free', lane: 'instagram_search', status: 'ok', results: [`instagram:${REEL}`] }] });
+  const dir = join(cfg.researchDir, 'sources', 'old-ig'); mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'instagram.json'), JSON.stringify({ merged: { items: [{ source: 'instagram', source_id: `${REEL}_74737900948`, raw: { shortcode: 'DWMVs73E7bV' } }] } }));
+  const rec = researchPost(cfg, `instagram-${REEL}`, '', NOW).builderInputs.find(b => b.batchId === 'old-ig').records;
+  assert.deepEqual(rec.map(x => [x.what, x.data.source_id]), [['Item, as written by last30free (instagram.json)', `${REEL}_74737900948`]]);
+});

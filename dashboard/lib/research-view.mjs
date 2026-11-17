@@ -212,7 +212,9 @@ function builderInputs(cfg, post) {
       const files = { tiktok: ['tiktok.json'], instagram: ['instagram.json'], youtube: ['youtube.json', 'youtubeShorts.json'] }[post.platform] || [];
       for (const name of files) {
         const file = read(name); if (!file) continue;
-        const find = list => (list || []).find(x => String(x.source_id) === post.nativeId);
+        // Same id rule as build-batch: Instagram's older '<media id>_<creator id>' is the plain media id.
+        const native = x => (post.platform === 'instagram' ? String(x.source_id).replace(/^(\d+)_\d+$/, '$1') : String(x.source_id));
+        const find = list => (list || []).find(x => native(x) === post.nativeId);
         const it = find(file.fetched && file.fetched.items) || find(file.merged && file.merged.items);
         if (it) entry.records.push({ what: `Item, as written by last30free (${name})`, data: it });
       }
