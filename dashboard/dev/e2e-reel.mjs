@@ -49,9 +49,9 @@ try {
   it = await item(); assert.equal(it.stage, 'candidate'); assert.equal(it.candidate.sha, rec.sha256); assert.equal(it.candidate.sha, sha(cand));
   const head = await fetch(`${base}/file?p=${encodeURIComponent(`video-projects/${slug}/${it.candidate.file}`)}`, { headers: { range: 'bytes=0-15', connection: 'close' } }); assert.equal(head.status, 206); console.log('ok  the dashboard serves the candidate for playback');
   r = await act({ type: 'approve-candidate', sha: it.candidate.sha }); assert.equal(r.status, 200, JSON.stringify(r)); console.log('ok  dashboard approved the candidate: ' + r.message);
-  const fin = join(dir, 'renders/final.mp4'); assert.ok(existsSync(fin)); assert.equal(sha(fin), rec.sha256);
+  const fin = join(dir, `renders/${reel().slug}-final.mp4`); assert.ok(existsSync(fin)); assert.equal(sha(fin), rec.sha256);
   const ap = reel().approvals.at(-1); assert.deepEqual([ap.status, ap.approvedBy, ap.sha256], ['approved', 'Mits', rec.sha256]);
   it = await item(); assert.equal(it.stage, 'instagram'); assert.equal(it.project.finalExists, true);
-  console.log(`ok  final.mp4 is the QA-verified candidate byte for byte (${rec.sha256.slice(0, 12)}); renders recorded: ${reel().renders.map(x => x.file.replace('renders/', '')).join(', ')}`);
+  console.log(`ok  ${reel().slug}-final.mp4 is the QA-verified candidate byte for byte (${rec.sha256.slice(0, 12)}); renders recorded: ${reel().renders.map(x => x.file.replace('renders/', '')).join(', ')}`);
   console.log('PASS  ' + root);
 } finally { srv.close(); }

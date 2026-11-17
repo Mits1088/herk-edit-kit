@@ -142,8 +142,13 @@ motion-graphics rules (cadence, gates, "never ship" lists) mechanically to ordin
     **Never run `approve-reel` because Stage 1 passed, or on an approval given in the same message as the
     render.** Run it only when the person approves that named candidate in a later message, or let them run:
     `npm run approve-reel -- video-projects/<slug> --candidate renders/<file>.mp4 --sha <12 hex> --approved-by "<name>"`.
-    It re-hashes the file, refuses anything QA did not verify, and archives the previous `renders/final.mp4`.
-13. Deliver: `renders/final.mp4` (or the pending candidate), the project folder, and `QA.md` with an honest
+    It re-hashes the file, refuses anything QA did not verify, and archives the previous final. New finals use
+    `renders/<reel-slug>-final.mp4`; `reel.json.finalFile` and the approval's `promotedTo` record the actual path.
+    An outside finishing edit (e.g. a Canva speed-up exported in 4K) is approved only after a candidate, as its
+    finish: the person watches it and approves it in the dashboard (Video tab, **Use an outside edit**) or runs
+    `node .agents/skills/create-reel/scripts/approve-external.mjs video-projects/<slug> --file renders/<file>.mp4 --sha <12 hex> --approved-by "<name>" --source Canva`.
+    It records `kind: external-edit` with `basedOn` the approved candidate and keeps a copy in `renders/approved/`.
+13. Deliver: `renders/<reel-slug>-final.mp4` (or the pending candidate), the project folder, and `QA.md` with an honest
     summary using PASS / FAIL / WARNING / NOT TESTED / NOT APPLICABLE. Never claim a check ran that did not, that
     you listened to audio, or that loudness numbers or transcript checks prove speech sounds natural.
 14. After the person's feedback, write the short retrospective in `short-form-edit` ("House style and notes"): what
@@ -160,4 +165,4 @@ Revisions reuse the existing project and render the next version number; earlier
 - `npx hyperframes snapshot` sends frames to Gemini when `GEMINI_API_KEY` is set: always pass `--describe false`
   unless the user approves the upload.
 - Do not publish, upload, push to Git, or change remotes. Keep renders and private assets out of Git.
-- Never write `renders/final.mp4` by hand, edit a `qa.json`, or set `REEL_STUDIO_*` test hooks in real projects.
+- Never write the approved final by hand, edit a `qa.json`, or set `REEL_STUDIO_*` test hooks in real projects.

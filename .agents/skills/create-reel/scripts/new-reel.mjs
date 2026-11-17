@@ -81,6 +81,7 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
   writeFileSync(join(dir, 'reel.json'), JSON.stringify({
     slug, compositionId: id, profile: profile.name, mode, style: NO_STYLE, fonts: [], duration,
     width: profile.width, height: profile.height, fps: profile.fps,
+    finalFile: `renders/${slug}-final.mp4`,
     // The creative direction, filled in while planning; a final render refuses to start until every field is set.
     direction: Object.fromEntries(DIRECTION_FIELDS.map(k => [k, ''])),
     // Gate B: no draft or final renders until a person approves the creative preflight (preflight-reel.mjs).
@@ -90,7 +91,7 @@ export function convertToVertical(dir, { slug, profile, duration, mode, title, b
     // (Mits, 12 Nov 2026); preflight-reel --record-opening records it, and --approve refuses until it exists.
     openingPreviewRequired: true,
     openingPreview: null,
-    // Stage 2: a person approves a verified candidate before it becomes renders/final.mp4. Footage always requires it.
+    // Stage 2: a person approves a verified candidate before it becomes the named final. Footage always requires it.
     requireHumanApproval: true,
     renders: [],
   }, null, 2) + '\n');

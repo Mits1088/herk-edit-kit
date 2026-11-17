@@ -70,7 +70,79 @@ Hook and reel approvals are described under phase 4 below.
 Phase 2 changed two workflow files: `approve-reel/gumroad_upload.mjs` (the gate) and step 9 of
 `approve-reel/SKILL.md` (the skill no longer uploads). Both have a matching copy under `.agents/skills/`.
 
-## Publishing (phase 3)
+## Zernio publishing
+
+Completed implementation, naming changes, current reel status and continuation notes:
+[publishing handover](../docs/HANDOVER-command-centre-publishing.md).
+
+The existing Publish tab now previews the exact approved final MP4, account handles and IDs, editable text
+for Instagram, Facebook, TikTok and YouTube, hashtags, YouTube title/keyword tags/visibility, TikTok delivery,
+privacy, interactions and consent. Facebook starts with a separate copy of the Instagram caption and can be
+edited independently. Subtitles stay in the approved render.
+
+Configure the two server-side credentials in the ignored root `.env`, or environment variables:
+
+```dotenv
+ZERNIO_KEY_TIKTOK_YOUTUBE=
+ZERNIO_KEY_INSTAGRAM_FACEBOOK=
+```
+
+The first setting routes TikTok and YouTube through login A; the second routes Instagram and Facebook through
+login B. Keys are never returned to the browser. Check accounts uses only account, health and TikTok creator-info
+GETs. It verifies Instagram professional-account permissions and the selected Facebook Page. Several matching
+accounts block that destination rather than silently picking a different handle.
+
+For the first deliberate live submission:
+
+1. Restart the Command Centre (`node dashboard/server.mjs`) and open the reel's **Publish** tab on this PC.
+2. Watch the approved final video. Review the handle, platform text, hashtags and settings. The script, matching
+   video approval/QA, creative preflight and any promised PDF/resource must already be approved and live.
+   A PENDING REVIEW trial cannot pass these gates.
+3. Select the intended destinations. For TikTok choose Direct Post or Creator Inbox, choose privacy and confirm
+   both consent boxes. Choose YouTube visibility explicitly.
+4. Click **Publish selected**, or enter a time in **Europe/London** and click **Schedule selected**. These actions
+   start a real upload and submission. Opening the page, Save text, Check accounts and Check status never do.
+5. Read each saved submission's result. **Scheduled in Zernio** means its hosted scheduler accepted it; the PC
+   can then be off. **Published** is recorded separately and includes the public link when one is available.
+
+Each destination has a persisted identity/idempotency key, video SHA, exact caption, account, settings and
+schedule before its upload starts. A partial failure never hides successful destinations. Retry publish or
+Retry schedule uses the failed destination's saved snapshot; it does not repost successes. A known failed
+provider post uses its retry endpoint, after a read-only reconciliation. An unconfirmed creation reuses its
+original identity and media URL, and is blocked after the conservative 23-hour safe retry window. Interrupted
+uploads remain on disk for explicit recovery. Status checks never resume work automatically.
+
+Status refresh runs every 30 seconds while this reel's Publish tab is open on the PC, or through Check status.
+No webhooks or local scheduled publishing jobs are required. Scheduled work remains in Zernio after dashboard
+shutdown. Preserve `reels-data/content/`; its manifests hold both historical records and submission identities.
+
+Limits: Facebook Reels use the documented 3–60 second format; Instagram needs a professional account and Facebook
+needs a Page. TikTok Business Direct Post currently exposes public privacy; Creator Inbox needs a final Post tap
+in TikTok and is tracked as manual action until a public link resolves. YouTube determines Shorts from video
+shape/duration; this composer declares content not made for children. Provider quotas and processing still apply.
+Past or ambiguous/skipped UK clock-change times are refused. Scheduling requires 10 minutes to 180 days ahead.
+Retries preserve the submitted video/text. A known failed remote post uses **Retry publish now** after its due
+time; future schedules cannot be published early by retry. Editing or cancelling an accepted post stays in Zernio.
+Publishing actions remain on the PC; the authenticated phone view can review/download and retain its existing
+manual publication-record actions.
+
+Contract references: [quickstart](https://docs.zernio.com/quickstart),
+[create post](https://docs.zernio.com/posts/create-post), [uploads](https://docs.zernio.com/guides/media-uploads),
+[timezones and scheduling](https://docs.zernio.com/guides/timezones),
+[idempotency](https://docs.zernio.com/guides/idempotency),
+[TikTok](https://docs.zernio.com/platforms/tiktok/posts),
+[YouTube](https://docs.zernio.com/platforms/youtube),
+[Instagram](https://docs.zernio.com/platforms/instagram),
+[Facebook](https://docs.zernio.com/platforms/facebook/posts).
+The requested `/products/scheduler` URL was unavailable during verification; the current create-post and
+timezone references supply the scheduler contract.
+
+Verification: `node --test tests/zernio.test.mjs` and `node dashboard/dev/check-publishing.mjs` use isolated fixture
+data and mocked API calls for every upload, publish, schedule and retry. The browser check is headless Edge,
+disables Pointer Lock, blocks external browser requests, and writes desktop/phone screenshots and a report to
+`tmp/command-centre/publishing/` (ignored). Live verification is limited to read-only connected-account checks.
+
+## Manual publishing records (phase 3)
 
 - **Instagram.** When ig-insights has found the post, the Publish tab shows it with "Yes, this is the post".
   That runs `link.py confirm <id> --project <slug>`, so `links.json` stays the single record. When ig-insights
@@ -129,15 +201,33 @@ reads the saved record back; the page moves on only if the record is there.
   again. A preview recorded before this existed is checked by order instead (was the plan edited afterwards?).
 - **Candidate.** Shown when the latest candidate passed QA. The player shows that candidate, not an older
   final. "Approve as the final video" runs `approve-reel.mjs` with the candidate's full SHA-256. The script
-  re-hashes the file, so a file changed after QA is refused. The approved file becomes `renders/final.mp4`
+  re-hashes the file, so a file changed after QA is refused. The approved file becomes `renders/<reel-slug>-final.mp4`
   byte for byte; nothing is rendered again. A candidate that failed QA has no approve button.
 - **Request changes.** Records your note against that exact plan or file and does nothing else. "Start
   revision" is separate. Video work runs in Claude Code, never as a queued job, so it gives you a command to
   paste, and the reel stays marked "revision started, nothing new yet" until a new preview or candidate exists.
 - The name written into approvals is `DASH_APPROVER` (default `Mits`).
 
-These write to the project's `reel.json`, the candidate's `qa.json` and `QA.md`, and `renders/final.mp4` (the
+These write to the project's `reel.json`, the candidate's `qa.json` and `QA.md`, and the named final MP4 (the
 previous final is archived by the script), all through the two scripts.
+
+New projects record their named output in `reel.json.finalFile`; approval records name it in `promotedTo`.
+The dashboard preview, download and publisher follow that recorded path. Older approvals using `final.mp4`
+remain readable. If the approved final is missing, **Restore approved final video** re-checks the candidate's
+hash and restores it without creating a second approval. A final renamed to the new convention is reconciled
+through the approval script, preserving the original approval date and archiving a different existing file.
+
+**Outside edits (for example Canva).** After a candidate is approved, the Renders panel has **Use an outside
+edit**: a dropdown of MP4s in `renders/` that Reel Studio did not render and that are not an approved version
+(including the named final when its bytes changed after approval, as when a Canva download is saved over it).
+Choosing one plays it and shows its length and size against the approved final, with warnings such as Facebook's
+60-second limit. After ticking "I watched and listened to this exact file", **Approve as final** runs
+`approve-external.mjs` with its full SHA-256. The script approves it only as a finish of the approved, QA-passed
+candidate (`basedOn`), checks it (decodes, H.264, vertical 9:16, audio, at least 3 s), keeps a copy in
+`renders/approved/external-<sha12>.mp4` with a check report beside it, and makes it the named final. Publishing
+then follows the new approval. Approval is refused while a Zernio post for the reel is prepared, in flight,
+unconfirmed or scheduled, so a scheduled post can't send the old cut. A missing outside-edit final is restored
+from its kept copy.
 
 ## Research (store, importer, page and saved ideas)
 

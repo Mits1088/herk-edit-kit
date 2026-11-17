@@ -12,14 +12,24 @@ import { probeQueue, queueMission, runUpload, checkUpload, classifyUpload, appro
 import { loadPreflight } from './lib/workflow.mjs';
 import { researchList, researchSearches, researchPost } from './lib/research-view.mjs';
 import { readIdeas, ideaInfo, ideasView, ideaAction } from './lib/ideas.mjs';
-const STATIC = { '/research.js': 'text/javascript; charset=utf-8', '/research.css': 'text/css; charset=utf-8' };
+import * as zernio from './lib/zernio.mjs';
+const STATIC = { '/research.js': 'text/javascript; charset=utf-8', '/research.css': 'text/css; charset=utf-8', '/publish.js': 'text/javascript; charset=utf-8', '/publish.css': 'text/css; charset=utf-8' };
 await loadPreflight(loadConfig()); // the Gate B report comes from the Reel Studio script itself
 
 // One action from the page. Records it, then hands on any follow-up work: an upload for an approved PDF,
 // or an agent job for a script approval or a PDF revision. Returns a short message for the page.
 export async function handleAction(cfg, body, { wait = false } = {}) {
+  if (['zernio-send', 'zernio-retry'].includes((body || {}).type)) await zernio.accounts(cfg, { fresh: true }); // read-only check immediately before submission
   const state = buildState(cfg); const item = state.items.find(i => i.id === (body || {}).id);
-  applyAction(cfg, state, body);
+  const saved = applyAction(cfg, state, body);
+  if (body.type === 'zernio-send' || body.type === 'zernio-retry') {
+    const ids = body.type === 'zernio-retry' ? [body.submission] : saved.zernio.posts.filter(p => p.state === 'prepared' && body.destinations.includes(p.platform)).map(p => p.id);
+    const work = zernio.send(cfg, item.id, { update: updateManifest, ids }); if (wait) await work; else work.catch(() => {});
+    if (body.type === 'zernio-retry') return 'Retry recorded for this destination only, with its saved video and text.';
+    return body.mode === 'schedule' ? 'Recorded. Sending the schedule to Zernio now; once Zernio accepts it, this PC can be off.' : 'Recorded. Sending to Zernio now.';
+  }
+  if (body.type === 'zernio-check') { await zernio.check(cfg, item.id, { update: updateManifest }); return 'Status checked with Zernio.'; }
+  if (body.type === 'zernio-draft') return 'Text saved. Nothing was sent.';
   const upload = () => {
     const kw = item.resource.keyword, sha = item.resource.sha; cfg.runtime.uploads[kw] = true;
     const done = runUpload(cfg, kw).then(r => { delete cfg.runtime.uploads[kw]; const st = classifyUpload(r); updateManifest(cfg, item.id, m => { m.upload = { state: st, code: r.code, log: r.log, sha, at: new Date().toISOString() }; }); liveAfterUpload(cfg, item, st); });
@@ -42,8 +52,10 @@ export async function handleAction(cfg, body, { wait = false } = {}) {
   if (body.type === 'decide' && body.version) return job('approve', `Approve reel ${item.reel} version ${body.version} (${item.batch})`, approvalPrompt(item, body.version), approvalCommand(item, body.version));
   if (body.type === 'decide') return 'Choice cleared.';
   if (body.type === 'feedback') return 'Feedback recorded against this version. Nothing has started.';
+  if (body.type === 'approve-external') { const f = buildState(cfg).items.find(i => i.id === item.id)?.project?.finalFile || ''; return `Approved the outside edit. That exact file is now ${f.replace(`video-projects/${item.project.slug}/`, '')}; a kept copy is in renders/approved/.`; }
+  if (body.type === 'restore-external') return 'Restored the approved outside edit from its kept copy. The approval is unchanged.';
   if (body.type === 'approve-hook') return 'Hook approved and saved in reel.json. The rest of the reel can now be built.';
-  if (body.type === 'approve-candidate') return 'Approved. That exact file is now renders/final.mp4.';
+  if (body.type === 'approve-candidate') return item.candidate.restore ? 'Restored the approved final video. The original approval is unchanged.' : 'Approved. That exact file is now ' + item.project.finalFile.replace(`video-projects/${item.project.slug}/`, '') + '.';
   if (body.type === 'start-revision' && item.feedback[body.index].asset !== 'pdf') return `Revision marked as started. Video work runs in Claude Code, so paste this there: ${item.feedback[body.index].command}`;
   if (body.type === 'start-revision') { const f = item.feedback[body.index]; return job('revise-pdf', `Revise PDF guide ${item.resource.keyword}`, revisionPrompt(item.resource.keyword, f.text), revisionPrompt(item.resource.keyword, f.text)); }
   if (body.type === 'withdraw-feedback') return 'Feedback withdrawn.';
@@ -120,6 +132,8 @@ export function createServer(cfg) {
       if (req.method === 'GET' && u.pathname === '/api/research') return send(res, 200, { ...researchList(cfg, Object.fromEntries(u.searchParams)), ideaPosts: readIdeas(cfg).map(i => i.postId), remote });
       if (req.method === 'GET' && u.pathname === '/api/research/searches') return send(res, 200, { searches: researchSearches(cfg) });
       if (req.method === 'GET' && u.pathname === '/api/research/post') { const d = researchPost(cfg, u.searchParams.get('id'), u.searchParams.get('q')); return d ? send(res, 200, { ...d, ...ideaInfo(cfg, d, readIdeas(cfg).find(i => i.postId === d.id), buildState(cfg).items), remote }) : send(res, 404, { error: 'Unknown post' }); }
+      // Zernio: connected accounts and their health, read-only. Keys stay on the server.
+      if (req.method === 'GET' && u.pathname === '/api/zernio/accounts') { zernio.accounts(cfg, { fresh: u.searchParams.get('fresh') === '1' && !remote }).then(d => send(res, 200, d), e => send(res, 502, { error: zernio.scrub(e.message) })); return; }
       if (req.method === 'GET' && u.pathname === '/api/research/ideas') return send(res, 200, { ideas: ideasView(cfg, buildState(cfg).items), remote });
       if (req.method === 'GET' && u.pathname === '/file') {
         const f = safeFile(cfg, u.searchParams.get('p')) || (remote ? null : linkedMedia(cfg, u.searchParams.get('p'))); if (!f) return send(res, 404, { error: 'Not available' });

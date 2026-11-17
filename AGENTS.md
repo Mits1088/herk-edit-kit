@@ -15,6 +15,8 @@ document loading defaults. Work locally unless the user requests subagents.
 ## Start and route
 
 Read `README.md` for installation and `docs/WORKFLOW.md` for a complete edit.
+For Command Centre publishing or final-video naming/approval work, first read
+[the publishing handover](docs/HANDOVER-command-centre-publishing.md).
 Use `edit-video` to coordinate transcription, cuts, design, and verification.
 For one stage, load the matching local skill:
 
@@ -59,8 +61,10 @@ cards; each style has a DESIGN.md, CSS tokens, and named text slots.
 See `style-templates/README.md` for whole-scene templates.
 
 Preserve raw files. Use a new output filename for each editing stage. Archive
-obsolete work. Video projects, personal footage, transcripts, credentials, and
-renders are gitignored. The 12 already-published projects are retained as teaching examples; new private
+obsolete work. Approved finals use `renders/<reel-slug>-final.mp4`, recorded as
+`finalFile` in `reel.json` and `promotedTo` in the approval. Read those paths;
+do not assume `final.mp4`. Video projects, personal footage, transcripts,
+credentials, and renders are gitignored. The 12 already-published projects are retained as teaching examples; new private
 projects stay ignored. Do not treat existing public examples as permission to add
 new personal footage. Never print secrets or copy private media into library examples.
 

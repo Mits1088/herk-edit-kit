@@ -36,7 +36,7 @@ export function confirmLink(cfg, key, slug) {
 const sha256 = f => createHash('sha256').update(readFileSync(f)).digest('hex');
 const readJson = f => JSON.parse(readFileSync(f, 'utf8'));
 const lastLine = r => (String((r.error && r.error.message) || r.stderr || r.stdout || 'no output').trim().split('\n').pop() || '').replace(/^Not approved:\s*/, '').slice(0, 300);
-const reelScript = (cfg, name, args) => spawnSync(process.execPath, [join(cfg.reelScriptsDir, name), ...args], { cwd: cfg.root, encoding: 'utf8', timeout: 120000, windowsHide: true });
+const reelScript = (cfg, name, args, timeout = 120000) => spawnSync(process.execPath, [join(cfg.reelScriptsDir, name), ...args], { cwd: cfg.root, encoding: 'utf8', timeout, windowsHide: true });
 
 // The read-only Gate B report, from the script's own function so the fingerprint is the one --approve will check.
 let preflightModule;
@@ -76,6 +76,26 @@ export function approveCandidate(cfg, slug, candidate, sha) {
   const r = reelScript(cfg, 'approve-reel.mjs', [dir, '--candidate', candidate, '--sha', sha, '--approved-by', cfg.approver, '--note', 'Approved in the content dashboard']);
   if (r.error || r.status !== 0) throw new Error('The candidate was not approved: ' + lastLine(r));
   const ok = (readJson(join(dir, 'reel.json')).approvals || []).some(a => a.status === 'approved' && a.candidate === candidate && a.sha256 === sha);
-  const final = join(dir, 'renders', 'final.mp4');
-  if (!ok || !existsSync(final) || sha256(final) !== sha) throw new Error('The approval script finished but renders/final.mp4 is not the approved file');
+  const reel = readJson(join(dir, 'reel.json'));
+  const rel = reel.finalFile || (reel.approvals || []).filter(a => a.status === 'approved').at(-1)?.promotedTo || 'renders/final.mp4';
+  const final = /^renders\/[A-Za-z0-9][A-Za-z0-9._-]*\.mp4$/.test(rel) ? join(dir, rel) : null;
+  if (!ok || !final || !existsSync(final) || sha256(final) !== sha) throw new Error('The approval script finished but the recorded final video is not the approved file');
+}
+
+// An outside finishing edit (e.g. Canva). The script decodes the whole file, so a 4K export gets more time.
+const latestApproval = dir => (readJson(join(dir, 'reel.json')).approvals || []).filter(a => a.status === 'approved').at(-1);
+const finalMatches = (dir, a) => !!a && /^renders\/[A-Za-z0-9][A-Za-z0-9._-]*\.mp4$/.test(a.promotedTo || '') && existsSync(join(dir, a.promotedTo)) && sha256(join(dir, a.promotedTo)) === a.sha256;
+export function approveExternal(cfg, slug, file, sha, source) {
+  const dir = join(cfg.projectsDir, slug);
+  const r = reelScript(cfg, 'approve-external.mjs', [dir, '--file', file, '--sha', sha, '--approved-by', cfg.approver, '--source', source, '--note', 'Approved in the content dashboard'], 900000);
+  if (r.error || r.status !== 0) throw new Error('The outside edit was not approved: ' + lastLine(r));
+  const a = latestApproval(dir);
+  if (!a || a.kind !== 'external-edit' || a.file !== file || a.sha256 !== sha || !finalMatches(dir, a)) throw new Error('The approval script finished but the recorded final video is not the approved outside edit');
+  return { warnings: String(r.stdout || '').split(/\r?\n/).filter(l => l.startsWith('Warning: ')).map(l => l.slice(9).trim()) };
+}
+export function restoreExternal(cfg, slug) {
+  const dir = join(cfg.projectsDir, slug);
+  const r = reelScript(cfg, 'approve-external.mjs', [dir, '--restore'], 300000);
+  if (r.error || r.status !== 0) throw new Error('The outside edit was not restored: ' + lastLine(r));
+  if (!finalMatches(dir, latestApproval(dir))) throw new Error('The restore finished but the final video does not match the approval');
 }

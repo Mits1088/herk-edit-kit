@@ -3,7 +3,7 @@
 // The real render-and-QA path is exercised by `npm run test:reel-smoke`, not by these tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, cpSync, mkdirSync, existsSync, copyFileSync, appendFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, cpSync, mkdirSync, existsSync, copyFileSync, appendFileSync, readdirSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -85,6 +85,21 @@ async function candidateWithRecord(dir, version, { results } = {}) {
   return { rel, file, record };
 }
 const approve = (dir, c, extra = {}) => approveCandidate(dir, { candidate: c.rel, sha: c.record.sha256.slice(0, 12), approvedBy: 'Reviewer', ...extra });
+
+test('legacy approval moves to the reel-named final, preserving its date and archiving a different named file', async () => {
+  const dir = project(), c = await candidateWithRecord(dir, 1);
+  await approve(dir, c);
+  const reelPath = join(dir, 'reel.json'), recordPath = core.recordPathFor(dir, c.file);
+  const reel = core.readJson(reelPath), record = core.readJson(recordPath), at = record.approval.approvedAt;
+  const named = core.finalPath(dir); renameSync(named, join(dir, 'renders/final.mp4'));
+  delete reel.finalFile; reel.approvals[0].promotedTo = 'renders/final.mp4'; record.approval.promotedTo = 'renders/final.mp4';
+  core.writeJson(reelPath, reel); core.writeJson(recordPath, record); writeFileSync(named, 'preserve this differently encoded named file');
+  const result = await approve(dir, c); assert.equal(result.restored, true); assert.equal(result.final, `renders/${SLUG}-final.mp4`);
+  assert.equal(await core.sha256File(named), c.record.sha256); assert.equal(readFileSync(join(dir, result.archived), 'utf8'), 'preserve this differently encoded named file');
+  const after = core.readJson(reelPath); assert.equal(after.approvals.length, 1); assert.equal(after.approvals[0].approvedAt, at); assert.equal(after.finalFile, result.final);
+  assert.equal(core.readJson(recordPath).approval.approvedAt, at); assert.equal(core.readJson(recordPath).approval.promotedTo, result.final);
+  after.finalFile = '../outside.mp4'; core.writeJson(reelPath, after); assert.throws(() => core.finalPath(dir), /directly inside renders/);
+});
 
 test('a successful draft render runs only the lightweight checks', () => {
   requireFfmpeg();
@@ -275,7 +290,7 @@ test('approval promotes only the verified candidate it names, and records it sep
   const dir = project({ mode: 'footage' });
   const c = await candidateWithRecord(dir, 1);
   const r = await approve(dir, c, { note: 'watched twice' });
-  assert.equal(r.final, 'renders/final.mp4');
+  assert.equal(r.final, `renders/${SLUG}-final.mp4`);
   assert.equal(await core.sha256File(core.finalPath(dir)), c.record.sha256, 'promoted output matches the approved candidate');
   const rec = core.readJson(core.recordPathFor(dir, c.file));
   assert.equal(rec.approval.status, 'approved'); assert.equal(rec.approval.sha256, c.record.sha256); assert.equal(rec.technicallyVerified, true);
@@ -457,4 +472,55 @@ test('preflight-reel: read-only report changes nothing; --approve refuses a wron
   assert.match(p.safeguard, /not proof of identity/);
   editPlan(dir, plan => { plan.scenes[0].visualIntent = 'interesting animation'; });
   refuse(['--fingerprint', fp.slice(0, 12), '--approved-by', 'x'], /only a generic description/);
+});
+
+// ---- outside finishing edits (e.g. a Canva speed-up exported in 4K)
+const { approveExternal, restoreExternal } = await import('../.claude/skills/create-reel/scripts/approve-external.mjs');
+function outsideVideo(file, { size = '360x640', seconds = 3.5, audio = true } = {}) {
+  requireFfmpeg();
+  const args = ['-v', 'error', '-y', '-f', 'lavfi', '-i', `color=c=0x335577:s=${size}:r=30:d=${seconds}`];
+  if (audio) args.push('-f', 'lavfi', '-i', `sine=frequency=440:duration=${seconds}`, '-c:a', 'aac', '-shortest');
+  const r = spawnSync('ffmpeg', [...args, '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', file], { windowsHide: true, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+}
+const ext = async (dir, file, extra = {}) => approveExternal(dir, { file, sha: (await core.sha256File(join(dir, file))).slice(0, 12), approvedBy: 'Reviewer', source: 'Canva', ...extra });
+
+test('outside edit: a Canva download saved as the named final is approved in place, kept, and restorable', { skip: !HAS_FFMPEG }, async () => {
+  const dir = project(), c = await candidateWithRecord(dir, 1); await approve(dir, c);
+  const named = `renders/${SLUG}-final.mp4`; outsideVideo(join(dir, named)); // overwrites the approved final, as a Canva download would
+  const sha = await core.sha256File(join(dir, named));
+  const r = await ext(dir, named);
+  assert.equal(r.final, named); assert.equal(r.archived, null); assert.equal(r.kept, `renders/approved/external-${sha.slice(0, 12)}.mp4`);
+  const reel = core.readJson(join(dir, 'reel.json')), a = reel.approvals.at(-1);
+  assert.equal(reel.approvals.length, 2); assert.equal(reel.finalFile, named);
+  assert.deepEqual({ kind: a.kind, file: a.file, sha256: a.sha256, candidate: a.candidate, source: a.source, approvedBy: a.approvedBy }, { kind: 'external-edit', file: named, sha256: sha, candidate: null, source: 'Canva', approvedBy: 'Reviewer' });
+  assert.deepEqual(a.basedOn, { candidate: c.rel, sha256: c.record.sha256 });
+  assert.equal(await core.sha256File(join(dir, r.kept)), sha); assert.ok(existsSync(join(dir, r.kept.replace(/\.mp4$/, '.md'))));
+  await assert.rejects(ext(dir, named), /already the approved final/);
+  // the final goes missing: restore from the kept copy, approval unchanged
+  renameSync(join(dir, named), join(dir, 'renders/elsewhere.mp4'));
+  await restoreExternal(dir); assert.equal(await core.sha256File(join(dir, named)), sha);
+  assert.equal(core.readJson(join(dir, 'reel.json')).approvals.length, 2);
+  await assert.rejects(restoreExternal(dir), /already holds/);
+  // a second outside edit finishes the same base candidate
+  outsideVideo(join(dir, 'renders/canva-v2.mp4'), { seconds: 3 });
+  const r2 = await ext(dir, 'renders/canva-v2.mp4');
+  assert.match(r2.archived, /^renders\/approved\/final-/); assert.equal(await core.sha256File(join(dir, named)), r2.sha256);
+  assert.deepEqual(core.readJson(join(dir, 'reel.json')).approvals.at(-1).basedOn, { candidate: c.rel, sha256: c.record.sha256 });
+});
+
+test('outside edit: refused without an approved base, for a changed hash, a Reel Studio render, a landscape or silent file', { skip: !HAS_FFMPEG }, async () => {
+  const dir = project(); outsideVideo(join(dir, 'renders/canva.mp4'));
+  await assert.rejects(ext(dir, 'renders/canva.mp4'), /No approved Reel Studio candidate/);
+  const c = await candidateWithRecord(dir, 1); await approve(dir, c);
+  await assert.rejects(ext(dir, 'renders/canva.mp4', { sha: 'abcdefabcdef' }), /changed since you reviewed it/);
+  await assert.rejects(ext(dir, 'renders/canva.mp4', { approvedBy: '' }), /--approved-by is required/);
+  await assert.rejects(ext(dir, c.rel), /is a Reel Studio render/);
+  await assert.rejects(approveExternal(dir, { file: '../outside.mp4', sha: 'a'.repeat(12), approvedBy: 'R' }), /directly inside renders/);
+  outsideVideo(join(dir, 'renders/wide.mp4'), { size: '640x360' });
+  await assert.rejects(ext(dir, 'renders/wide.mp4'), /vertical 9:16/);
+  outsideVideo(join(dir, 'renders/silent.mp4'), { audio: false });
+  await assert.rejects(ext(dir, 'renders/silent.mp4'), /audio stream present/);
+  assert.equal(core.readJson(join(dir, 'reel.json')).approvals.length, 1, 'nothing was approved');
+  assert.equal(await core.sha256File(core.finalPath(dir)), c.record.sha256, 'the approved final is untouched');
 });

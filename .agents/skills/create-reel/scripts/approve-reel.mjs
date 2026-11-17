@@ -15,7 +15,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, relative, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { isCandidateFile, recordPathFor, sha256File, humanApprovalRequired, promote, readJson, writeJson, writeProjectSummary, qaDirFor, HUMAN_CHECKLIST } from './qa-core.mjs';
+import { isCandidateFile, recordPathFor, sha256File, humanApprovalRequired, promote, finalPath, readJson, writeJson, writeProjectSummary, qaDirFor, HUMAN_CHECKLIST } from './qa-core.mjs';
 
 export async function approveCandidate(dir, { candidate, sha, approvedBy, note = '', copy } = {}) {
   dir = resolve(dir);
@@ -33,7 +33,6 @@ export async function approveCandidate(dir, { candidate, sha, approvedBy, note =
   if (record.render !== rel || !record.candidate) throw new Error(`The QA record in ${relative(dir, recordPath)} is for ${record.render}, not ${rel}.`);
   if (!/^[a-f0-9]{64}$/.test(record.sha256 || '')) throw new Error('The QA record has no full SHA-256 for this candidate.');
   if (!record.technicallyVerified) throw new Error(`${rel} did not pass Stage 1: ${(record.blocking || []).map(r => `${r.status} ${r.check}`).join('; ') || 'not verified'}.`);
-  if (record.approval?.status === 'approved') throw new Error(`${rel} was already approved at ${record.approval.approvedAt}.`);
   if (!/^[a-f0-9]{12,64}$/i.test(sha || '')) throw new Error('--sha needs at least the first 12 hex characters of the candidate hash shown in QA.md.');
   if (!record.sha256.startsWith(sha.toLowerCase())) throw new Error(`--sha ${sha} does not match the QA-verified hash ${record.sha256.slice(0, 12)} of ${rel}.`);
   const needHuman = humanApprovalRequired(reel);
@@ -41,13 +40,30 @@ export async function approveCandidate(dir, { candidate, sha, approvedBy, note =
   // Re-hash immediately before promotion: the file must be the one QA verified.
   const now = await sha256File(file);
   if (now !== record.sha256) throw new Error(`${rel} changed after QA (now ${now.slice(0, 12)}, verified ${record.sha256.slice(0, 12)}). Run QA again on a new candidate.`);
+  const final = relative(dir, finalPath(dir)).replaceAll('\\', '/');
+
+  if (record.approval?.status === 'approved') {
+    const latest = (reel.approvals || []).filter(a => a.status === 'approved').at(-1);
+    if (!latest || latest.candidate !== rel || latest.sha256 !== record.sha256 || record.approval.sha256 !== record.sha256) throw new Error(`${rel} is not the latest matching approval in reel.json. Nothing was restored.`);
+    if (final === (record.approval.promotedTo || 'renders/final.mp4') && existsSync(join(dir, final))) throw new Error(`${rel} was already approved at ${record.approval.approvedAt}.`);
+    const result = await promote(dir, file, record.sha256, { copy });
+    if (final !== record.approval.promotedTo) {
+      record.approval.promotedTo = final; latest.promotedTo = final;
+      reel.finalFile = final;
+      if (result.archived) { record.approval.renamedPreviousFinalArchivedAs = result.archived; latest.renamedPreviousFinalArchivedAs = result.archived; }
+      writeJson(recordPath, record); writeJson(reelPath, reel);
+      writeProjectSummary(dir, record, relative(dir, join(qaDirFor(dir, file), 'QA.md')).replaceAll('\\', '/'));
+    }
+    return { candidate: rel, sha256: record.sha256, final, archived: result.archived || null, restored: true, approval: record.approval };
+  }
 
   const at = new Date();
   const result = await promote(dir, file, record.sha256, { copy, now: at });
+  reel.finalFile = final;
   const approval = needHuman || approvedBy
     ? { status: 'approved', approvedBy: String(approvedBy).trim(), approvedAt: at.toISOString(), sha256: record.sha256, note, checklist: reel.mode === 'footage' ? HUMAN_CHECKLIST : HUMAN_CHECKLIST.filter(x => !/speech|Voice/.test(x)) }
     : { status: 'promoted-without-human-approval', approvedAt: at.toISOString(), sha256: record.sha256, note, reason: 'reel.json requireHumanApproval is false' };
-  approval.promotedTo = 'renders/final.mp4';
+  approval.promotedTo = final;
   if (result.archived) approval.previousFinalArchivedAs = result.archived.replaceAll('\\', '/');
   record.approval = approval;
   writeJson(recordPath, record);
@@ -57,7 +73,7 @@ export async function approveCandidate(dir, { candidate, sha, approvedBy, note =
   reel.approvals.push({ candidate: rel, ...approval });
   writeFileSync(reelPath, JSON.stringify(reel, null, 2) + '\n');
   writeProjectSummary(dir, record, relative(dir, qaMd).replaceAll('\\', '/'));
-  return { candidate: rel, sha256: record.sha256, final: 'renders/final.mp4', archived: approval.previousFinalArchivedAs || null, approval };
+  return { candidate: rel, sha256: record.sha256, final, archived: approval.previousFinalArchivedAs || null, approval };
 }
 
 function parseArgs(argv) {
@@ -79,7 +95,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       process.exit(o.help ? 0 : 2);
     }
     const r = await approveCandidate(o._[0], o);
-    console.log(`Approved ${r.candidate} (${r.sha256.slice(0, 12)}) -> ${r.final}${r.archived ? `; previous final kept as ${r.archived}` : ''}.`);
+    console.log(`${r.restored ? 'Restored previously approved' : 'Approved'} ${r.candidate} (${r.sha256.slice(0, 12)}) -> ${r.final}${r.archived ? `; previous final kept as ${r.archived}` : ''}.`);
     console.log(`Recorded in ${basename(r.candidate, '.mp4')}.qa/qa.json, reel.json and QA.md.`);
   } catch (e) { console.error(`Not approved: ${e.message}`); process.exit(1); }
 }

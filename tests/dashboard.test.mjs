@@ -2,7 +2,7 @@
 // Runs against a throwaway copy of the workflow's folder layout; never touches real projects.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, existsSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -343,7 +343,7 @@ test('Instagram, Shorts and TikTok are recorded one at a time; one never marks a
   await assert.rejects(pub('instagram', { at: 'soon' }), /Enter the time/);
   await assert.rejects(pub('instagram', { url: 'https://example.com/reel/x' }), /not from instagram.com/);
   await assert.rejects(pub('instagram', { url: 'https://instagram.com.evil.test/reel/x' }), /not from instagram.com/);
-  await assert.rejects(pub('facebook'), /Unknown platform/);
+  await assert.rejects(pub('linkedin'), /Unknown platform/); // Facebook became a real, separately recorded destination
   assert.equal(by(buildState(cfg, NOW), ONE).stage, 'instagram', 'refused requests record nothing');
   assert.match(await pub('instagram', { url: 'https://www.instagram.com/reel/abc/' }), /Shorts and TikTok now have a due date/);
   let one = by(buildState(cfg, T('2026-11-15T12:00:00Z')), ONE);
@@ -523,7 +523,7 @@ test('the hook is approved by the real preflight script, only for the plan on sc
   await assert.rejects(handleAction(cfg, { id: TWO, type: 'approve-hook', fingerprint: fp2, watched: true }), /not waiting for a hook approval/);
 });
 
-test('a QA-passed candidate is approved by the real approve script and becomes final.mp4 byte for byte, with no new render', async () => {
+test('a QA-passed candidate becomes the named final byte for byte and a missing final reuses its original approval', async () => {
   const { root, cfg } = fixture2(); const dir = scratchReel(root, 'candreel'); const TWO = '2026-11-14-001-02'; const reelJson = join(dir, 'reel.json');
   recordOpening(dir); const fp = JSON.parse(cli('preflight-reel.mjs', dir, '--json').stdout).fingerprint;
   assert.equal(cli('preflight-reel.mjs', dir, '--approve', '--fingerprint', fp.slice(0, 12), '--approved-by', 'test person').status, 0);
@@ -545,16 +545,27 @@ test('a QA-passed candidate is approved by the real approve script and becomes f
   it = by(buildState(cfg, NOW), TWO); assert.deepEqual(it.needs.filter(n => /andidate/.test(n.label)).map(n => n.label), ['Candidate feedback recorded, revision not started']);
   assert.match(await handleAction(cfg, { id: TWO, type: 'start-revision', index: 0 }), /\/create-reel Revise video-projects\/candreel/);
   it = by(buildState(cfg, NOW), TWO); assert.equal(it.stage, 'candidate'); assert.match(it.note, /no new candidate has been rendered yet/); assert.ok(!it.needs.some(n => /andidate/.test(n.label)));
-  assert.equal(existsSync(join(dir, 'renders/final.mp4')), false, 'feedback and a started revision promote nothing');
+  const final = join(dir, 'renders/candreel-final.mp4');
+  assert.equal(existsSync(final), false, 'feedback and a started revision promote nothing');
   // the file changed on disk after QA: the script re-hashes it and refuses, and nothing is promoted
   const good = readFileSync(c.file); writeFileSync(c.file, 'tampered after QA');
   await assert.rejects(handleAction(cfg, { id: TWO, type: 'approve-candidate', sha: c.sha }), /The candidate was not approved: .*changed after QA/);
-  assert.equal(existsSync(join(dir, 'renders/final.mp4')), false); assert.equal((JSON.parse(readFileSync(reelJson, 'utf8')).approvals || []).length, 0);
+  assert.equal(existsSync(final), false); assert.equal((JSON.parse(readFileSync(reelJson, 'utf8')).approvals || []).length, 0);
   writeFileSync(c.file, good);
-  assert.match(await handleAction(cfg, { id: TWO, type: 'approve-candidate', sha: c.sha }), /That exact file is now renders\/final.mp4/);
-  assert.equal(sha256(join(dir, 'renders/final.mp4')), c.sha, 'final.mp4 is the approved candidate, unchanged'); assert.equal(sha256(c.file), c.sha);
+  assert.match(await handleAction(cfg, { id: TWO, type: 'approve-candidate', sha: c.sha }), /That exact file is now renders\/candreel-final.mp4/);
+  assert.equal(sha256(final), c.sha, 'the named final is the approved candidate, unchanged'); assert.equal(sha256(c.file), c.sha);
   const ap = JSON.parse(readFileSync(reelJson, 'utf8')).approvals; assert.equal(ap.length, 1); assert.deepEqual([ap[0].status, ap[0].approvedBy, ap[0].candidate, ap[0].sha256], ['approved', 'Mits', c.rel, c.sha]);
   assert.equal(JSON.parse(readFileSync(qaCore.recordPathFor(dir, c.file), 'utf8')).approval.status, 'approved');
   it = by(buildState(cfg, NOW), TWO); assert.equal(it.stage, 'instagram'); assert.equal(it.candidate, null); assert.equal(it.project.finalExists, true);
   await assert.rejects(handleAction(cfg, { id: TWO, type: 'approve-candidate', sha: c.sha }), /no QA-passed candidate/);
+  // A missing final must reuse the recorded approval, rather than trying to approve the candidate a second time.
+  const originalReel = readFileSync(reelJson, 'utf8'), originalQA = readFileSync(qaCore.recordPathFor(dir, c.file), 'utf8');
+  renameSync(final, join(dir, 'renders/saved-final.mp4'));
+  it = by(buildState(cfg, NOW), TWO); assert.equal(it.candidate.restore, true); assert.ok(it.needs.some(n => /Restore the approved final/.test(n.label)));
+  writeFileSync(c.file, 'changed after approval');
+  await assert.rejects(handleAction(cfg, { id: TWO, type: 'approve-candidate', sha: c.sha }), /changed after QA/); assert.equal(existsSync(final), false);
+  writeFileSync(c.file, good);
+  assert.match(await handleAction(cfg, { id: TWO, type: 'approve-candidate', sha: c.sha }), /Restored the approved final video/);
+  assert.equal(sha256(final), c.sha); assert.equal(readFileSync(reelJson, 'utf8'), originalReel); assert.equal(readFileSync(qaCore.recordPathFor(dir, c.file), 'utf8'), originalQA);
+  assert.equal(by(buildState(cfg, NOW), TWO).candidate, null);
 });

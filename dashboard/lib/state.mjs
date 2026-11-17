@@ -4,6 +4,7 @@ import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { titleFrom, reviewFrom, parseApproved, parseGenerated, parseYoutube, parseResources, parseDraft } from './parse.mjs';
+import { view as zernioView, finalVideo, isOpen as zernioOpen, NAMES as ZNAMES } from './zernio.mjs';
 import { readManifests } from './manifest.mjs';
 import { createHash } from 'node:crypto';
 import { approvalCommand, approvalPrompt, revisionPrompt, videoRevisionPrompt, classifyUpload } from './jobs.mjs';
@@ -12,6 +13,33 @@ import { hookReport } from './workflow.mjs';
 const shaCache = new Map();
 export function sha256File(full) {
   try { const st = statSync(full); const key = full + ':' + st.mtimeMs + ':' + st.size; if (!shaCache.has(key)) shaCache.set(key, createHash('sha256').update(readFileSync(full)).digest('hex')); return shaCache.get(key); } catch { return null; }
+}
+// Duration and size of an MP4, cached like the hash. ffprobe is optional; without it these read as unknown.
+const probeCache = new Map();
+function probeVideo(full) {
+  try { const st = statSync(full); const key = full + ':' + st.mtimeMs + ':' + st.size;
+    if (!probeCache.has(key)) { let v = { seconds: null, width: null, height: null };
+      try { const r = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height:format=duration', '-of', 'json', full], { encoding: 'utf8', timeout: 8000, windowsHide: true });
+        const j = JSON.parse(r.stdout || '{}'); const s = (j.streams || [])[0] || {}; const d = Number(j.format && j.format.duration);
+        v = { seconds: Number.isFinite(d) ? Math.round(d * 10) / 10 : null, width: s.width || null, height: s.height || null }; } catch { /* unknown */ }
+      probeCache.set(key, v); }
+    return probeCache.get(key); } catch { return { seconds: null, width: null, height: null }; }
+}
+const DRAFT_OR_CANDIDATE = /-(draft|candidate)-v\d{3}\.mp4$/i;
+// MP4s in renders/ that Reel Studio did not render and that are not an approved version: outside edits (e.g. a
+// Canva export) that could be approved as the final. The named final is listed when its bytes changed after approval.
+function outsideEdits(dir, r, final, approved) {
+  // Only the current approved bytes are left out, so an earlier copy (e.g. the original render) can be chosen again.
+  const recorded = new Set((r.renders || []).map(x => x.file)); const shas = new Set([approved.at(-1)?.sha256].filter(Boolean));
+  const out = [];
+  for (const name of ls(join(dir, 'renders'))) {
+    const file = 'renders/' + name;
+    if (!/\.mp4$/i.test(name) || name.startsWith('.') || DRAFT_OR_CANDIDATE.test(name) || recorded.has(file)) continue;
+    const full = join(dir, file); const sha = sha256File(full); if (!sha || shas.has(sha)) continue;
+    const st = statSync(full);
+    out.push({ file, sha, size: st.size, modifiedAt: new Date(st.mtimeMs).toISOString(), changedFinal: file === final && approved.length > 0, ...probeVideo(full) });
+  }
+  return out.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
 }
 const safeName = s => String(s).replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim(); // same rule as gumroad_upload.mjs
 
@@ -39,6 +67,8 @@ function readProject(cfg, slug) {
   });
   const approved = (r.approvals || []).filter(a => a.status === 'approved');
   const lastApproval = approved[approved.length - 1] || null;
+  const recordedFinal = r.finalFile || lastApproval?.promotedTo || (lastApproval ? 'renders/final.mp4' : `renders/${slug}-final.mp4`);
+  const final = /^renders\/[A-Za-z0-9][A-Za-z0-9._-]*\.mp4$/.test(recordedFinal) ? recordedFinal : 'renders/final.mp4';
   const pf = r.preflight || null;
   return {
     slug, mode: r.mode || null, duration: r.duration || null,
@@ -48,9 +78,12 @@ function readProject(cfg, slug) {
     // Only a reel still waiting at Gate B needs the live report; it is what the approve button is checked against.
     hook: r.preflightRequired && (!pf || pf.status !== 'approved') ? hookReport(cfg, dir) : null,
     renders,
-    approval: lastApproval ? { candidate: lastApproval.candidate, sha: lastApproval.sha256 || null, by: lastApproval.approvedBy || null, at: lastApproval.approvedAt || null } : null,
-    finalExists: existsSync(join(dir, 'renders', 'final.mp4')),
-    finalFile: `video-projects/${slug}/renders/final.mp4`,
+    approval: lastApproval ? { candidate: lastApproval.candidate, sha: lastApproval.sha256 || null, by: lastApproval.approvedBy || null, at: lastApproval.approvedAt || null,
+      ...(lastApproval.kind === 'external-edit' ? { kind: 'external-edit', file: lastApproval.file || null, source: lastApproval.source || null, basedOn: lastApproval.basedOn || null, keptCopy: lastApproval.keptCopy || null, seconds: lastApproval.seconds ?? null, width: lastApproval.width || null, height: lastApproval.height || null } : {}) } : null,
+    approvedVideo: lastApproval && existsSync(join(dir, final)) ? probeVideo(join(dir, final)) : null,
+    outsideEdits: lastApproval ? outsideEdits(dir, r, final, approved) : [],
+    finalExists: existsSync(join(dir, final)),
+    finalFile: `video-projects/${slug}/${final}`,
   };
 }
 
@@ -217,7 +250,10 @@ export function buildState(cfg, now = new Date()) {
     const unknowns = []; const needs = [];
     // Publication you recorded here. A post confirmed in ig-insights (links.json) always takes precedence.
     const pub = man.publishing || {};
-    if (!it.ig && pub.instagram) it.ig = { at: pub.instagram.at, url: pub.instagram.url || null, manual: true };
+    if (!it.ig && pub.instagram) it.ig = { at: pub.instagram.at, url: pub.instagram.url || null, manual: true, via: pub.instagram.via || null };
+    // Zernio submissions, newest per platform: an open one stops the "post it yourself" prompt; a failed one asks for you.
+    const zl = {}; for (const z of (man.zernio || {}).posts || []) zl[z.platform] = z;
+    const zBusy = k => !!zl[k] && (zernioOpen(zl[k].state) || zl[k].state === 'inbox' || zl[k].state === 'verify');
     // Where the file you linked sits in Uploads: the root means "on Instagram only", the all-platforms folder means "everywhere".
     const uf = links.uploadsFile && uploads.includes(links.uploadsFile) ? links.uploadsFile : null;
     const folder = !uf ? null : uf.startsWith(cfg.uploadsAllDir + '/') ? 'all' : !uf.includes('/') ? 'instagram' : null;
@@ -262,7 +298,7 @@ export function buildState(cfg, now = new Date()) {
     const lastRender = p ? p.renders[p.renders.length - 1] : null;
     const lastCand = p ? [...p.renders].reverse().find(r => r.kind === 'candidate') : null;
     const finalDone = !!p && ((p.approval && p.finalExists) || (lastRender && lastRender.kind === 'final' && lastRender.exists));
-    if (p && p.approval && !p.finalExists) unknowns.push('An approval is recorded but renders/final.mp4 is missing');
+    if (p && p.approval && !p.finalExists) unknowns.push(`An approval is recorded but ${p.finalFile} is missing`);
     if (p && !p.approval && p.finalExists) unknowns.push('renders/final.mp4 exists but no approval is recorded');
 
     if (it.isSource) { stage = 'source'; who = 'You'; need('Production', 'Start the rewrite', 'Open source', 'scripts', 'Transcript received, not yet rewritten'); }
@@ -299,7 +335,10 @@ export function buildState(cfg, now = new Date()) {
       const q = lastCand.qa || { state: 'missing' };
       if (q.state === 'passed') {
         stage = 'candidate'; const mine = feedback.filter(x => x.asset === 'candidate' && x.version === lastCand.sha);
-        if (mine.some(x => !x.started)) { who = 'You'; need('Production', 'Candidate feedback recorded, revision not started', 'Open feedback', 'video', 'Start the revision when you are ready'); }
+        const restore = p.approval && p.approval.candidate === lastCand.file && p.approval.sha === lastCand.sha && !p.finalExists;
+        if (p.approval && p.approval.kind === 'external-edit' && !p.finalExists) { who = 'You'; need('Production', 'Restore the chosen final copy', 'Restore final', 'video', `The approval is recorded, but ${p.finalFile.replace(`video-projects/${p.slug}/`, '')} is missing`); }
+        else if (restore) { who = 'You'; need('Production', 'Restore the approved final video', 'Restore final', 'video', `The approval is recorded, but ${p.finalFile.replace(`video-projects/${p.slug}/`, '')} is missing`); }
+        else if (mine.some(x => !x.started)) { who = 'You'; need('Production', 'Candidate feedback recorded, revision not started', 'Open feedback', 'video', 'Start the revision when you are ready'); }
         else if (mine.length) note = 'A revision was started; no new candidate has been rendered yet';
         else { who = 'You'; need('Production', 'Review the candidate', 'Review candidate', 'video', `Candidate v${String(lastCand.version).padStart(3, '0')} passed QA`); }
       }
@@ -322,7 +361,7 @@ export function buildState(cfg, now = new Date()) {
     } else if (stage === 'instagram') {
       const block = resource.keyword && resource.state !== 'live';
       if (block) { platforms.ig.state = 'blocked'; fail = fail || null; need('Publishing', 'Make the resource live before posting', 'Finish resource', 'resource', `Keyword ${resource.keyword} is ${resource.state === 'not-built' ? 'not built' : 'still a draft'}`); }
-      else need('Publishing', 'Post to Instagram', 'Publish', 'publish', 'The final video and caption are ready');
+      else if (!zBusy('instagram')) need('Publishing', 'Post to Instagram', 'Publish', 'publish', 'The final video and caption are ready');
     }
     if (it.ig) {
       due = it.ig.at ? dueDate(cfg, it.ig.at) : null;
@@ -335,14 +374,21 @@ export function buildState(cfg, now = new Date()) {
         const r = pub[name];
         platforms[k] = r ? { state: 'published', at: r.at, url: r.url || null, due: dueIso } : folder === 'all' ? { state: 'published', at: null, url: null, due: dueIso, source: 'folder' }
           : backlog ? { state: 'not-recorded', due: dueIso } : { state: isDue ? 'due' : 'waiting', due: dueIso, bucket };
-        if (platforms[k].state === 'due') need('Publishing', `Post to ${label}`, 'Publish', 'publish', folder === 'instagram' ? 'Its file is still in the Uploads root, which means Instagram only' : `Due since ${whenIn(cfg.dueTimeZone, due)}; no post is recorded`);
+        if (platforms[k].state === 'due' && !zBusy(name)) need('Publishing', `Post to ${label}`, 'Publish', 'publish', folder === 'instagram' ? 'Its file is still in the Uploads root, which means Instagram only' : `Due since ${whenIn(cfg.dueTimeZone, due)}; no post is recorded`);
       }
       if (platforms.yt.state === 'published' && platforms.tt.state === 'published') { stage = 'done'; who = 'System'; }
       if (folder === 'all' && !(pub.youtube && pub.tiktok)) unknowns.push(`Shorts and TikTok read as posted because the linked file is in "${cfg.uploadsAllDir}"; no time or link is recorded`);
       if (it.ig.folder) unknowns.push('Instagram reads as posted from where the linked file sits in Uploads; ig-insights has not confirmed a post');
       if (backlog && !(pub.youtube && pub.tiktok)) unknowns.push('Posted on Instagram before the dashboard recorded Shorts and TikTok; record them on the Publish tab if they went out');
-      if (it.ig.manual) unknowns.push('The Instagram post was entered by you; ig-insights has not matched it yet');
+      if (it.ig.manual) unknowns.push(it.ig.via === 'zernio' ? 'The Instagram post was published through Zernio; ig-insights has not matched it yet' : 'The Instagram post was entered by you; ig-insights has not matched it yet');
       if (resource.keyword && resource.state !== 'live') unknowns.push(`Published on Instagram while keyword ${resource.keyword} is not marked live; confirm that viewers can receive it`);
+    }
+    // Facebook is recorded on its own. A file in the all-platforms folder, or an older "everywhere" record, never marks it.
+    platforms.fb = pub.facebook ? { state: 'published', at: pub.facebook.at, url: pub.facebook.url || null } : { state: it.ig ? 'not-recorded' : 'not-yet' };
+    for (const [k, z] of Object.entries(zl)) {
+      if (z.state === 'failed') need('Publishing', `Zernio could not post to ${ZNAMES[k]}`, 'Open', 'publish', z.error || 'No reason was given');
+      else if (z.state === 'inbox') need('Publishing', 'Finish the TikTok post in the TikTok app', 'Open', 'publish', 'It was sent to your TikTok inbox, not published');
+      else if (z.state === 'verify' || z.state === 'unknown') need('Publishing', `Check the ${ZNAMES[k]} submission`, 'Open', 'publish', z.error || 'Zernio has not confirmed it');
     }
     if (resource.pdf && (resource.gate === 'changed' || (resource.state !== 'live' && resource.gate === 'awaiting'))) { // a rebuilt guide needs review even when its keyword is live
       const mine = feedback.filter(x => x.asset === 'pdf' && x.version === resource.sha);
@@ -382,7 +428,7 @@ export function buildState(cfg, now = new Date()) {
       stage, note, fail, who, files: it.files, sourceMatch: it.sourceMatch || null, captions: it.captions || null,
       resource, manual, links: { ...links }, linkSource: it.linkSource || null,
       project: p, platforms, due: due ? due.toISOString() : null,
-      candidate: stage === 'candidate' && lastCand.exists && lastCand.sha ? { file: lastCand.file, sha: lastCand.sha, version: lastCand.version } : null,
+      candidate: stage === 'candidate' && !(p.approval && p.approval.kind === 'external-edit') && lastCand.exists && lastCand.sha ? { file: lastCand.file, sha: lastCand.sha, version: lastCand.version, ...(p.approval && p.approval.candidate === lastCand.file && p.approval.sha === lastCand.sha && !p.finalExists ? { restore: true } : {}) } : null,
       suggestions: it.suggestions || [], unknowns, needs,
       decision: man.decision && !it.files.approved && it.reel ? { ...man.decision, command: approvalCommand(it, man.decision.version) } : null,
       feedback: feedback.map(x => ({ ...x,
@@ -391,6 +437,7 @@ export function buildState(cfg, now = new Date()) {
       jobs: (man.jobs || []).map(j => ({ ...j, status: ((cfg.runtime ? cfg.runtime.queue.missions : []).find(q => q.id === j.id) || {}).status || 'no longer in the queue' })),
     });
   }
+  for (const o of out) o.zernio = zernioView(cfg, o, manifests[o.id]);
   out.sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage) || String(b.batch || '').localeCompare(String(a.batch || '')) || a.title.localeCompare(b.title));
 
   return {
@@ -408,6 +455,7 @@ export function itemDetail(cfg, state, id) {
   if (f.source) out.source = { file: f.source, text: read(join(cfg.root, f.source)) || '', match: it.sourceMatch };
   if (!f.generated && f.draft) out.generated = { file: f.draft, draft: true, ...parseDraft(read(join(cfg.root, f.draft)) || '') };
   if (f.generated) { const g = parseGenerated(read(join(cfg.root, f.generated)) || '', f.generated); out.generated = { file: f.generated, ...g }; }
+  try { const v = finalVideo(cfg, it); if (v) out.video = { file: v.file, size: v.size, sha: v.sha, seconds: v.seconds, matchesApproval: v.matchesApproval, approvedAt: v.approvedAt }; } catch { /* no readable final video */ }
   if (f.approved) { const a = parseApproved(read(join(cfg.root, f.approved)) || '', f.approved); out.approved = { file: f.approved, ...a, youtubeParts: parseYoutube(a.youtube) }; }
   return out;
 }

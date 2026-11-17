@@ -64,7 +64,12 @@ export function sha256File(file) {
 export const isCandidateFile = (file, slug) => new RegExp(`^${slug}-candidate-v\\d{3}\\.mp4$`).test(basename(file));
 export const qaDirFor = (dir, render) => join(dir, 'renders', basename(render, '.mp4') + '.qa');
 export const recordPathFor = (dir, render) => join(qaDirFor(dir, render), 'qa.json');
-export const finalPath = dir => join(dir, 'renders', 'final.mp4');
+export const finalPath = dir => {
+  const reel = readJson(join(dir, 'reel.json'));
+  const final = reel.finalFile || `renders/${reel.slug}-final.mp4`;
+  if (!/^renders\/[A-Za-z0-9][A-Za-z0-9._-]*\.mp4$/.test(final)) throw new Error('The final filename must be an MP4 directly inside renders/.');
+  return join(dir, final);
+};
 
 // Footage (Mode B) always needs a person; other modes follow reel.json, defaulting to required.
 export function humanApprovalRequired(reel) {
@@ -807,7 +812,7 @@ export function reportMarkdown({ title, render, profileLine, record }) {
 
 export function approvalLine(record) {
   const a = record.approval || { status: 'pending' };
-  if (a.status === 'approved') return `APPROVED by ${a.approvedBy} at ${a.approvedAt} for \`${a.sha256.slice(0, 12)}\`, promoted to renders/final.mp4`;
+  if (a.status === 'approved') return `APPROVED by ${a.approvedBy} at ${a.approvedAt} for \`${a.sha256.slice(0, 12)}\`, promoted to ${a.promotedTo || 'renders/final.mp4'}`;
   if (a.status === 'promoted-without-human-approval') return `not required by project settings; promoted at ${a.approvedAt}`;
   return record.technicallyVerified ? 'PENDING: watch and listen, then approve explicitly' : 'not available until Stage 1 passes';
 }
@@ -865,11 +870,11 @@ export async function promote(dir, candidate, expectedSha, { copy = copyFileSync
     renameSync(tmp, final);
   } catch (e) {
     cleanup();
-    throw new Error(`Promotion stopped; renders/final.mp4 was not changed. ${e.message}`);
+    throw new Error(`Promotion stopped; ${relative(dir, final)} was not changed. ${e.message}`);
   }
   if (await sha256File(final) !== expectedSha) {
     if (archived) copyFileSync(archived, final); else unlinkSync(final);
-    throw new Error(`renders/final.mp4 did not match the approved hash after promotion${archived ? '; the previous final was restored' : ''}.`);
+    throw new Error(`${relative(dir, final)} did not match the approved hash after promotion${archived ? '; the previous final was restored' : ''}.`);
   }
   return { final, archived: archived && relative(dir, archived), unchanged: false };
 }

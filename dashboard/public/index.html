@@ -112,6 +112,7 @@ table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,520px);z-index:20}
 </style>
 <link rel="stylesheet" href="/research.css">
+<link rel="stylesheet" href="/publish.css">
 </head>
 <body>
 <div class="wrap">
@@ -121,6 +122,7 @@ table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;
 </div>
 <div id="toast" role="status" hidden></div>
 <script src="/research.js"></script>
+<script src="/publish.js"></script>
 <script>
 let S = null, view = 'attention', cur = null, tab = 'scripts', detail = null, showAll = false, pubOpen = null, liveOpen = false;
 const $ = s => document.querySelector(s);
@@ -141,11 +143,14 @@ function copyText(t){ if(navigator.clipboard&&window.isSecureContext) return nav
   return new Promise((ok,no)=>{ const a=document.createElement('textarea'); a.value=t; a.setAttribute('readonly',''); a.style.cssText='position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(a); a.select(); a.setSelectionRange(0,t.length); let r=false; try{ r=document.execCommand('copy'); }catch(_){} a.remove(); r?ok():no(); }); }
 const nowLocal = () => new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
 function toast(m){ const t=$('#toast'); t.textContent=m; t.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>t.hidden=true,m.length>80?12000:3500); }
+async function refreshDetail(){ if(!cur) return; const id=cur.id; try{ const r=await fetch('/api/item?id='+encodeURIComponent(id)); const d=await r.json(); if(cur&&cur.id===id){ detail=d; render(); } }catch(_){} }
 async function load(quiet){ try{ const r=await fetch('/api/state'); S=await r.json(); if(cur){ cur=S.items.find(i=>i.id===cur.id)||null; if(!cur) view='attention'; }
+    // The Publish tab shows the approved file from the item detail; fetch it again when the approval moved on.
+    if(cur&&detail&&detail.video&&cur.project&&cur.project.approval&&cur.project.approval.sha!==detail.video.sha) refreshDetail();
     const q=S.queue; $('#status').textContent=`Read from your files at ${new Date(S.generatedAt).toLocaleTimeString('en-GB')}. ${q.available&&q.running?'Job queue: '+q.missions.length+' jobs':'Job status unavailable ('+q.reason+')'}. It reads your workflow files and changes one only when a button says so.${S.remote?' Phone view: copy captions, download the video and record what you published. Everything else stays on the PC.':''}${S.warnings.length?' Warnings: '+S.warnings.join('; '):''}`;
     render(); }catch(e){ if(!quiet) $('#status').textContent='Could not read state: '+e.message; } }
-async function act(a,msg){ const r=await fetch('/api/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(a)}); const j=await r.json(); if(!r.ok){ toast(j.error||'That did not work'); return; } toast(j.message&&j.message!=='Saved'?j.message:(msg||'Saved')); await load(); }
-async function open(id,t){ cur=S.items.find(i=>i.id===id); if(!cur) return; tab=t||(cur.needs[0]||{}).tab||'scripts'; detail=null; pubOpen=null; liveOpen=false; fbOpen=false; studio={}; render(); window.scrollTo(0,0);
+async function act(a,msg){ const r=await fetch('/api/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(a)}); const j=await r.json(); if(!r.ok){ toast(j.error||'That did not work'); return; } toast(j.message&&j.message!=='Saved'?j.message:(msg||'Saved')); await load(); if(/^approve-|^restore-/.test(a.type||'')) await refreshDetail(); }
+async function open(id,t){ cur=S.items.find(i=>i.id===id); if(!cur) return; extSel=''; extTick=false; extSrc=''; tab=t||(cur.needs[0]||{}).tab||'scripts'; detail=null; pubOpen=null; liveOpen=false; fbOpen=false; studio={}; render(); window.scrollTo(0,0);
   try{ const r=await fetch('/api/item?id='+encodeURIComponent(id)); detail=await r.json(); if(cur&&cur.id===id) render(); }catch(_){} }
 
 function track(it){ const i=idx(it); const need=it.needs.some(n=>n.group==='Production'||n.group==='Publishing');
@@ -277,8 +282,28 @@ function hookBox(it){ const p=it.project, h=p.hook; if(!h) return '';
   ${reviewBox(it,'hook',h.planAfterPreview?null:h.fingerprint,`<button class="btn primary" data-approvehook="${esc(h.fingerprint)}">Approve this hook</button>`,'For example: the first line lands too late')}
   <p class="sub">Approval applies to this exact plan (fingerprint ${esc(h.fingerprint.slice(0,12))}). If the plan changes, it asks again.</p>`; }
 function candBox(it){ const c=it.candidate; const fb=it.feedback.some(x=>x.asset==='candidate'); if(!c) return fb?reviewBox(it,'candidate',null,'',''):'';
+  if(c.restore) return `<p class="info">This candidate is already approved. The final copy is missing.</p><div class="row"><button class="btn primary" data-approvecand="${esc(c.sha)}">Restore approved final video</button></div><p class="sub">Restores the exact approved file after checking its SHA-256. The original approval is kept; no new render is made.</p>`;
   return `${reviewBox(it,'candidate',c.sha,`<button class="btn primary" data-approvecand="${esc(c.sha)}">Approve as the final video</button>`,'For example: the caption at 0:12 covers the face')}
-  <p class="sub">Approval applies to this exact file, the one QA verified (sha256 ${esc(c.sha.slice(0,12))}). It becomes renders/final.mp4 as it is, with no new render.</p>`; }
+  <p class="sub">Approval applies to this exact file, the one QA verified (sha256 ${esc(c.sha.slice(0,12))}). It becomes ${esc(it.project.finalFile)} as it is, with no new render.</p>`; }
+/* Outside finishing edit (e.g. Canva): pick it, watch it, approve it as the final. */
+let extSel = '', extSrc = '', extTick = false, extBusy = false;
+const mb = n => (n/1048576).toFixed(1)+' MB', dims = v => v&&v.width?`${v.width}×${v.height}`:'size unknown', secs = v => v&&v.seconds!=null?`${v.seconds.toFixed(1)} s`:'length unknown';
+function extWarnings(e,base){ const w=[]; if(e.seconds!=null){ if(base&&base.seconds!=null&&Math.abs(e.seconds-base.seconds)>=0.1) w.push(`${e.seconds<base.seconds?'Shorter':'Longer'} than the approved final by ${Math.abs(e.seconds-base.seconds).toFixed(1)} s`);
+    if(e.seconds>60) w.push('Over 60 s, so Facebook Reels will refuse it'); if(e.seconds>180) w.push('Over 3 minutes: too long for Instagram Reels and YouTube Shorts'); }
+  if(e.width&&e.height&&!(e.height>e.width&&Math.abs(e.width/e.height-9/16)<0.01)) w.push('Not vertical 9:16, so the approval checks will refuse it');
+  return w; }
+function extBox(it){ const p=it.project, ex=p.outsideEdits||[]; if(!p.approval||S.remote) return '';
+  if(p.approval.kind==='external-edit'&&!p.finalExists) return `<div class="block">The chosen final copy is missing from ${esc(p.finalFile.replace('video-projects/'+p.slug+'/',''))}.</div><div class="row"><button class="btn primary" data-restoreext="1">Restore approved final video</button></div><p class="sub">Copies the kept copy (${esc(p.approval.keptCopy||'')}) back after checking its SHA-256. The approval is unchanged.</p>`;
+  if(it.candidate) return '';
+  const e=ex.find(x=>x.file===extSel);
+  const opts=[['','Keep approved final'],...ex.map(x=>[x.file,`${x.file.replace('renders/','')} · ${secs(x)} · ${dims(x)}${x.changedFinal?' · changed since approval':''}`])];
+  return `<dl class="kv"><dt>Choose the final copy</dt><dd>${ex.length?`<select id="extsel" aria-label="Choose the final copy">${opts.map(([v,t])=>`<option value="${esc(v)}" ${v===extSel?'selected':''}>${esc(t)}</option>`).join('')}</select>`:'<span class="sub">No other copies in renders/. Put your edited copies there (any name, for example '+esc(p.slug)+'-final.mp4) and reopen this tab.</span>'}</dd></dl>
+  ${e?`<div style="display:grid;gap:8px"><dl class="kv"><dt>Length</dt><dd>${secs(e)} (approved final ${secs(p.approvedVideo)})</dd><dt>Size</dt><dd>${dims(e)} (approved final ${dims(p.approvedVideo)}) · ${mb(e.size)}</dd><dt>SHA-256</dt><dd class="mono">${esc(e.sha.slice(0,12))}</dd><dt>Saved</dt><dd>${fmt(e.modifiedAt)}</dd></dl>
+    ${extWarnings(e,p.approvedVideo).map(w=>`<div class="unknown">${esc(w)}</div>`).join('')}
+    <label class="form" for="extsrc"><span class="sub">Note, optional (for example "Canva, sped up")</span><input class="inp" id="extsrc" maxlength="60" value="${esc(extSrc)}"></label>
+    <label class="row"><input type="checkbox" id="exttick" ${extTick?'checked':''}><span>I watched and listened to this exact file</span></label>
+    <div class="row"><button class="btn primary" data-approveext="${esc(e.sha)}" ${extTick&&!extBusy?'':'disabled'}>${extBusy?'Checking and approving… (a 4K file can take a minute)':'Approve as final'}</button></div>
+    <p class="sub">Approves this exact file (sha256 ${esc(e.sha.slice(0,12))}) as the final copy of this reel. It is checked (plays through, H.264, vertical 9:16, has audio), kept in renders/approved/, and becomes ${esc(p.finalFile.replace('video-projects/'+p.slug+'/','').replace(/^renders\/final\.mp4$/,'renders/'+p.slug+'-final.mp4'))}. Publishing then uses it.</p></div>`:''}`; }
 function tVideo(it){ const p=it.project; const free=S.projects.filter(x=>!x.linked||(p&&x.slug===p.slug)).map(x=>x.slug);
   const sg=it.suggestions.filter(s=>s.slug&&!p);
   const link=it.videoOnly?'':`<div class="panel"><div class="row"><h3>Video project</h3>${p?`<span class="pill ok">${esc(it.linkSource||'Linked')}</span>`:'<span class="pill you">Not linked</span>'}</div>
@@ -286,17 +311,18 @@ function tVideo(it){ const p=it.project; const free=S.projects.filter(x=>!x.link
     <dl class="kv"><dt>Linked project</dt><dd>${fileSel('project',free,it.links.project||(p?p.slug:''),'None')}</dd></dl>${!p?`<p class="sub">No project yet? Start one in Claude Code with /create-reel, then link it here.</p>`:''}</div>`;
   if(!p) return link;
   const pf=p.preflight, pfOk=pf&&pf.status==='approved'; const last=[...p.renders].reverse().find(r=>r.kind==='candidate'&&r.exists)||[...p.renders].reverse().find(r=>r.exists);
-  const play=it.candidate?`video-projects/${p.slug}/${it.candidate.file}`:p.finalExists?p.finalFile:last?`video-projects/${p.slug}/${last.file}`:null;
+  const ext=!it.candidate&&(p.outsideEdits||[]).find(x=>x.file===extSel);
+  const play=it.candidate?`video-projects/${p.slug}/${it.candidate.file}`:ext?`video-projects/${p.slug}/${ext.file}`:p.finalExists?p.finalFile:last?`video-projects/${p.slug}/${last.file}`:null;
   return link+`<div class="panel"><div class="row"><h3>Hook preview</h3><span class="pill ${pfOk?'ok':p.preflightRequired?(p.opening?'you':'run'):'unkp'}">${pfOk?'Approved':p.preflightRequired?(p.hook&&p.hook.valid&&p.hook.openingOk?'Awaiting your approval':'Not ready to review'):'No hook gate on this project'}</span></div>
     <dl class="kv">${pfOk?`<dt>Approved</dt><dd>${esc(pf.approvedBy||'')} · ${fmt(pf.approvedAt)}</dd><dt>Fingerprint</dt><dd class="mono">${esc(pf.fingerprint||'')}</dd>`:''}${p.opening?`<dt>Opening preview</dt><dd>first ${p.opening.end}s, recorded ${fmt(p.opening.recordedAt)}</dd>`:'<dt>Opening preview</dt><dd>Not recorded</dd>'}</dl>${pfOk?'':hookBox(it)}</div>
   <div class="panel"><div class="row"><h3>Renders</h3>${it.candidate?'<span class="pill you">Candidate awaiting your approval</span>':p.approval&&p.finalExists?'<span class="pill ok">Final ready</span>':it.fail?'<span class="pill bad">QA failed</span>':''}</div>
     ${it.fail?`<div class="block">${esc(it.fail)}</div><p class="sub">To recover: fix the cause, render again and re-run QA. Approval stays unavailable until QA passes.</p>`:''}
     <div class="media">${play?`<video controls preload="metadata" src="/file?p=${encodeURIComponent(play)}"></video>`:'<span class="sub">No video file yet</span>'}<div style="display:grid;gap:10px;min-width:0">
     ${play?`<p class="mono">Playing: ${esc(play)}</p>`:''}${candBox(it)}
-    <div class="scroll"><table><tr><th>File</th><th>QA</th><th>SHA</th><th>Rendered</th></tr>${p.renders.map(r=>`<tr><td class="mono">${esc(r.file.replace('renders/',''))}${r.exists?'':' (missing)'}</td><td>${r.qa?`<span class="pill ${r.qa.state==='passed'?'ok':r.qa.state==='failed'?'bad':'unkp'}">${esc(r.qa.verdict||r.qa.state)}</span>`:''}</td><td class="mono">${esc((r.sha||'').slice(0,12))}</td><td>${fmt(r.at)}</td></tr>`).join('')||'<tr><td colspan="4">No renders yet</td></tr>'}</table></div>
-    ${p.approval?`<dl class="kv"><dt>Approved file</dt><dd class="mono">${esc(p.approval.candidate)} · ${esc((p.approval.sha||'').slice(0,12))}</dd><dt>Approved</dt><dd>${esc(p.approval.by||'')} · ${fmt(p.approval.at)}</dd></dl>`:''}</div></div></div>`; }
+    <div class="scroll"><table><tr><th>File</th><th>QA</th><th>SHA</th><th>Rendered</th></tr>${p.renders.map(r=>`<tr><td class="mono">${esc(r.file.replace('renders/',''))}${r.exists?'':' (missing)'}</td><td>${r.qa?`<span class="pill ${r.qa.state==='passed'?'ok':r.qa.state==='failed'?'bad':'unkp'}">${esc(r.qa.verdict||r.qa.state)}</span>`:''}</td><td class="mono">${esc((r.sha||'').slice(0,12))}</td><td>${fmt(r.at)}</td></tr>`).join('')||'<tr><td colspan="4">No renders yet</td></tr>'}${p.approval&&p.approval.kind==='external-edit'?`<tr><td class="mono">${esc((p.approval.file||'').replace('renders/',''))}</td><td><span class="pill ok">CHOSEN COPY</span></td><td class="mono">${esc((p.approval.sha||'').slice(0,12))}</td><td>${fmt(p.approval.at)}</td></tr>`:''}</table></div>
+    ${p.approval?`<dl class="kv"><dt>Approved final</dt><dd class="mono">${esc(p.finalFile.replace('video-projects/'+p.slug+'/',''))} · ${esc((p.approval.sha||'').slice(0,12))}${p.approval.kind==='external-edit'?` · chosen copy${p.approval.source&&p.approval.source!=='Outside edit'?' ('+esc(p.approval.source)+')':''}`:''}</dd><dt>Approved</dt><dd>${esc(p.approval.by||'')} · ${fmt(p.approval.at)}</dd></dl>${extBox(it)}<details><summary class="sub">Approval source candidate</summary><p class="mono">${esc(p.approval.kind==='external-edit'?(p.approval.basedOn||{}).candidate||'':p.approval.candidate)}</p></details>`:''}</div></div></div>`; }
 function copyBox(label,text){ return text?`<div style="display:grid;gap:6px"><div class="row" style="justify-content:space-between"><span class="sub">${label}</span><button class="btn small" data-copy="${esc(text)}">Copy</button></div><div class="cap">${esc(text)}</div></div>`:`<p class="sub">${label}: not in the approved file</p>`; }
-const PL = {ig:['instagram','Instagram','https://www.instagram.com/reel/...'],yt:['youtube','YouTube Shorts','https://youtube.com/shorts/...'],tt:['tiktok','TikTok','https://www.tiktok.com/@you/video/...']};
+const PL = {ig:['instagram','Instagram','https://www.instagram.com/reel/...'],yt:['youtube','YouTube Shorts','https://youtube.com/shorts/...'],tt:['tiktok','TikTok','https://www.tiktok.com/@you/video/...'],fb:['facebook','Facebook','https://www.facebook.com/reel/...']};
 function pubForm(k){ const [,name,ph]=PL[k];
   return pubOpen===k?`<div class="form"><label class="sub" for="pubat">When it went live (this device's clock)</label><input class="inp" type="datetime-local" id="pubat" value="${nowLocal()}">
     <label class="sub" for="puburl">Link to the post (optional)</label><input class="inp" type="url" id="puburl" inputmode="url" placeholder="${ph}">
@@ -313,7 +339,7 @@ function tPublish(it){ const d=detail, a=d&&d.approved, pl=it.platforms, p=it.pr
     ${dl||'<p class="sub">Final video: not ready</p>'}
     <dl class="kv">${pl.ig.state==='published'?postLink(pl.ig.url):''}
     <dt>File in Uploads</dt><dd>${S.files.uploadsFound?fileSel('uploadsFile',S.files.uploads,it.links.uploadsFile,'None linked'):'Uploads folder not found'}</dd></dl>
-    <p class="sub">A linked file in the Uploads root reads as "on Instagram only". In "${esc(S.files.uploadsAllDir)}" it reads as "on every platform". Moving the file updates this page.</p>
+    <p class="sub">A linked file in the Uploads root reads as "on Instagram only". In "${esc(S.files.uploadsAllDir)}" it also records Shorts and TikTok. Facebook always needs its own record.</p>
     ${pl.ig.state==='ready'?pubForm('ig'):''}
     ${pl.ig.state==='published'&&pl.ig.manual?`<p class="sub">Entered by you. ig-insights has not matched this post yet; when it does, you confirm it here and its time takes over.</p>${withdraw('ig')}`:''}
     ${a?copyBox('Instagram caption',a.instagram):'<p class="sub">Captions appear once a script is approved and linked.</p>'}</div>`;
@@ -322,7 +348,8 @@ function tPublish(it){ const d=detail, a=d&&d.approved, pl=it.platforms, p=it.pr
     ${it.due?`<dl class="kv"><dt>Due</dt><dd>${dueTxt(it.due)}${st==='due'||st==='waiting'?' · '+left(it.due):''} · ${S.dueTimeZone}</dd>${st==='published'?postLink(pl[k].url):''}</dl>`:st==='not-yet'?'<p class="sub">The date is set when Instagram is confirmed.</p>':''}
     ${st==='not-recorded'?'<p class="sub">This reel went on Instagram before the dashboard recorded this platform. If you posted it here too, record it.</p>':''}${st!=='published'&&st!=='not-yet'?dl+pubForm(k):''}${st==='published'?(pl[k].source==='folder'?`<p class="sub">Read from the Uploads folder: the linked file is in "${esc(S.files.uploadsAllDir)}". No time or link is recorded.</p>`:withdraw(k)):''}${a?body:''}</div>`; };
   const y=a?a.youtubeParts:null;
-  return `<div class="grid3">${ig}${later('yt','YouTube Shorts',y?(y.title||y.description?copyBox('Title',y.title)+copyBox('Description',y.description)+copyBox('Tags',y.tags):copyBox('YouTube Shorts text',a.youtube)):'')}${later('tt','TikTok',a?copyBox('TikTok caption',a.tiktok):'')}</div>`; }
+  const fb=pl.fb.state==='published'?`<span class="pill ok">Published ${fmt(pl.fb.at)}</span><dl class="kv">${postLink(pl.fb.url)}</dl>${withdraw('fb')}`:pl.ig.state==='published'?pubForm('fb'):'<p class="sub">No Facebook publication recorded.</p>';
+  return `${Publishing.render(it,d,S.remote)}<details class="group"><summary><strong>Manual publication records and caption copies</strong></summary><div class="grid3">${ig}${later('yt','YouTube Shorts',y?(y.title||y.description?copyBox('Title',y.title)+copyBox('Description',y.description)+copyBox('Tags',y.tags):copyBox('YouTube Shorts text',a.youtube)):'')}${later('tt','TikTok',a?copyBox('TikTok caption',a.tiktok):'')}<div class="panel"><h3>Facebook</h3>${fb}<p class="sub">Historical “all platforms” records do not include Facebook.</p></div></div></details>`; }
 
 /* ---- approvals (phase 2) ---- */
 let fbOpen = false, studio = {}, ret = null; // ret: the row a project was opened from, and how far the list was scrolled
@@ -379,6 +406,8 @@ document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b
   else if(d.fbopen!==undefined){ fbOpen=d.fbopen||false; render(); const t=document.getElementById('fbtext'); if(t) t.focus(); }
   else if(d.fbsave){ const t=document.getElementById('fbtext'), asset=fbOpen; fbOpen=false; act({id:cur.id,type:'feedback',asset,text:t?t.value:''}); }
   else if(d.approvehook){ const t=document.getElementById('hooktick'); if(!(t&&t.checked)){ toast('Tick "I have watched this opening" first'); return; } act({id:cur.id,type:'approve-hook',fingerprint:d.approvehook,watched:true}); }
+  else if(d.approveext){ if(!extTick){ toast('Tick "I watched and listened to this exact file" first'); return; } extBusy=true; render(); act({id:cur.id,type:'approve-external',file:extSel,sha:d.approveext,source:extSrc,watched:true}).finally(()=>{ extBusy=false; extSel=''; extTick=false; render(); }); }
+  else if(d.restoreext){ act({id:cur.id,type:'restore-external'}); }
   else if(d.approvecand){ act({id:cur.id,type:'approve-candidate',sha:d.approvecand}); }
   else if(d.startrev!==undefined){ act({id:cur.id,type:'start-revision',index:Number(d.startrev)}); }
   else if(d.withdraw!==undefined){ act({id:cur.id,type:'withdraw-feedback',index:Number(d.withdraw)}); }
@@ -391,7 +420,8 @@ document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b
   else if(d.liveopen!==undefined){ liveOpen=d.liveopen==='1'; render(); }
   else if(d.resstatus){ const t=document.getElementById('livetick'); if(d.resstatus==='live'&&!(t&&t.checked)){ toast('Tick the box first'); return; } liveOpen=false; act({id:cur.id,type:'resource-status',keyword:cur.resource.keyword,to:d.resstatus,confirmed:d.resstatus==='live'}); }
   else if(d.hide!==undefined){ act({id:cur.id,type:'hide',hidden:d.hide==='1'},d.hide==='1'?'Removed from every list. No file was deleted. Find it under Pipeline, Removed.':'Back in the dashboard'); } });
-document.addEventListener('change',e=>{ const s=e.target.closest('select[data-link]'); if(s&&cur) act({id:cur.id,type:'link',kind:s.dataset.link,value:s.value||null},s.value?'Linked':'Link removed'); });
+document.addEventListener('input',e=>{ if(e.target.id==='extsrc') extSrc=e.target.value; });
+document.addEventListener('change',e=>{ if(e.target.id==='extsel'){ extSel=e.target.value; extTick=false; render(); return; } if(e.target.id==='exttick'){ extTick=e.target.checked; const b=document.querySelector('[data-approveext]'); if(b) b.disabled=!extTick||extBusy; return; } const s=e.target.closest('select[data-link]'); if(s&&cur) act({id:cur.id,type:'link',kind:s.dataset.link,value:s.value||null},s.value?'Linked':'Link removed'); });
 setInterval(()=>{ if(cur&&cur.resource.upload&&cur.resource.upload.state==='uploading') load(true); },3000);
 load(); setInterval(()=>{ const v=[...document.querySelectorAll('video,audio')].find(x=>!x.paused)||(fbOpen||pubOpen||liveOpen?1:null)||(cur&&tab==='resource'&&cur.resource.pdf&&!(cur.resource.upload&&cur.resource.upload.state==='uploading')?1:null); if(!document.hidden&&!document.querySelector('select:focus,input:focus,textarea:focus')&&!(v&&!v.paused)) load(true); },30000);
 </script>

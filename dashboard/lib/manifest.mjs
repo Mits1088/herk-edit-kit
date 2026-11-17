@@ -3,13 +3,15 @@
 // link) are checked here and carried out by workflow.mjs.
 import { readdirSync, readFileSync, writeFileSync, renameSync, mkdirSync, appendFileSync, existsSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { setResourceStatus, confirmLink, approveHook, approveCandidate } from './workflow.mjs';
+import { setResourceStatus, confirmLink, approveHook, approveCandidate, approveExternal, restoreExternal } from './workflow.mjs';
+import { prepare as zernioPrepare, prepareRetry as zernioRetry } from './zernio.mjs';
 
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,120}$/;
 export const PLATFORMS = {
   instagram: { short: 'ig', name: 'Instagram', hosts: ['instagram.com'] },
   youtube: { short: 'yt', name: 'YouTube', hosts: ['youtube.com', 'youtu.be'] },
   tiktok: { short: 'tt', name: 'TikTok', hosts: ['tiktok.com'] },
+  facebook: { short: 'fb', name: 'Facebook', hosts: ['facebook.com', 'fb.watch'] }, // its own record; nothing else ever implies it
 };
 
 export function readManifests(cfg) {
@@ -140,6 +142,22 @@ export function applyAction(cfg, state, action, now = new Date()) {
     if (!/^[a-f0-9]{64}$/.test(a.sha || '') || a.sha !== c.sha) throw new Error('A different candidate is waiting now. Watch the current one first.');
     if ((item.feedback || []).some(x => x.asset === 'candidate' && x.version === c.sha && !x.started)) throw new Error('You asked for changes to this candidate. Start the revision, or withdraw the feedback, before approving.');
     approveCandidate(cfg, item.project.slug, c.file, c.sha);
+  } else if (a.type === 'approve-external') {
+    const p = item.project;
+    if (!p || !p.approval) throw new Error('Approve a Reel Studio candidate first. An outside edit finishes an approved video.');
+    const e = (p.outsideEdits || []).find(x => x.file === a.file);
+    if (!e) throw new Error('That file is not an outside edit in this project’s renders folder');
+    if (!/^[a-f0-9]{64}$/.test(a.sha || '') || a.sha !== e.sha) throw new Error('That file changed since you opened it. Watch the current version first.');
+    if (a.watched !== true) throw new Error('Tick the box to confirm you watched and listened to this exact file');
+    const busy = ((m.zernio || {}).posts || []).filter(r => ['prepared', 'uploading', 'submitting', 'retrying', 'processing', 'unknown', 'scheduled'].includes(r.state));
+    if (busy.length) throw new Error(`Zernio still holds ${busy.map(r => r.platform).join(', ')} with the current video (${[...new Set(busy.map(r => r.state))].join(', ')}). Let it finish, or cancel it in Zernio and check status, before changing the final.`);
+    const source = String(a.source || '').replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 60) || 'Outside edit';
+    approveExternal(cfg, p.slug, e.file, e.sha, source);
+  } else if (a.type === 'restore-external') {
+    const p = item.project;
+    if (!p || !p.approval || p.approval.kind !== 'external-edit') throw new Error('The approved final is not an outside edit');
+    if (p.finalExists) throw new Error('The approved final is already in place');
+    restoreExternal(cfg, p.slug);
   } else if (a.type === 'publish') {
     const P = PLATFORMS[a.platform]; if (!P) throw new Error('Unknown platform');
     const when = new Date(a.at); if (!a.at || Number.isNaN(+when)) throw new Error('Enter the time it was published');
@@ -161,6 +179,15 @@ export function applyAction(cfg, state, action, now = new Date()) {
     const pub = m.publishing || {}; if (!pub[a.platform]) throw new Error('The dashboard holds no record to withdraw');
     if (a.platform === 'instagram' && (pub.youtube || pub.tiktok)) throw new Error('Withdraw the Shorts and TikTok records first');
     delete pub[a.platform];
+  } else if (a.type === 'zernio-send') {
+    zernioPrepare(cfg, item, m, a, now); // every destination, its request key and its exact text are saved before anything is sent
+  } else if (a.type === 'zernio-retry') {
+    zernioRetry(cfg, item, m, a, now);
+  } else if (a.type === 'zernio-draft') {
+    if (JSON.stringify(a.fields || {}).length > 40000) throw new Error('That text is too long to save');
+    (m.zernio ||= {}).draft = { fields: a.fields || {}, savedAt: at };
+  } else if (a.type === 'zernio-check') {
+    if (!((m.zernio || {}).posts || []).length) throw new Error('Nothing has been sent to Zernio for this reel');
   } else if (a.type === 'confirm-post') {
     const sg = (item.suggestions || []).find(s => s.key && s.key === a.key && s.publishedAt); if (!sg) throw new Error('That post is no longer proposed for this reel');
     if (sg.slug && item.project && sg.slug !== item.project.slug) throw new Error(`ig-insights proposed this post for "${sg.slug}", not this reel's video project`);
