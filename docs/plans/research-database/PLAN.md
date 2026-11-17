@@ -1,6 +1,6 @@
 # Research database: SQLite plan
 
-Status: agreed (revision 2, after review). Steps 1 and 2 built.
+Status: agreed (revision 2, after review). Steps 1 to 4 built; step 5 (Research page) next. Older-run backfill (step 2) not yet run.
 Date: 2026-11-17
 
 ## Goal

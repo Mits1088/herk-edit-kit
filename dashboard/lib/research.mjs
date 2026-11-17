@@ -4,17 +4,22 @@
 import { createHash } from 'node:crypto';
 import { openDb, withDb, transaction, loadPost, loadAllPosts, loadSearches, findSearch, savePost, saveSearch, fingerprint, countSearches } from './research-db.mjs';
 
-// lane -> [provider, platform]. Instagram comes from Signal Room only (paid Apify fetching stays off);
-// TikTok from last30free only. X, Hacker News and Reddit are outside this workflow, so they have no lane.
+// lane -> [provider, platform]. Instagram comes from Signal Room (tracked creators) and from last30free's paid
+// Apify search; TikTok from last30free only. X, Hacker News and Reddit are outside this workflow: no lane.
 export const LANES = {
   instagram_short_form: ['signal-room', 'instagram'],
   youtube_short_form: ['signal-room', 'youtube'],
   youtube_long_form: ['signal-room', 'youtube'],
   youtube_discovery: ['last30free', 'youtube'],
+  youtube_shorts_feed: ['last30free', 'youtube'],
   tiktok_hashtag: ['last30free', 'tiktok'],
+  instagram_search: ['last30free', 'instagram'],
 };
+// Where a measurement time came from: the source said so, our collector stamped the fetch, a file's modification
+// time (fallback), or a backfilled run's time. Only the first two are trusted for growth (see growth()).
+const MEASURED_BASIS = ['source', 'collection', 'file-mtime', 'backfill-run-time'];
 const PLATFORMS = {
-  instagram: { id: /^\d{6,25}$/, hosts: ['instagram.com'], providers: ['signal-room'] },
+  instagram: { id: /^\d{6,25}$/, hosts: ['instagram.com'], providers: ['signal-room', 'last30free'] },
   youtube: { id: /^[A-Za-z0-9_-]{11}$/, hosts: ['youtube.com', 'youtu.be'], providers: ['signal-room', 'last30free'] },
   tiktok: { id: /^\d{6,25}$/, hosts: ['tiktok.com'], providers: ['last30free'] },
 };
@@ -93,6 +98,9 @@ export function validateBatch(b) {
         if (p.provider !== 'last30free') bad(`${w}: discoveryScore comes from last30free only`);
         if (!Number.isFinite(o.discoveryScore)) bad(`${w}: discoveryScore must be a number`);
       }
+      if (o.scoreFormula != null && (p.provider !== 'last30free' || typeof o.scoreFormula !== 'string' || !SAFE_ID.test(o.scoreFormula))) bad(`${w}: scoreFormula is a short id, from last30free only`);
+      if (o.measuredBasis != null && !MEASURED_BASIS.includes(o.measuredBasis)) bad(`${w}: measuredBasis must be one of ${MEASURED_BASIS.join(', ')}`);
+      if (o.measuredBasis != null && o.measuredAt == null) bad(`${w}: measuredBasis needs a measuredAt`);
     }
   });
 
@@ -105,14 +113,19 @@ export function validateBatch(b) {
     if (!['ok', 'error'].includes(r.status)) bad(`${at}.status must be ok or error`);
     if (r.status === 'error' && (typeof r.error !== 'string' || !r.error.trim())) bad(`${at}: a failed run must carry its error text`);
     if (!optStr(r.note)) bad(`${at}.note must be text`);
+    if (r.counts != null && !(isObj(r.counts) && Object.values(r.counts).every(v => Number.isInteger(v) && v >= 0))) bad(`${at}.counts must map names to whole numbers`);
+    if (r.cost != null && !isObj(r.cost)) bad(`${at}.cost must be an object`);
     if (!Array.isArray(r.results)) return bad(`${at}.results must be a list of "platform:id", best match first`);
-    if (r.status === 'error' && r.results.length) bad(`${at}: a failed run cannot list results`);
-    for (const x of r.results) {
+    if (r.fetchedOnly != null && !Array.isArray(r.fetchedOnly)) return bad(`${at}.fetchedOnly must be a list of "platform:id"`);
+    if (r.status === 'error' && (r.results.length || (r.fetchedOnly || []).length)) bad(`${at}: a failed run cannot list results`);
+    // results: what the search reported, best first. fetchedOnly: what it also returned and we kept (older than the
+    // window, undated, or past the report limit). Both must have a post entry from this run's provider.
+    for (const x of [...r.results, ...(r.fetchedOnly || [])]) {
       if (typeof x !== 'string' || !x.startsWith(lane[1] + ':')) bad(`${at}: result ${JSON.stringify(x)} is not a ${lane[1]} post`);
       else if (!(seen.get(x) || []).includes(lane[0])) bad(`${at}: result ${x} has no matching ${lane[0]} entry in posts`);
     }
   });
-  const listed = new Set(b.runs.flatMap(r => Array.isArray(r.results) ? r.results.map(x => `${x}|${r.provider}`) : []));
+  const listed = new Set(b.runs.flatMap(r => [...(Array.isArray(r.results) ? r.results : []), ...(Array.isArray(r.fetchedOnly) ? r.fetchedOnly : [])].map(x => `${x}|${r.provider}`)));
   for (const p of b.posts) if (isObj(p) && !listed.has(`${ref(p)}|${p.provider}`)) bad(`${ref(p)} (${p.provider}) is not listed in any run's results`);
   return errs;
 }
@@ -125,9 +138,12 @@ function observationOf(p) {
   const out = { provider: p.provider, measuredAt: o.measuredAt ?? null, metrics };
   if (o.outlier != null) out.outlier = Object.fromEntries(Object.entries(o.outlier).filter(([, v]) => v != null)); // creator-relative evidence
   if (o.discoveryScore != null) out.discoveryScore = o.discoveryScore; // engagement at fetch; never mixed with outlier
+  if (o.scoreFormula != null) out.scoreFormula = o.scoreFormula;
+  if (o.measuredBasis != null) out.measuredBasis = o.measuredBasis;
   return out;
 }
-const values = o => canon({ metrics: o.metrics, outlier: o.outlier, discoveryScore: o.discoveryScore });
+// The evidence that makes two measurements the same one (the same fields as the stored fingerprint).
+const values = o => canon({ metrics: o.metrics, outlier: o.outlier, discoveryScore: o.discoveryScore, scoreFormula: o.scoreFormula });
 const min = (a, b) => (a < b ? a : b), max = (a, b) => (a > b ? a : b);
 
 function mergePost(old, p, batch) {

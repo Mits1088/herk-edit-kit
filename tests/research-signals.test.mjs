@@ -58,7 +58,8 @@ test('YouTube from Signal Room is undated, so the fallback is required and enfor
   const tracked = b.posts.find(p => p.id === 'ynEEbqKQSaY' && p.provider === 'signal-room'), found = b.posts.find(p => p.id === 'ynEEbqKQSaY' && p.provider === 'last30free');
   assert.equal(tracked.observation.measuredAt, null); // a recent publication date is not a measurement time
   assert.deepEqual(tracked.observation.outlier, { metric: 'bounded_velocity_signal', value: 21.44 }); assert.ok(!('discoveryScore' in tracked.observation));
-  assert.equal(found.observation.measuredAt, FETCHED.toISOString()); assert.equal(found.observation.discoveryScore, 6.73); assert.ok(!('outlier' in found.observation));
+  assert.equal(found.observation.measuredAt, '2026-11-16T21:17:54Z'); assert.equal(found.observation.measuredBasis, 'file-mtime'); // older output: the file's time, whole seconds, never used for growth
+   assert.equal(found.observation.discoveryScore, 6.73); assert.ok(!('outlier' in found.observation));
   assert.equal(found.observation.metrics.likes, null); // last30free writes 0 for a missing count: unknown, not zero
   assert.equal(found.format, 'long'); assert.equal(found.transcript, null); // subtitles failed: no transcript, and the description is not one
   assert.equal(found.caption, 'Self-host n8n today');
@@ -74,7 +75,7 @@ test('TikTok is labelled as hashtag discovery, saved without a transcript, and a
   assert.deepEqual(validateBatch(b), []);
   const p = b.posts.find(x => x.platform === 'tiktok');
   assert.equal(p.transcript, null); assert.equal(p.format, 'short'); assert.equal(p.durationSeconds, 66);
-  assert.deepEqual(p.observation.metrics, { views: 3260, likes: 186, comments: 0, shares: 2, followers: null });
+  assert.deepEqual(p.observation.metrics, { views: 3260, likes: 186, comments: 0, shares: 2, saves: null, followers: null });
   assert.match(b.runs.find(r => r.lane === 'tiktok_hashtag').note, /hashtag search #n8n only, no transcripts; 1 of 1 match/);
   // last30free reported an error, a command failed, and a Signal Room lane failed: each stays in the batch as a failed run
   const failed = buildBatch(base({ signalRoom: { lanes: ['instagram_short_form', 'youtube_long_form'], matches: [igMatch('3802204658396629750')], errors: [{ lane: 'youtube_long_form', error: 'The research backend is temporarily unavailable. Please retry shortly.' }] }, last30free: { tiktok: { file: 'tt' }, youtube: { error: 'yt-dlp exited 1' } } }),
@@ -82,4 +83,38 @@ test('TikTok is labelled as hashtag discovery, saved without a transcript, and a
   assert.deepEqual(validateBatch(failed), []);
   assert.deepEqual(failed.runs.filter(r => r.status === 'error').map(r => [r.lane, r.error]), [['youtube_long_form', 'The research backend is temporarily unavailable. Please retry shortly.'], ['youtube_discovery', 'yt-dlp exited 1'], ['tiktok_hashtag', 'TikTok search failed: timeout']]);
   assert.equal(failed.posts.length, 1);
+});
+
+test('newer last30free output: every fetched post kept, its own collection time, counts and cost carried', () => {
+  const at = '2026-11-16T21:20:00.700000Z';
+  const item = (source, id, extra = {}) => ({ source, source_id: id, url: source === 'tiktok' ? `https://www.tiktok.com/@a/video/${id}` : source === 'instagram' ? `https://www.instagram.com/p/${id.slice(-6)}/` : `https://www.youtube.com/shorts/${id}`,
+    title: `n8n post ${id}`, text: `n8n post ${id}`, author: 'a', created_at: '2026-11-15T10:00:00Z', score: 9.5, score_formula: `l30-${source}-v1`, collected_at: at, in_window: true,
+    metrics: { views: 100, likes: 0, comments: null, reposts: 3, saves: 4 }, raw: { followers: 50, media_type: 'video', username: 'a', video_duration_secs: 30, duration: 30, hashtag: 'n8n' }, ...extra });
+  const out = (source, reported, fetched, cost = null) => ({ results: { [source]: { status: 'ok', count: reported.length, counts: { fetched: fetched.length, in_window: 1, outside_window: fetched.length - 1, reported: reported.length }, cost } },
+    merged: { items: reported }, fetched: { count: fetched.length, items: fetched } });
+  const cost = { provider: 'apify', run_id: 'RUN123', status: 'SUCCEEDED', charged_usd: 0.19, max_charge_usd: 0.5 };
+  const ttShown = item('tiktok', '7708502162103438612'), ttOld = item('tiktok', '7708502162103438000', { created_at: '2026-08-01T00:00:00Z', in_window: false, score: 2 });
+  const ttUndated = item('tiktok', '7708502162103438111', { created_at: null, in_window: null, score: null });
+  const igShown = item('instagram', '3802204658396629750'), ysShown = item('youtube', 'If5q9eJ66EU');
+  const files = { tt: out('tiktok', [ttShown], [ttShown, ttOld, ttUndated], cost), ig: out('instagram', [igShown], [igShown], cost), ys: out('youtube', [ysShown], [ysShown]) };
+  const sr = { lanes: ['instagram_short_form'], matches: [igMatch('3802204658396629750')] }; // the same reel from Signal Room
+  const b = buildBatch(base({ signalRoom: sr, last30free: { tiktok: { file: 'tt' }, instagram: { file: 'ig' }, youtubeShorts: { file: 'ys' } } }), io(files));
+  assert.deepEqual(validateBatch(b), []);
+
+  const tt = b.runs.find(r => r.lane === 'tiktok_hashtag');
+  assert.deepEqual(tt.results, ['tiktok:7708502162103438612']);
+  assert.deepEqual(tt.fetchedOnly.sort(), ['tiktok:7708502162103438000', 'tiktok:7708502162103438111']);
+  assert.deepEqual([tt.counts.fetched, tt.cost.run_id], [3, 'RUN123']); assert.match(tt.note, /2 more fetched and kept/);
+  const p = b.posts.find(x => x.id === '7708502162103438612');
+  assert.equal(p.observation.measuredAt, '2026-11-16T21:20:00Z'); assert.equal(p.observation.measuredBasis, 'collection'); // rounded down
+  assert.deepEqual(p.observation.metrics, { views: 100, likes: 0, comments: null, shares: 3, saves: 4, followers: 50 }); // a real 0 stays 0
+  assert.equal(p.observation.scoreFormula, 'l30-tiktok-v1');
+  const undated = b.posts.find(x => x.id === '7708502162103438111');
+  assert.equal(undated.publishedAt, null); assert.equal(undated.observation.discoveryScore, null);
+
+  assert.ok(b.runs.some(r => r.lane === 'instagram_search' && r.results[0] === 'instagram:3802204658396629750'));
+  assert.equal(b.posts.filter(x => x.id === '3802204658396629750').length, 2); // one entry per source; the importer joins them
+  assert.equal(b.posts.find(x => x.id === '3802204658396629750' && x.provider === 'last30free').format, 'short');
+  const ys = b.runs.find(r => r.lane === 'youtube_shorts_feed');
+  assert.deepEqual(ys.results, ['youtube:If5q9eJ66EU']); assert.equal(b.posts.find(x => x.id === 'If5q9eJ66EU').format, 'short');
 });

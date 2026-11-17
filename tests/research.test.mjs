@@ -204,7 +204,10 @@ test('an invalid batch is rejected before any post data changes', () => {
   const rejects = (b, re) => assert.ok(validateBatch(b).some(m => re.test(m)), `expected ${re} in ${JSON.stringify(validateBatch(b))}`);
   rejects(batch('x', DAY1, [ig({ transcript: { text: 'Comment STAR for the setup. #claude', origin: 'signal-room' } })]), /caption is not a transcript/);
   rejects(batch('x', DAY1, [ig({ transcript: { text: 'words', origin: 'caption' } })]), /transcript\.origin/);
-  rejects(batch('x', DAY1, [ig({ provider: 'last30free', observation: null })]), /not allowed for instagram/); // paid Instagram fetching stays off
+  rejects(batch('x', DAY1, [ig({ provider: 'last30free', observation: null })]), /belongs to signal-room/); // a last30free reel needs the instagram_search lane
+  rejects(batch('x', DAY1, [tiktok({ observation: { measuredAt: DAY1, metrics: { views: 1 }, measuredBasis: 'guess' } })]), /measuredBasis must be one of/);
+  rejects(batch('x', DAY1, [ig({ observation: { measuredAt: null, metrics: { plays: 1 }, scoreFormula: 'x' } })]), /scoreFormula/);
+  rejects({ ...batch('x', DAY1, [tiktok()]), runs: [{ provider: 'last30free', lane: 'tiktok_hashtag', status: 'ok', results: [`tiktok:${TT}`], counts: { fetched: -1 } }] }, /counts must map/);
   rejects(batch('x', DAY1, [{ ...ig(), platform: 'x' }]), /instagram, youtube or tiktok/);
   rejects(batch('x', DAY1, [{ ...ig(), platform: 'reddit' }]), /instagram, youtube or tiktok/);
   rejects(batch('x', DAY1, [ig({ id: 'DcTC77TvZNt' })]), /not a instagram id/); // the shortcode is not the canonical id
@@ -219,6 +222,12 @@ test('an invalid batch is rejected before any post data changes', () => {
   rejects(batch('x', DAY1, [], [{ provider: 'last30free', lane: 'tiktok_hashtag', status: 'error', results: [] }]), /must carry its error text/);
   rejects({ ...batch('x', 'yesterday', [ig()]) }, /retrievedAt/);
   assert.deepEqual(validateBatch(batch('ok', DAY1, [ig(), ytTracked(), ytDiscovery(), tiktok()])), []);
+  // Instagram from last30free's Apify search, with posts it fetched but did not report
+  const igL30 = ig({ provider: 'last30free', transcript: null, observation: { measuredAt: DAY1, measuredBasis: 'collection', metrics: { views: 5000, shares: 39 }, discoveryScore: 9, scoreFormula: 'l30-instagram-v1' } });
+  const old = tiktok({ id: '7703257820640152000', url: 'https://www.tiktok.com/@someone/video/7703257820640152000' });
+  assert.deepEqual(validateBatch({ schema: 1, batchId: 'ok2', retrievedAt: DAY1, search: { query: 'n8n' }, posts: [igL30, tiktok(), old],
+    runs: [{ provider: 'last30free', lane: 'instagram_search', status: 'ok', results: [`instagram:${IG}`], counts: { fetched: 1 }, cost: { run_id: 'R' } },
+      { provider: 'last30free', lane: 'tiktok_hashtag', status: 'ok', results: [`tiktok:${TT}`], fetchedOnly: ['tiktok:7703257820640152000'] }] }), []);
 });
 
 test('a reused batch id with different contents is refused', () => {
@@ -323,4 +332,17 @@ test('a post reports which part matched, so a caption hit is not shown as spoken
   const c = matchPost(read(cfg, 'instagram', IG), 'plugins claude');
   assert.equal(c.matched, true); assert.deepEqual(c.fields, { transcript: ['plugins'], title: ['plugins'], caption: ['claude'] });
   assert.equal(matchPost(read(cfg, 'instagram', IG), 'n8n').matched, false);
+});
+
+test('posts fetched but not reported are stored, and a run keeps its counts and cost', () => {
+  const cfg = fixture(); const OLD = '7703257820640152000';
+  const old = tiktok({ id: OLD, url: `https://www.tiktok.com/@someone/video/${OLD}`, publishedAt: '2026-08-01T00:00:00Z', observation: { measuredAt: DAY1, measuredBasis: 'collection', metrics: { views: 9 }, discoveryScore: 1, scoreFormula: 'l30-tiktok-v1' } });
+  const cost = { provider: 'apify', run_id: 'RUN123', charged_usd: 0.19 };
+  importBatch(cfg, { schema: 1, batchId: 'f1', retrievedAt: DAY1, search: { query: 'n8n', windowDays: 30 }, posts: [tiktok(), old],
+    runs: [{ provider: 'last30free', lane: 'tiktok_hashtag', status: 'ok', results: [`tiktok:${TT}`], fetchedOnly: [`tiktok:${OLD}`], counts: { fetched: 2, outside_window: 1 }, cost }] });
+  assert.equal(readPosts(cfg).length, 2);
+  const o = read(cfg, 'tiktok', OLD).observations[0];
+  assert.deepEqual([o.measuredBasis, o.scoreFormula], ['collection', 'l30-tiktok-v1']);
+  const run = readSearches(cfg)[0].runs[0];
+  assert.deepEqual([run.counts, run.cost, run.fetchedOnly], [{ fetched: 2, outside_window: 1 }, cost, [`tiktok:${OLD}`]]);
 });

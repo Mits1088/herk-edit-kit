@@ -280,9 +280,14 @@ The whole batch is checked first. If anything is wrong it lists every problem, e
 }
 ```
 
-- **Lanes:** `instagram_short_form`, `youtube_short_form`, `youtube_long_form` (Signal Room), `youtube_discovery`,
-  `tiktok_hashtag` (last30free). Instagram is accepted from Signal Room only and TikTok from last30free only.
-  Nothing else has a lane, so X, Hacker News and Reddit cannot be imported.
+- **Lanes:** `instagram_short_form`, `youtube_short_form`, `youtube_long_form` (Signal Room); `youtube_discovery`,
+  `youtube_shorts_feed`, `tiktok_hashtag`, `instagram_search` (last30free; TikTok and Instagram via paid Apify).
+  TikTok is accepted from last30free only. Nothing else has a lane, so X, Hacker News and Reddit cannot be imported.
+- **A run** may also carry `fetchedOnly` (posts it returned but did not report: older, undated or past the
+  limit; stored like any other post), `counts` (whole numbers, e.g. fetched, in_window, outside_window) and
+  `cost` (the Apify run id, status and actual charge).
+- **A measurement** may carry `measuredBasis` (`source`, `collection`, `file-mtime`, `backfill-run-time`; the last
+  two never make growth) and, from last30free, `scoreFormula` (e.g. `l30-tiktok-v1`).
 - **Ids** are the platform's own: Instagram numeric media id (not the link shortcode), YouTube 11-character video
   id, TikTok numeric video id. `results` are `platform:id`, best match first; they are the top matches from that
   search, not everything that exists. Every post must appear in a run of its own provider.

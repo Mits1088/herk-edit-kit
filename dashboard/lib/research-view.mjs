@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { readPosts, readSearches, growth, matchPost, highlight } from './research.mjs';
 
 const GROUPS = [['instagram:short', 'Instagram'], ['youtube:short', 'YouTube Shorts'], ['youtube:long', 'YouTube long-form'], ['youtube:unknown', 'YouTube, format unknown'], ['tiktok:short', 'TikTok']];
-export const LANE_LABEL = { instagram_short_form: 'Instagram', youtube_short_form: 'YouTube Shorts', youtube_long_form: 'YouTube long-form', youtube_discovery: 'YouTube discovery', tiktok_hashtag: 'TikTok hashtag' };
+export const LANE_LABEL = { instagram_short_form: 'Instagram', youtube_short_form: 'YouTube Shorts', youtube_long_form: 'YouTube long-form', youtube_discovery: 'YouTube discovery', youtube_shorts_feed: 'YouTube Shorts feed', tiktok_hashtag: 'TikTok hashtag', instagram_search: 'Instagram search' };
 export const PROVIDER_LABEL = { 'signal-room': 'Signal Room', last30free: 'last30free' };
 const OUTLIER_LABEL = { reach_per_follower: 'reach per follower', age_adjusted_channel_outlier: 'age-adjusted channel outlier', bounded_velocity_signal: 'bounded velocity signal' };
 // Changes between two calls for the same video (21.44 and 25.77 seen on 2026-11-16), so it cannot order results.

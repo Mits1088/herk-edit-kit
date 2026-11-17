@@ -62,15 +62,27 @@ function fromSignalRoom(m, sr) {
   return post;
 }
 
-// last30free fetches counts live, so the fetch time (the output file's time) is the measurement time.
-// Its adapters write 0 when a count is missing, so 0 views, likes or followers are treated as unknown.
-function fromLast30(it, platform, fetchedAt, subs) {
-  const raw = it.raw || {}; const pos = v => (num(v) > 0 ? v : null);
-  const post = { platform, id: String(it.source_id), provider: 'last30free', url: it.url, title: it.title || null, publishedAt: it.created_at || null, transcript: null };
-  const m = it.metrics || {};
+// last30free fetches counts live. Its newer output stamps each item's own collection time (collected_at) and
+// keeps every fetched record ("fetched", with in_window); missing counts are null and a 0 is a real 0. Older
+// output has neither: the file's modification time stands in for the measurement time (measuredBasis
+// "file-mtime", never used for growth) and a 0 views, likes or followers is treated as unknown.
+// Whole seconds, rounded down, so a collection time can never read later than the batch's retrievedAt.
+const isoZ = v => (typeof v === 'string' && v ? new Date(v).toISOString().replace(/\.\d{3}Z$/, 'Z') : null);
+function fromLast30(it, platform, fileTime, subs, newer) {
+  const raw = it.raw || {}; const m = it.metrics || {};
+  const c = newer ? num : v => (num(v) > 0 ? v : null); // a count; older output wrote 0 for unknown
+  const pos = v => (num(v) > 0 ? v : null); // durations: 0 is never real
+  const collected = newer && it.collected_at ? isoZ(it.collected_at) : null;
+  const post = { platform, id: String(it.source_id), provider: 'last30free', url: it.url, title: it.title || null, publishedAt: isoZ(it.created_at), transcript: null };
+  const observation = metrics => ({ measuredAt: collected || fileTime, measuredBasis: collected ? 'collection' : 'file-mtime', metrics,
+    discoveryScore: num(it.score), ...(it.score_formula ? { scoreFormula: it.score_formula } : {}) });
   if (platform === 'tiktok') {
     Object.assign(post, { format: 'short', creator: { handle: it.author || null, name: raw.full_name || null }, caption: it.text || null, durationSeconds: pos(raw.video_duration_secs) });
-    post.observation = { measuredAt: fetchedAt, metrics: { views: pos(m.views), likes: pos(m.likes), comments: num(m.comments), shares: num(m.reposts), followers: pos(raw.followers) }, discoveryScore: num(it.score) };
+    post.observation = observation({ views: c(m.views), likes: c(m.likes), comments: num(m.comments), shares: num(m.reposts), saves: num(m.saves), followers: c(raw.followers) });
+  } else if (platform === 'instagram') {
+    // The Apify search returns reels (video) and sometimes photos or carousels: only a video is short-form.
+    Object.assign(post, { format: raw.media_type === 'video' ? 'short' : 'unknown', creator: { handle: raw.username || it.author || null, name: raw.full_name || null }, caption: it.text || null, durationSeconds: pos(raw.video_duration_secs) });
+    post.observation = observation({ views: c(m.views), likes: c(m.likes), comments: num(m.comments), shares: num(m.reposts), followers: c(raw.followers) });
   } else {
     const dur = pos(raw.duration); const text = String(it.text || '');
     // A Short cannot run past three minutes; below that, only a /shorts/ link proves the format.
@@ -79,10 +91,13 @@ function fromLast30(it, platform, fetchedAt, subs) {
     Object.assign(post, { format, creator: { name: it.author || raw.channel || null, handle: raw.uploader_id || null }, caption: caption || null, durationSeconds: dur });
     const sub = subs && subs.transcripts ? subs.transcripts[post.id] : null;
     if (sub && sub.trim()) post.transcript = { text: sub, origin: 'subtitles', capturedAt: subs.fetchedAt || null };
-    post.observation = { measuredAt: fetchedAt, metrics: { views: pos(m.views), likes: pos(m.likes) }, discoveryScore: num(it.score) };
+    post.observation = observation({ views: c(m.views), likes: c(m.likes), comments: newer ? num(m.comments) : null, followers: newer ? num(raw.followers) : null });
   }
   return post;
 }
+// last30free draft keys -> [lane, platform, the source name inside the output file]
+export const L30_LANES = { youtube: ['youtube_discovery', 'youtube', 'youtube'], youtubeShorts: ['youtube_shorts_feed', 'youtube', 'youtube'],
+  tiktok: ['tiktok_hashtag', 'tiktok', 'tiktok'], instagram: ['instagram_search', 'instagram', 'instagram'] };
 const textOf = p => [p.title, p.caption, p.transcript && p.transcript.text].filter(Boolean).join('\n');
 
 export function buildBatch(draft, io = { readJson: f => JSON.parse(readFileSync(f, 'utf8')), mtime: f => statSync(f).mtime }) {
@@ -106,23 +121,37 @@ export function buildBatch(draft, io = { readJson: f => JSON.parse(readFileSync(
   const reasons = youtubeFallback(draft);
   if (reasons.length && !l30.youtube) throw new Error(`The YouTube fallback is required (${reasons.join('; ')}) but the draft has no last30free.youtube. Run it, or record its error.`);
   const subs = l30.subtitles && l30.subtitles.file ? io.readJson(l30.subtitles.file) : null;
-  for (const [key, lane, platform] of [['youtube', 'youtube_discovery', 'youtube'], ['tiktok', 'tiktok_hashtag', 'tiktok']]) {
+  const listed = new Set(posts.map(p => `${refOf(p)}|${p.provider}`)); // one entry per post and provider per batch
+  for (const [key, [lane, platform, source]] of Object.entries(L30_LANES)) {
     const src = l30[key]; if (!src) continue;
     const why = key === 'youtube' ? `fallback because ${reasons.join('; ') || 'requested'}; ` : '';
-    let error = src.error || null, list = [], tag = '';
+    let error = src.error || null, reported = [], kept = [], tag = '', counts = null, cost = null;
     if (!error) {
-      const out = io.readJson(src.file); const res = (out.results || {})[key] || {};
+      const out = io.readJson(src.file); const res = (out.results || {})[source] || {};
+      counts = res.counts || null; cost = res.cost || null;
       if (res.status !== 'ok') error = res.error || `last30free reported status ${res.status}`;
       else {
-        const fetchedAt = io.mtime(src.file).toISOString();
-        list = (out.merged.items || []).filter(it => it.source === key).map(it => fromLast30(it, platform, fetchedAt, subs));
-        tag = ((out.merged.items || []).find(it => it.source === key && it.raw && it.raw.hashtag) || { raw: {} }).raw.hashtag || '';
+        const newer = !!out.fetched; const fileTime = io.mtime(src.file).toISOString().replace(/\.\d{3}Z$/, 'Z');
+        const merged = (out.merged.items || []).filter(it => it.source === source);
+        const all = newer ? out.fetched.items.filter(it => it.source === source) : merged;
+        const shown = new Set(merged.map(it => String(it.source_id)));
+        for (const it of all) {
+          const post = fromLast30(it, platform, fileTime, subs, newer);
+          if (!listed.has(`${refOf(post)}|last30free`)) { posts.push(post); listed.add(`${refOf(post)}|last30free`); }
+          (shown.has(post.id) ? reported : kept).push(post);
+        }
+        // reported keeps last30free's own order (best score first)
+        const order = new Map(merged.map((it, i) => [String(it.source_id), i])); reported.sort((a, b) => order.get(a.id) - order.get(b.id));
+        tag = ((all.find(it => it.raw && it.raw.hashtag)) || { raw: {} }).raw.hashtag || '';
       }
     }
-    if (error) { runs.push({ provider: 'last30free', lane, status: 'error', error: String(error), note: why.trim() || undefined, results: [] }); continue; }
-    posts.push(...list);
-    const limits = key === 'tiktok' ? `hashtag search #${tag} only, no transcripts; ` : `yt-dlp search, top matches only; ${list.filter(p => p.transcript).length} of ${list.length} with subtitles; `;
-    runs.push({ provider: 'last30free', lane, status: 'ok', note: why + limits + relevance(list), results: list.map(refOf) });
+    if (error) { runs.push({ provider: 'last30free', lane, status: 'error', error: String(error), note: why.trim() || undefined, results: [], ...(cost ? { cost } : {}) }); continue; }
+    const limits = { tiktok: `hashtag search #${tag} only, no transcripts; `, instagram: `Apify reel search #${tag}, no transcripts; `,
+      youtube: `yt-dlp search, top matches only; ${reported.filter(p => p.transcript).length} of ${reported.length} with subtitles; `,
+      youtubeShorts: `yt-dlp hashtag Shorts feed #${tag}; ` }[key];
+    const extra = kept.length ? `; ${kept.length} more fetched and kept (older, undated or past the report limit)` : '';
+    runs.push({ provider: 'last30free', lane, status: 'ok', note: why + limits + relevance(reported) + extra, results: reported.map(refOf),
+      ...(kept.length ? { fetchedOnly: kept.map(refOf) } : {}), ...(counts ? { counts } : {}), ...(cost ? { cost } : {}) });
   }
   return { schema: 1, batchId: draft.batchId, retrievedAt: draft.retrievedAt, search: { query: draft.query, windowDays: draft.windowDays ?? null }, runs, posts };
 }
@@ -142,7 +171,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename
     // Keep what the batch was built from, so a copied number can be checked against its source later.
     const keep = join(loadConfig().researchDir, 'sources', draft.batchId); mkdirSync(keep, { recursive: true });
     copyFileSync(file, join(keep, 'draft.json'));
-    for (const k of ['tiktok', 'youtube', 'subtitles']) { const f = ((draft.last30free || {})[k] || {}).file; if (f) copyFileSync(f, join(keep, k + '.json')); }
+    for (const k of [...Object.keys(L30_LANES), 'subtitles']) { const f = ((draft.last30free || {})[k] || {}).file; if (f) copyFileSync(f, join(keep, k + '.json')); }
     console.log(`Builder inputs kept: ${keep}`);
     for (const r of batch.runs) console.log(`  ${r.lane}: ${r.status === 'ok' ? r.results.length + ' posts. ' + (r.note || '') : 'FAILED: ' + r.error}`);
   } catch (e) { console.error(e.message); process.exit(1); }
