@@ -10,7 +10,7 @@ import { buildState, itemDetail } from './lib/state.mjs';
 import { applyAction, readManifests, updateManifest, liveAfterUpload } from './lib/manifest.mjs';
 import { probeQueue, queueMission, runUpload, checkUpload, classifyUpload, approvalPrompt, approvalCommand, revisionPrompt } from './lib/jobs.mjs';
 import { loadPreflight } from './lib/workflow.mjs';
-import { researchList, researchSearches, researchPost } from './lib/research-view.mjs';
+import { researchList, researchSearches, researchPost, researchCsv } from './lib/research-view.mjs';
 import { readIdeas, ideaInfo, ideasView, ideaAction } from './lib/ideas.mjs';
 import * as zernio from './lib/zernio.mjs';
 const STATIC = { '/research.js': 'text/javascript; charset=utf-8', '/research.css': 'text/css; charset=utf-8', '/publish.js': 'text/javascript; charset=utf-8', '/publish.css': 'text/css; charset=utf-8' };
@@ -130,6 +130,12 @@ export function createServer(cfg) {
       // and the short-form export go through POST /api/research/action below, on the PC only.
       if (req.method === 'GET' && STATIC[u.pathname]) return send(res, 200, readFileSync(join(import.meta.dirname, 'public', u.pathname.slice(1))), STATIC[u.pathname]);
       if (req.method === 'GET' && u.pathname === '/api/research') return send(res, 200, { ...researchList(cfg, Object.fromEntries(u.searchParams)), ideaPosts: readIdeas(cfg).map(i => i.postId), remote });
+      // The current Research table as a CSV download (read-only; opens in Excel).
+      if (req.method === 'GET' && u.pathname === '/api/research/export.csv') {
+        const f = Object.fromEntries(u.searchParams); const name = `research-${['short', 'long', 'unknown'].includes(f.format) ? f.format : 'short'}-${new Date().toISOString().slice(0, 10)}.csv`;
+        res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+        return res.end(researchCsv(cfg, f));
+      }
       if (req.method === 'GET' && u.pathname === '/api/research/searches') return send(res, 200, { searches: researchSearches(cfg) });
       if (req.method === 'GET' && u.pathname === '/api/research/post') { const d = researchPost(cfg, u.searchParams.get('id'), u.searchParams.get('q')); return d ? send(res, 200, { ...d, ...ideaInfo(cfg, d, readIdeas(cfg).find(i => i.postId === d.id), buildState(cfg).items), remote }) : send(res, 404, { error: 'Unknown post' }); }
       // Zernio: connected accounts and their health, read-only. Keys stay on the server.

@@ -22,6 +22,9 @@ const WINDOWS = ['7', '30', '90', '365', 'all'];
 // speed = average views per day. score compares only within one platform, so it needs a platform filter.
 const SORTS = ['speed', 'views', 'published', 'engagement', 'shares', 'growth', 'score', 'outlier'];
 const PAGE = 50;
+// The most rows one page view holds; past it the page asks for narrower filters instead of offering more.
+// The CSV export is not limited. Settable as cfg.researchListMax (tests).
+const LIST_MAX = 2000;
 // Ages are calendar days in the dashboard's timezone (Europe/London unless DASH_TZ says otherwise), so a post from
 // the evening of the 14th is "2 days ago" on the 16th, whatever the hour.
 let TZ = 'Europe/London';
@@ -44,21 +47,22 @@ function runsOf(post, searches) {
 }
 const memberOf = r => [...(r.results || []), ...(r.fetchedOnly || [])];
 
-// The metrics row: every number from ONE measurement (the newest dated one with a view count, else the newest
-// undated one), so counts from different measurements are never mixed.
+// The metrics row: every number from ONE measurement (the newest dated one with any count, else the newest undated
+// one), so counts from different measurements are never mixed. A measurement without a view count still shows the
+// counts it has; views and everything worked out from views stay unavailable.
 function metricsOf(post) {
-  const primary = o => PRIMARY[post.platform].find(k => typeof o.metrics[k] === 'number');
-  const counted = (post.observations || []).filter(primary);
+  const primary = o => PRIMARY[post.platform].find(k => typeof o.metrics[k] === 'number') || null;
+  const counted = (post.observations || []).filter(o => Object.values(o.metrics || {}).some(v => typeof v === 'number'));
   const dated = counted.filter(o => o.measuredAt).sort((a, b) => Date.parse(b.measuredAt) - Date.parse(a.measuredAt));
   const o = dated[0] || counted.filter(x => !x.measuredAt).sort((a, b) => (a.lastRetrievedAt < b.lastRetrievedAt ? 1 : -1))[0];
   if (!o) return null;
   const m = o.metrics; const num = v => (typeof v === 'number' ? v : null);
-  const views = m[primary(o)], likes = num(m.likes), comments = num(m.comments), shares = num(m.shares);
+  const views = primary(o) ? m[primary(o)] : null, likes = num(m.likes), comments = num(m.comments), shares = num(m.shares);
   // Average views per day up to that measurement: the post's age when it was measured. Under a day counts as one.
   const ageAtMeasure = o.measuredAt && post.publishedAt ? (Date.parse(o.measuredAt) - Date.parse(post.publishedAt)) / 86400e3 : null;
   return {
     provider: o.provider, viewMetric: primary(o), views, likes, comments, shares, saves: num(m.saves),
-    avgViewsPerDay: ageAtMeasure != null && ageAtMeasure >= 0 ? views / Math.max(1, ageAtMeasure) : null,
+    avgViewsPerDay: views != null && ageAtMeasure != null && ageAtMeasure >= 0 ? views / Math.max(1, ageAtMeasure) : null,
     engagementRate: views > 0 && likes != null && comments != null ? (likes + comments) / views : null,
     shareRate: views > 0 && shares != null ? shares / views : null,
     measuredAt: o.measuredAt, measuredBasis: o.measuredBasis || null, retrievedAt: o.lastRetrievedAt,
@@ -96,14 +100,15 @@ function summarise(post, searches, now) {
   };
 }
 
-function cleanFilters(f = {}) {
+function cleanFilters(f = {}, max = LIST_MAX) {
   const pick = (v, list, d) => (list.includes(v) ? v : d);
-  const limit = Math.min(1000, Math.max(PAGE, Math.ceil((Number(f.limit) || PAGE) / PAGE) * PAGE));
+  const limit = Math.min(max, Math.max(PAGE, Math.ceil((Number(f.limit) || PAGE) / PAGE) * PAGE));
   return { search: String(f.search || '').trim(), q: String(f.q || '').trim().slice(0, 200), platform: pick(f.platform, ['instagram', 'youtube', 'tiktok'], ''), format: pick(f.format, ['short', 'long', 'unknown'], 'short'), window: pick(f.window, WINDOWS, '30'), sort: pick(f.sort, SORTS, 'speed'), limit };
 }
 
-export function researchList(cfg, filters, now = new Date()) {
-  TZ = cfg.dueTimeZone || TZ; const f = cleanFilters(filters); const posts = readPosts(cfg);
+export function researchList(cfg, filters, now = new Date(), { unlimited = false } = {}) {
+  const max = cfg.researchListMax || LIST_MAX;
+  TZ = cfg.dueTimeZone || TZ; const f = cleanFilters(filters, max); const posts = readPosts(cfg);
   const searches = readSearches(cfg).sort((a, b) => (a.retrievedAt < b.retrievedAt ? 1 : -1));
   const queries = [...new Set(searches.map(s => s.search.query))];
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
@@ -151,13 +156,36 @@ export function researchList(cfg, filters, now = new Date()) {
   }
   return {
     generatedAt: now.toISOString(), filters: f, sortedBy: sortBy, scoreNeedsPlatform, queries, formats,
-    rows: recent.slice(0, f.limit), more: Math.max(0, recent.length - f.limit),
+    rows: unlimited ? recent : recent.slice(0, f.limit),
+    // more: how many further rows "Show more" can still bring in; capped: matches beyond what one view holds.
+    more: unlimited ? 0 : Math.max(0, Math.min(recent.length, max) - f.limit), capped: unlimited ? 0 : Math.max(0, recent.length - max),
     // Posts with no publication date are never in a date window: listed only when the window is "any date".
     undatedRows: f.window === 'all' ? rows.filter(r => r.bucket === 'undated').sort(order) : [],
     failures, partials,
     totals: { posts: posts.length, searches: searches.length, lastRetrievedAt: searches[0] ? searches[0].retrievedAt : null, shown: rows.length, recent: recent.length, historical: rows.filter(r => r.bucket === 'historical').length, undated: rows.filter(r => r.bucket === 'undated').length },
     staleDays: STALE_DAYS, pageSize: PAGE,
   };
+}
+
+// The current table as CSV (every matching row, not only the top 50), in the page's order and with its columns.
+// UTF-8 with a byte-order mark so Excel reads it correctly. Text that a spreadsheet would run as a formula is
+// prefixed with an apostrophe.
+export function researchCsv(cfg, filters, now = new Date()) {
+  const l = researchList(cfg, filters, now, { unlimited: true });
+  const rows = [...l.rows, ...l.undatedRows];
+  const text = v => { const s = String(v ?? ''); return /^[=+\-@\t\r]/.test(s) ? "'" + s : s; };
+  const cell = v => { const s = typeof v === 'number' ? String(v) : text(v); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const r4 = v => (v == null ? '' : Math.round(v * 10000) / 10000);
+  const head = ['Platform', 'Format', 'Title', 'Creator', 'Link', 'Published (UTC)', 'Views', 'Avg views/day', 'Likes', 'Comments', 'Shares', 'Saves',
+    'Engagement rate', 'Share rate', 'Score', 'Score formula', 'Score measured (UTC)', 'Growth', 'Growth from (UTC)', 'Growth to (UTC)', 'Last checked (UTC)',
+    'Measurement time basis', 'Sources', 'Topics'];
+  const lines = rows.map(r => { const m = r.metrics || {}; const g = r.growth;
+    return [r.platform, r.format, r.title, r.creator.handle ? '@' + String(r.creator.handle).replace(/^@/, '') : r.creator.name, r.url, r.publishedAt,
+      m.views, r4(m.avgViewsPerDay), m.likes, m.comments, m.shares, m.saves, r4(m.engagementRate), r4(m.shareRate),
+      r.score && r.score.value, r.score && r.score.formula, r.score && r.score.measuredAt,
+      g && g.delta != null ? `${g.delta} ${g.metric}` : '', g && g.from.at, g && g.to.at, m.measuredAt, m.measuredBasis,
+      r.providers.join(' + '), [...new Set(r.runs.map(x => x.query))].join(' | ')].map(cell).join(','); });
+  return '\uFEFF' + [head.map(cell).join(','), ...lines].join('\r\n') + '\r\n';
 }
 
 export function researchSearches(cfg) {

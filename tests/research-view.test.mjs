@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 const { loadConfig } = await import('../dashboard/lib/config.mjs');
 const { importBatch } = await import('../dashboard/lib/research.mjs');
-const { researchList, researchPost, researchSearches } = await import('../dashboard/lib/research-view.mjs');
+const { researchList, researchPost, researchSearches, researchCsv } = await import('../dashboard/lib/research-view.mjs');
 const { createServer } = await import('../dashboard/server.mjs');
 
 const NOW = new Date('2026-11-17T12:00:00Z'), AT = '2026-11-17T09:00:00Z';
@@ -213,4 +213,49 @@ test('the page routes only read: the store is byte-identical after every request
     assert.equal((await fetch(base + '/api/research', { method: 'POST' })).status, 404);
   } finally { srv.close(); }
   assert.deepEqual(snap(), before);
+});
+
+test('a measurement without a view count still shows its known counts and time', () => {
+  const cfg = store();
+  importBatch(cfg, batch('nv', AT, 'noviews', [tt('7708502162103438400', { observation: { measuredAt: AT, metrics: { likes: 100, comments: 10, shares: 5 } } })]));
+  const m = researchList(cfg, { search: 'noviews' }, NOW).rows[0].metrics;
+  assert.deepEqual([m.likes, m.comments, m.shares, m.measuredAt], [100, 10, 5, AT]);
+  assert.deepEqual([m.views, m.viewMetric, m.avgViewsPerDay, m.engagementRate, m.shareRate], [null, null, null, null, null]);
+});
+
+test('the score carries its own date when it is older than the row\'s other numbers', () => {
+  const cfg = store(); const ID = '7708502162103438500';
+  importBatch(cfg, batch('s1', AT, 'scored', [tt(ID, { observation: { measuredAt: AT, metrics: { views: 10 }, discoveryScore: 4 } })]));
+  importBatch(cfg, { schema: 1, batchId: 's2', retrievedAt: '2026-11-17T11:00:00Z', search: { query: 'scored' }, posts: [tt(ID, { observation: { measuredAt: '2026-11-17T11:00:00Z', metrics: { views: 20 } } })],
+    runs: [{ provider: 'last30free', lane: 'tiktok_hashtag', status: 'ok', results: [`tiktok:${ID}`] }] });
+  const r = researchList(cfg, { search: 'scored' }, NOW).rows[0];
+  assert.deepEqual([r.metrics.views, r.metrics.measuredAt, r.score.value, r.score.measuredAt], [20, '2026-11-17T11:00:00Z', 4, AT]);
+});
+
+test('Show more stops honestly at the page limit', () => {
+  const cfg = { ...store(), researchListMax: 100 };
+  importBatch(cfg, batch('cap', AT, 'cap', Array.from({ length: 120 }, (_, i) => tt(String(7708502162103450000n + BigInt(i)), { observation: { measuredAt: AT, metrics: { views: i + 1 } }, publishedAt: '2026-11-16T09:00:00Z' }))));
+  const first = researchList(cfg, { search: 'cap' }, NOW);
+  assert.deepEqual([first.rows.length, first.more, first.capped], [50, 50, 20]);
+  const last = researchList(cfg, { search: 'cap', limit: '5000' }, NOW);
+  assert.deepEqual([last.filters.limit, last.rows.length, last.more, last.capped], [100, 100, 0, 20]); // no further "Show more"
+  assert.equal(researchCsv(cfg, { search: 'cap' }, NOW).trim().split('\r\n').length, 121); // the export is not limited
+});
+
+test('the CSV export is the whole filtered table, Excel-safe', async () => {
+  const cfg = store();
+  importBatch(cfg, batch('csv', AT, 'csv', [tt('7708502162103438600', { title: '=HYPERLINK("x") "quoted", comma', observation: { measuredAt: AT, metrics: { views: 1000, likes: 100, comments: 50, shares: 20 }, discoveryScore: 9.1 }, publishedAt: '2026-11-15T09:00:00Z' })]));
+  const csv = researchCsv(cfg, { search: 'csv' }, NOW); const lines = csv.slice(1).trim().split('\r\n');
+  assert.ok(csv.startsWith('\uFEFF'));
+  assert.ok(lines[0].startsWith('Platform,Format,Title,Creator,Link,Published (UTC),Views,Avg views/day'));
+  assert.equal(lines.length, 2);
+  assert.ok(lines[1].includes(`"'=HYPERLINK(""x"") ""quoted"", comma"`)); // a formula is never run; quotes and commas escaped
+  assert.ok(lines[1].includes(',1000,500,100,50,20,,0.15,0.02,9.1,'));
+  // the route serves it as a download and changes nothing
+  const srv = createServer(cfg); await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  try {
+    const res = await fetch(`http://localhost:${srv.address().port}/api/research/export.csv?search=csv&format=long%22%0d%0aX:1`);
+    assert.equal(res.status, 200); assert.ok(res.headers.get('content-type').startsWith('text/csv'));
+    assert.match(res.headers.get('content-disposition'), /^attachment; filename="research-short-\d{4}-\d{2}-\d{2}\.csv"$/); // a bad format never reaches the header
+  } finally { srv.close(); }
 });

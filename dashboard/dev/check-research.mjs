@@ -54,6 +54,11 @@ for (const [name, w, h] of [['desk', 1280, 900], ['phone', 390, 844]]) {
   await s.shot('short-30-days');
   await page.click('[data-r-more]'); await s.settle(); r = await s.rows();
   ok(`${name}: Show more adds the rest`, r.length === 56, `${r.length} rows`);
+  if (name === 'desk') {
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('a[href^="/api/research/export.csv"]')]);
+    const csv = await (await import('node:fs')).promises.readFile(await dl.path(), 'utf8');
+    ok(`${name}: Export CSV downloads the whole filtered table`, /^research-short-\d{4}-\d{2}-\d{2}\.csv$/.test(dl.suggestedFilename()) && csv.trim().split(/\r?\n/).length === 57, dl.suggestedFilename());
+  }
   await page.selectOption('#r-sort', 'score'); await s.settle(); t = await s.text();
   ok(`${name}: score on a mixed list asks for a platform`, /Scores are only comparable within one platform/.test(t));
   await page.selectOption('#r-platform', 'tiktok'); await s.settle(); t = await s.text(); r = await s.rows();

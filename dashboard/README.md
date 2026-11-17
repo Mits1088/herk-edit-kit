@@ -346,6 +346,13 @@ short-form export go through `POST /api/research/action`, on this PC only.
   likes, comments, shares, engagement rate ((likes + comments) / views), share rate (shares / views), the original
   last30free score, growth and last checked. Every number in a row comes from one measurement; a dash means the
   source did not give it. The score is compared within one platform only, so sorting by score needs a platform.
+- A measurement without a view count still shows its likes, comments and shares and its time; views and the
+  rates worked out from them stay unavailable. The score shows its own date when it comes from an older
+  measurement than the rest of the row.
+- **Show more** adds 50 at a time, up to 2,000 rows; past that the page asks for narrower filters.
+- **Export CSV** downloads the whole filtered table (not only the rows on screen) as UTF-8 CSV for Excel, from
+  `GET /api/research/export.csv` with the page's filters. Text a spreadsheet would run as a formula is prefixed
+  with an apostrophe.
 - Each row carries source badges (Signal Room: tracked creators; last30free: discovery).
 - **Freshness.** "Measured N days ago" comes from the source's measurement time and is marked stale after 7 days;
   "Measurement time unknown" when the source gave none. Publication and import dates are shown separately.

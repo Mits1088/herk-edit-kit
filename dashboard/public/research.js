@@ -76,7 +76,7 @@
       <span class="sub">${e(PLATFORM[r.platform])} · ${e(r.creator.handle ? '@' + String(r.creator.handle).replace(/^@/, '') : r.creator.name || 'Creator unknown')} · ${dur(r.durationSeconds)}</span>${tags(r, data.ideaPosts.includes(r.id))}${r.match && !r.match.matched ? `<span class="sub">“${e(r.match.query)}” not found in the saved text</span>` : ''}</td>
       <td class="nowrap" data-label="Published">${publishedCell(r)}</td>
       ${cell(big(m.views), 'Views')}${cell(big(m.avgViewsPerDay), 'Avg views/day')}${cell(big(m.likes), 'Likes')}${cell(big(m.comments), 'Comments')}${cell(big(m.shares), 'Shares')}
-      ${cell(pct(m.engagementRate), 'Engagement')}${cell(pct(m.shareRate), 'Share rate')}${cell(r.score ? `${n(r.score.value)}<span class="sub">${e(PLATFORM[r.score.platform])}</span>` : null, 'Score')}
+      ${cell(pct(m.engagementRate), 'Engagement')}${cell(pct(m.shareRate), 'Share rate')}${cell(r.score ? `${n(r.score.value)}<span class="sub">${e(PLATFORM[r.score.platform])}${r.score.measuredAt && r.score.measuredAt !== (r.metrics || {}).measuredAt ? ` · from ${day(r.score.measuredAt)}` : ''}</span>` : null, 'Score')}
       ${cell(growthMini(r), 'Growth')}${checkedCell(r.metrics)}</tr>`; }).join('')}
     </tbody></table></div>`;
   }
@@ -97,6 +97,7 @@
       <div class="r-field"><label for="r-sort">Sort by</label><select id="r-sort" name="sort">${Object.entries(SORT).map(([k, l]) => opt(k, l, f.sort)).join('')}</select></div>
       <div class="r-field wide full"><label for="r-q">Words in the saved text</label><input id="r-q" name="q" type="search" value="${e(f.q)}" placeholder='n8n, or "claude code" for an exact phrase' autocomplete="off"></div>
       <div class="r-actions"><button class="btn primary" type="submit">Filter saved research</button><button class="btn" type="button" data-r-reset="1">Reset filters</button>
+      <a class="btn" href="/api/research/export.csv?${e(new URLSearchParams({ ...f, limit: '' }).toString())}" download>Export CSV</a>
       <span class="sub">${data.scoreNeedsPlatform ? '<span class="r-warn">Scores are only comparable within one platform: choose a platform to sort by score. Sorted by average views per day instead.</span>' : f.sort === 'outlier' ? 'Creator outlier compares a post with its own creator. Posts with only an unstable signal, or none, sort last.' : 'Every number in a row comes from one measurement. A dash means the source did not give it.'}</span></div></form>`;
     // One quiet line per search, so a gap is not read as "nothing found". The exact errors live on the Searches tab.
     const byQuery = new Map(); for (const x of data.failures) { if (!byQuery.has(x.query)) byQuery.set(x.query, { at: x.retrievedAt, lanes: [] }); byQuery.get(x.query).lanes.push(x.laneLabel); }
@@ -105,7 +106,8 @@
     const hidden = [t.historical ? `${t.historical} published before the ${win}` : '', t.undated && f.window !== 'all' ? `${t.undated} with no publication date` : ''].filter(Boolean);
     const summary = `<p class="r-summary" role="status"><strong>${t.recent}</strong> ${FORMAT[f.format].toLowerCase()} ${t.recent === 1 ? 'post' : 'posts'} ${f.window === 'all' ? 'with a publication date' : `published in the ${win}`}, sorted by ${e(SORT[data.sortedBy].toLowerCase())}${data.rows.length < t.recent ? `, top ${data.rows.length} shown` : ''}.${hidden.length ? ` Not listed: ${hidden.join(' and ')}${f.window !== 'all' ? ` <button class="r-link" data-r-window="all">Show any date</button>` : ''}.` : ''} Saved posts stay stored when they leave this view.</p>`;
     const list = data.rows.length ? table(data.rows, `${FORMAT[f.format]}, ${win}`) : `<div class="panel"><p>No saved ${FORMAT[f.format].toLowerCase()} post matches these filters${f.window === 'all' ? '' : ` in the ${win}`}.</p></div>`;
-    const more = data.more ? `<div class="row"><button class="btn" data-r-more="1">Show ${Math.min(data.pageSize, data.more)} more</button><span class="sub">${data.more} more match these filters.</span></div>` : '';
+    const more = (data.more ? `<div class="row"><button class="btn" data-r-more="1">Show ${Math.min(data.pageSize, data.more)} more</button><span class="sub">${data.more} more match these filters.</span></div>` : '')
+      + (!data.more && data.capped ? `<p class="sub">${data.capped.toLocaleString('en-GB')} more match these filters than one page can list. Narrow the filters, or export the full table as CSV.</p>` : '');
     const und = data.undatedRows.length ? `<details class="r-hist"><summary>${data.undatedRows.length} with no publication date</summary><p class="sub">The source gave no date, so these are never counted as recent.</p>${table(data.undatedRows, 'Publication date unknown')}</details>` : '';
     return `${note()}<div class="r-head">${tabs}</div>${filters}${fails}${summary}${list}${more}${und}`;
   }
