@@ -95,6 +95,20 @@ function fromLast30(it, platform, fileTime, subs, newer) {
   }
   return post;
 }
+// The same video found by two last30free searches (YouTube discovery and the Shorts feed) is one batch entry:
+// details fill each other's gaps, a known Short stays a Short, and the newer measurement is kept whole (its counts,
+// score, formula and time together; numbers from two measurements are never mixed).
+function mergeL30(a, b) {
+  const out = { ...a, creator: { ...a.creator } };
+  for (const k of ['title', 'caption', 'publishedAt', 'durationSeconds']) if (out[k] == null && b[k] != null) out[k] = b[k];
+  for (const k of ['handle', 'name']) if (out.creator[k] == null && (b.creator || {})[k] != null) out.creator[k] = b.creator[k];
+  if (!out.transcript && b.transcript) out.transcript = b.transcript;
+  if (b.format === 'short' || out.format === 'unknown') { out.format = b.format === 'unknown' ? out.format : b.format; }
+  if (out.format === 'short' && /\/shorts\//.test(b.url)) out.url = b.url;
+  const at = p => (p.observation && p.observation.measuredAt) || '';
+  if (b.observation && (!out.observation || at(b) > at(out))) out.observation = b.observation;
+  return out;
+}
 // last30free draft keys -> [lane, platform, the source name inside the output file]
 export const L30_LANES = { youtube: ['youtube_discovery', 'youtube', 'youtube'], youtubeShorts: ['youtube_shorts_feed', 'youtube', 'youtube'],
   tiktok: ['tiktok_hashtag', 'tiktok', 'tiktok'], instagram: ['instagram_search', 'instagram', 'instagram'] };
@@ -121,23 +135,26 @@ export function buildBatch(draft, io = { readJson: f => JSON.parse(readFileSync(
   const reasons = youtubeFallback(draft);
   if (reasons.length && !l30.youtube) throw new Error(`The YouTube fallback is required (${reasons.join('; ')}) but the draft has no last30free.youtube. Run it, or record its error.`);
   const subs = l30.subtitles && l30.subtitles.file ? io.readJson(l30.subtitles.file) : null;
-  const listed = new Set(posts.map(p => `${refOf(p)}|${p.provider}`)); // one entry per post and provider per batch
+  const l30Posts = new Map(); // one last30free entry per post per batch; a second sighting is merged into it
   for (const [key, [lane, platform, source]] of Object.entries(L30_LANES)) {
     const src = l30[key]; if (!src) continue;
     const why = key === 'youtube' ? `fallback because ${reasons.join('; ') || 'requested'}; ` : '';
-    let error = src.error || null, reported = [], kept = [], tag = '', counts = null, cost = null;
+    let error = src.error || null, partial = null, reported = [], kept = [], tag = '', counts = null, cost = null;
     if (!error) {
       const out = io.readJson(src.file); const res = (out.results || {})[source] || {};
       counts = res.counts || null; cost = res.cost || null;
-      if (res.status !== 'ok') error = res.error || `last30free reported status ${res.status}`;
+      // "partial": a paid run failed or was stopped after producing results; those results are imported, with the reason.
+      if (res.status === 'partial') partial = res.error || 'partial results';
+      if (res.status !== 'ok' && res.status !== 'partial') error = res.error || `last30free reported status ${res.status}`;
       else {
         const newer = !!out.fetched; const fileTime = io.mtime(src.file).toISOString().replace(/\.\d{3}Z$/, 'Z');
         const merged = (out.merged.items || []).filter(it => it.source === source);
         const all = newer ? out.fetched.items.filter(it => it.source === source) : merged;
         const shown = new Set(merged.map(it => String(it.source_id)));
         for (const it of all) {
-          const post = fromLast30(it, platform, fileTime, subs, newer);
-          if (!listed.has(`${refOf(post)}|last30free`)) { posts.push(post); listed.add(`${refOf(post)}|last30free`); }
+          const post = fromLast30(it, platform, fileTime, subs, newer); const key = refOf(post);
+          if (l30Posts.has(key)) { const merged = mergeL30(posts[l30Posts.get(key)], post); posts[l30Posts.get(key)] = merged; }
+          else { l30Posts.set(key, posts.length); posts.push(post); }
           (shown.has(post.id) ? reported : kept).push(post);
         }
         // reported keeps last30free's own order (best score first)
@@ -150,8 +167,8 @@ export function buildBatch(draft, io = { readJson: f => JSON.parse(readFileSync(
       youtube: `yt-dlp search, top matches only; ${reported.filter(p => p.transcript).length} of ${reported.length} with subtitles; `,
       youtubeShorts: `yt-dlp hashtag Shorts feed #${tag}; ` }[key];
     const extra = kept.length ? `; ${kept.length} more fetched and kept (older, undated or past the report limit)` : '';
-    runs.push({ provider: 'last30free', lane, status: 'ok', note: why + limits + relevance(reported) + extra, results: reported.map(refOf),
-      ...(kept.length ? { fetchedOnly: kept.map(refOf) } : {}), ...(counts ? { counts } : {}), ...(cost ? { cost } : {}) });
+    runs.push({ provider: 'last30free', lane, status: 'ok', note: (partial ? `PARTIAL: ${partial}. ` : '') + why + limits + relevance(reported) + extra, results: reported.map(refOf),
+      ...(kept.length ? { fetchedOnly: kept.map(refOf) } : {}), ...(counts ? { counts } : {}), ...(cost ? { cost } : {}), ...(partial ? { partial } : {}) });
   }
   return { schema: 1, batchId: draft.batchId, retrievedAt: draft.retrievedAt, search: { query: draft.query, windowDays: draft.windowDays ?? null }, runs, posts };
 }
