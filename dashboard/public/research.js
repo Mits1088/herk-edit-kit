@@ -25,22 +25,63 @@
     return `<span class="r-status r-st-${s.key}"${reel ? ` title="Reel: ${e(reel)}"` : ''}>${UiIcon(STAGE[s.key][1])}${STAGE[s.key][0]}</span>`; };
 
   let remote = false, root = null, tab = 'signals', F = { ...DEFAULTS }, data = null, searches = null, ideas = null, detail = null, detailId = null, error = null, returnTo = null, returnY = 0, removeAsk = false, busy = false, trEdit = false;
+  // Groups: groups is the Ideas tab's summary list; groupId/group is the open group page; sel the ideas ticked for a new one.
+  let groups = null, groupId = null, group = null, sel = new Set(), delAsk = false, draftDirty = false, draftTimer = null, draftChain = Promise.resolve();
   const get = async url => { const r = await fetch(url); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; };
+  const post = async body => { const r = await fetch('/api/research/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'That did not work'); return j; };
 
   async function loadList() { error = null; try { data = await get('/api/research?' + new URLSearchParams(F)); } catch (x) { error = x.message; } draw(); }
-  async function loadIdeas() { error = null; try { const j = await get('/api/research/ideas'); ideas = j.ideas; remote = !!j.remote; } catch (x) { error = x.message; } draw(); }
+  async function loadIdeas() { error = null; try { const j = await get('/api/research/ideas'); ideas = j.ideas; groups = j.groups || []; remote = !!j.remote; const free = new Set(ideas.filter(x => !x.group).map(x => x.idea.id)); sel = new Set([...sel].filter(id => free.has(id))); } catch (x) { error = x.message; } draw(); }
+  async function loadGroup() {
+    error = null; const forId = groupId;
+    try { const g = await get('/api/research/group?' + new URLSearchParams({ id: forId })); if (groupId === forId) group = g; }
+    catch (x) { if (groupId === forId) { toast(x.message); groupId = null; group = null; tab = 'ideas'; return loadIdeas(); } }
+    draw();
+  }
   const LOAD = { signals: () => loadList(), searches: () => loadSearches(), ideas: () => loadIdeas() };
   // One saved-idea action. A click is ignored while a request is in flight, and every action is repeat-safe on the server.
+  // Returns the server's answer (or null), so a caller can follow it, e.g. open a group just created.
   async function act(body, focusSel) {
-    if (busy) return; busy = true;
-    try { const r = await fetch('/api/research/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); toast(r.ok ? j.message : j.error || 'That did not work'); }
+    if (busy) return null; busy = true; let j = null;
+    if (groupId) await saveDraft(); // typing in the script box is saved before the page is redrawn
+    try { const r = await fetch('/api/research/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); j = await r.json(); toast(r.ok ? j.message : j.error || 'That did not work'); if (!r.ok) j = null; }
     catch (x) { toast('That did not work: ' + x.message); }
-    busy = false; removeAsk = false; trEdit = false; data = null; ideas = null;
+    busy = false; removeAsk = false; trEdit = false; delAsk = false; data = null; ideas = null;
     if (detailId) { try { detail = await get('/api/research/post?' + new URLSearchParams({ id: detailId, q: F.q || F.search })); } catch (x) { error = x.message; } draw(); const f = focusSel && root.querySelector(focusSel); if (f) f.focus(); }
+    else if (groupId) { await loadGroup(); const f = focusSel && root.querySelector(focusSel); if (f) f.focus(); }
     else if (tab === 'ideas') await loadIdeas();
+    return j;
+  }
+  // The group's script saves itself shortly after typing stops, and before anything that redraws or leaves the page.
+  // It never redraws, so the cursor stays where it is.
+  // The text is taken from the box now, not later in the chain, so leaving the view mid-save loses nothing.
+  function saveDraft({ keepalive = false } = {}) {
+    clearTimeout(draftTimer); draftTimer = null;
+    const box = root && root.querySelector('#r-gdraft');
+    if (!draftDirty || !box || !group || group.remote) return draftChain;
+    const text = box.value, forId = group.group.id; draftDirty = false;
+    const status = t => { const s = root && root.querySelector('#r-gsave'); if (s) s.textContent = t; };
+    if (keepalive) { try { fetch('/api/research/action', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'set-group-draft', groupId: forId, draft: text }) }); } catch { /* the page is going away */ } return draftChain; }
+    draftChain = draftChain.then(async () => {
+      status('Saving…');
+      try { const j = await post({ type: 'set-group-draft', groupId: forId, draft: text }); if (group && group.group.id === forId) { group.group.draft = text; if (j.savedAt) group.group.draftSavedAt = j.savedAt; } status(j.savedAt ? 'Saved ' + when(j.savedAt) : 'Saved'); }
+      catch (x) { if (group && group.group.id === forId) draftDirty = true; status('Not saved: ' + x.message); }
+    });
+    return draftChain;
+  }
+  async function deleteGroup() {
+    if (busy || !groupId) return; busy = true; clearTimeout(draftTimer); draftDirty = false;
+    try { const j = await post({ type: 'delete-group', groupId }); toast(j.message); groupId = null; group = null; delAsk = false; tab = 'ideas'; ideas = null; busy = false; draw(); await loadIdeas(); }
+    catch (x) { busy = false; toast(x.message); }
+  }
+  async function openGroup(id) {
+    if (groupId) await saveDraft();
+    groupId = id; group = null; delAsk = false; detailId = null; detail = null; draw(); window.scrollTo(0, 0);
+    await loadGroup(); const h = root && root.querySelector('#r-gtitle'); if (h) h.focus();
   }
   async function loadSearches() { error = null; try { searches = (await get('/api/research/searches')).searches; } catch (x) { error = x.message; } draw(); }
   async function openPost(id) {
+    if (groupId) await saveDraft();
     returnTo = id; returnY = window.scrollY; detailId = id; detail = null; removeAsk = false; trEdit = false; draw(); window.scrollTo(0, 0);
     try { detail = await get('/api/research/post?' + new URLSearchParams({ id, q: F.q || F.search })); } catch (x) { error = x.message; detailId = null; }
     draw(); const h = root && root.querySelector('#r-title'); if (h) h.focus();
@@ -133,15 +174,22 @@
   }
   // While a fetch runs, look again every few seconds. Text being typed in the page is kept across the redraw.
   let pollTimer = null;
-  const fetchingNow = () => (detailId ? !!(detail && detail.fetch && detail.fetch.state === 'fetching') : tab === 'ideas' && !!ideas && ideas.some(x => x.fetch && x.fetch.state === 'fetching'));
+  const fetchingNow = () => (detailId ? !!(detail && detail.fetch && detail.fetch.state === 'fetching')
+    : groupId ? !!group && group.members.some(m => m.fetch && m.fetch.state === 'fetching')
+    : tab === 'ideas' && !!ideas && ideas.some(x => x.fetch && x.fetch.state === 'fetching'));
   function schedulePoll() { clearTimeout(pollTimer); pollTimer = fetchingNow() ? setTimeout(poll, 4000) : null; }
   async function poll() {
     pollTimer = null; if (!root || !root.isConnected) return;
     if (busy) return schedulePoll();
-    const sig = () => JSON.stringify(detailId ? detail && detail.fetch : (ideas || []).map(x => x.fetch));
-    const before = sig(), forId = detailId;
+    const sig = () => JSON.stringify(detailId ? detail && detail.fetch : groupId ? group && group.members.map(m => m.fetch) : (ideas || []).map(x => x.fetch));
+    const before = sig(), forId = detailId, forGroup = groupId;
     try {
       if (forId) { const d = await get('/api/research/post?' + new URLSearchParams({ id: forId, q: F.q || F.search })); if (detailId !== forId || busy) return schedulePoll(); detail = d; }
+      else if (forGroup) {
+        const g = await get('/api/research/group?' + new URLSearchParams({ id: forGroup })); if (groupId !== forGroup || detailId || busy) return schedulePoll();
+        // the script on screen is the one being typed; the server's copy is used only where nothing is waiting to save
+        if (draftDirty && group) g.group.draft = group.group.draft; group = g;
+      }
       else if (tab === 'ideas') { const j = await get('/api/research/ideas'); if (detailId || tab !== 'ideas' || busy) return schedulePoll(); ideas = j.ideas; }
     } catch { return schedulePoll(); }
     if (sig() === before) return schedulePoll();
@@ -167,17 +215,36 @@
       const [cls, label, why] = ideaState(x), s = x.stage || { key: 'todo' };
       return `<section class="panel" aria-label="Idea: ${e(x.post.title || 'Untitled post')}"><div class="r-head"><div><button class="r-open" data-r-open="${e(x.post.id)}">${e(x.post.title || 'Untitled post')}</button><span class="r-tags"><span class="r-tag">${e(PF(x.post))}</span><span class="r-tag">${EVIDENCE[x.post.evidence]}</span></span></div>${s.key === 'todo' ? `<span class="pill ${cls}">${label}</span>` : stageBadge(s)}</div>
         <div><p class="r-kind">Your angle</p>${x.idea.angle ? `<div class="r-angle">${e(x.idea.angle)}</div>` : '<p class="sub">No angle written yet.</p>'}</div>
-        ${fetchLine(x.fetch, x.idea.id, 'card', remote)}
+        ${fetchLine(x.fetch, x.idea.id, 'card', remote)}${groupLine(x)}
         <p class="sub">${s.key === 'used' ? (s.manual ? `Marked as used ${when(s.at)}.` : `${s.reel ? `“${e(s.reel.title)}” went` : 'Its reel went'} on Instagram${s.at ? ' ' + when(s.at) : ''}.`) : s.key === 'dropped' ? `Dropped ${when(s.at)}.` : e(why)}</p>
         <div class="row"><button class="btn small" data-r-open="${e(x.post.id)}" aria-label="Open idea and evidence: ${e(x.post.title || 'Untitled post')}">Open idea and evidence</button><button class="btn small" data-r-briefof="${i}">Copy brief</button>${x.exported && x.exported.pipelineId ? `<button class="btn small" data-r-pipeline="${e(x.exported.pipelineId)}" aria-label="Open in Pipeline: ${e(x.post.title || 'Untitled post')}">Open in Pipeline</button>` : ''}${closeButtons(x)}</div></section>`;
     };
-    const groups = { todo: [], production: [], used: [], dropped: [] };
-    ideas.forEach((x, i) => groups[x.missing ? 'todo' : (x.stage || { key: 'todo' }).key].push(cardOf(x, i)));
+    const stages = { todo: [], production: [], used: [], dropped: [] };
+    ideas.forEach((x, i) => stages[x.missing ? 'todo' : (x.stage || { key: 'todo' }).key].push(cardOf(x, i)));
     const HELP = { todo: 'Saved, not made yet.', production: 'Exported to the script workflow, so the reel is in your Pipeline.', used: 'Its reel is on Instagram, or you marked it used. Kept as a record of what inspired what.', dropped: 'Ideas you decided not to make. Reopen one to bring it back.' };
-    const head = k => `<h3 class="r-group-head">${UiIcon(STAGE[k][1])}${k === 'todo' ? 'To do' : STAGE[k][0]} <span class="count">${groups[k].length}</span></h3>`;
-    const open = k => `<section class="r-stage r-stage-${k}" aria-label="${k === 'todo' ? 'To do' : STAGE[k][0]}">${head(k)}<p class="sub">${HELP[k]}</p>${groups[k].length ? `<div class="r-ideas">${groups[k].join('')}</div>` : '<p class="sub">None right now.</p>'}</section>`;
-    const folded = k => groups[k].length ? `<details class="r-stage r-stage-${k}"><summary>${head(k)}<span class="sub">${HELP[k]}</span></summary><div class="r-ideas">${groups[k].join('')}</div></details>` : '';
+    const head = k => `<h3 class="r-group-head">${UiIcon(STAGE[k][1])}${k === 'todo' ? 'To do' : STAGE[k][0]} <span class="count">${stages[k].length}</span></h3>`;
+    const open = k => `<section class="r-stage r-stage-${k}" aria-label="${k === 'todo' ? 'To do' : STAGE[k][0]}">${head(k)}<p class="sub">${HELP[k]}</p>${stages[k].length ? `<div class="r-ideas">${stages[k].join('')}</div>` : '<p class="sub">None right now.</p>'}</section>`;
+    const folded = k => stages[k].length ? `<details class="r-stage r-stage-${k}"><summary>${head(k)}<span class="sub">${HELP[k]}</span></summary><div class="r-ideas">${stages[k].join('')}</div></details>` : '';
     const missing = ideas.filter(x => x.fetch && x.fetch.canFetch).length;
+    return `${vGroups()}${vIdeaList(open, folded, missing)}`;
+  }
+  // A YouTube idea's group, or a box to pick it for a new one (up to 3).
+  function groupLine(x) {
+    if (x.group) return `<p class="r-ingroup"><span class="r-tag">In group: ${e(x.group.name)}</span><button class="btn small" data-r-group="${e(x.group.id)}">Open group</button></p>`;
+    if (remote || x.missing || x.post.platform !== 'youtube') return '';
+    const on = sel.has(x.idea.id), full = !on && sel.size >= 3;
+    return `<label class="r-check r-pick" for="r-sel-${e(x.idea.id)}"><input type="checkbox" id="r-sel-${e(x.idea.id)}" data-r-sel="${e(x.idea.id)}" ${on ? 'checked' : ''} ${full ? 'disabled' : ''}>Select for a group${full ? ' <span class="sub">(3 already chosen)</span>' : ''}</label>`;
+  }
+  function vGroups() {
+    const pickable = ideas.some(x => !x.missing && !x.group && x.post.platform === 'youtube');
+    const bar = remote || !pickable ? '' : `<div class="row r-gbar"><button class="btn primary" data-r-gcreate="1" ${sel.size ? '' : 'disabled'}>Group selected (${sel.size}/3)</button>${sel.size ? '<button class="btn small" data-r-gclear="1">Clear selection</button>' : ''}<span class="sub">Tick up to 3 similar YouTube ideas below, then group them to see them side by side.</span></div>`;
+    const cards = (groups || []).map(g => `<section class="panel r-gcard" aria-label="Group: ${e(g.name)}"><div class="r-head"><div><button class="r-open" data-r-group="${e(g.id)}">${e(g.name)}</button>
+      <span class="r-tags"><span class="r-tag">${g.count}/3 ideas</span>${g.hasDraft ? '<span class="r-tag">Script written</span>' : ''}</span></div><button class="btn small" data-r-group="${e(g.id)}" aria-label="Open group: ${e(g.name)}">Open group</button></div>
+      ${g.titles.length ? `<ul class="r-gtitles">${g.titles.map(t => `<li>${e(t)}</li>`).join('')}</ul>` : '<p class="sub">No ideas in it now. Its script is kept.</p>'}</section>`).join('');
+    if (!cards && !bar) return '';
+    return `<section class="r-stage" aria-label="Groups"><h3 class="r-group-head">${UiIcon('progress')}Groups <span class="count">${(groups || []).length}</span></h3>${bar}${cards ? `<div class="r-ideas">${cards}</div>` : '<p class="sub">No group yet.</p>'}</section>`;
+  }
+  function vIdeaList(open, folded, missing) {
     const fetchAll = !remote && missing ? `<div class="row"><button class="btn" data-r-fetchmissing="1">Fetch missing transcripts (${missing})</button><span class="sub">YouTube ideas only, one video at a time.</span></div>` : '';
     return `<p class="sub">An idea moves on by itself: exporting it puts it In production, and it counts as Used once its reel is on Instagram. Research imports never change an idea.</p>${fetchAll}${open('todo')}${open('production')}${folded('used')}${folded('dropped')}`;
   }
@@ -210,6 +277,43 @@
       <div class="r-hand"><h4>Short-form handoff</h4>${hand}</div></section>`;
   }
 
+  // ---- one group: up to 3 videos side by side, then Mits's own script ----
+  function groupCol(m, i, ro) {
+    const remove = ro ? '' : `<button class="btn small" data-r-gremove="${e(m.ideaId)}">Remove from group</button>`;
+    if (m.missing) return `<section class="panel r-gcol" aria-label="Video ${i + 1}"><p class="r-kind">Video ${i + 1}</p><h3>Source post not found</h3><p class="sub">It is no longer in the research store.</p>${m.angle ? `<div class="r-angle">${e(m.angle)}</div>` : ''}<div class="row">${remove}</div></section>`;
+    const views = m.views != null ? `${n(m.views)} <span class="sub">· ${m.viewsMeasuredAt ? `measured ${day(m.viewsMeasuredAt)}` : 'measurement time unknown'}</span>` : '<span class="sub">Not recorded</span>';
+    const tr = m.transcriptText
+      ? `<p class="sub">${n(m.transcriptWords)} words, ${e(m.transcriptLabel)}.</p><div class="row"><button class="btn small" data-r-gcopy="${i}">Copy transcript</button></div><div class="r-text r-gtext" tabindex="0" aria-label="Transcript of video ${i + 1}">${e(m.transcriptText)}</div>`
+      : `${fetchLine(m.fetch, m.ideaId, 'post', ro)}${m.fetch && m.fetch.state === 'fetching' ? '' : `<p class="sub">No transcript yet. <button class="r-link" data-r-open="${e(m.postId)}">Open its page</button> to paste one.</p>`}`;
+    return `<section class="panel r-gcol" aria-label="Video ${i + 1}: ${e(m.title || 'Untitled post')}"><p class="r-kind">Video ${i + 1}</p><button class="r-open" data-r-open="${e(m.postId)}">${e(m.title || 'Untitled post')}</button>
+      <dl class="kv"><dt>Creator</dt><dd>${e(m.creator || 'Unknown')}</dd><dt>Views</dt><dd>${views}</dd><dt>Published</dt><dd>${m.publishedAt ? day(m.publishedAt) : 'Unknown'}</dd><dt>Duration</dt><dd>${dur(m.durationSeconds)}</dd>
+      <dt>Link</dt><dd><a href="${e(m.url)}" target="_blank" rel="noopener noreferrer">Watch on YouTube</a></dd></dl>
+      <div><p class="r-kind">Your angle</p>${m.angle ? `<div class="r-angle">${e(m.angle)}</div>` : '<p class="sub">No angle written yet.</p>'}</div>
+      <div><p class="r-kind">Transcript (spoken words)</p>${tr}</div><div class="row">${remove}</div></section>`;
+  }
+  function vGroup() {
+    const back = `<div><button class="back" data-r-gback="1">Back to Ideas</button></div>`;
+    if (!group) return `${back}<p class="sub">Loading the group…</p>`;
+    const g = group.group, ro = !!group.remote, ms = group.members;
+    const head = `<div class="r-head"><div><h2 id="r-gtitle" tabindex="-1">${e(g.name)}</h2><span class="r-tags"><span class="r-tag">${ms.length}/${group.max} ideas</span><span class="r-tag">YouTube</span></span></div>
+      <button class="btn" data-r-gbundle="1">Copy all transcripts</button></div>`;
+    const rename = ro ? '' : `<div class="row r-gname"><label class="sub" for="r-gname">Group name</label><input id="r-gname" type="text" maxlength="120" value="${e(g.name)}"><button class="btn small" data-r-grename="1">Rename</button></div>`;
+    const cols = ms.length ? `<div class="r-gcols" style="--cols:${ms.length}">${ms.map((m, i) => groupCol(m, i, ro)).join('')}</div>`
+      : '<div class="panel"><p><strong>No ideas in this group now.</strong> Your script below is kept. Add an idea, or delete the group when you no longer need it.</p></div>';
+    const add = ro || ms.length >= group.max ? '' : group.candidates.length
+      ? `<div class="row r-gadd"><label class="sub" for="r-gaddsel">Add a saved YouTube idea (${ms.length}/${group.max})</label><select id="r-gaddsel">${group.candidates.map(c => `<option value="${e(c.ideaId)}">${e(c.title)}</option>`).join('')}</select><button class="btn small" data-r-gadd="1">Add to group</button></div>`
+      : `<p class="sub">No other saved YouTube idea is free to add (${ms.length}/${group.max}). Save one from Signals first.</p>`;
+    const saved = g.draftSavedAt ? 'Saved ' + when(g.draftSavedAt) : g.draft ? '' : 'Nothing written yet.';
+    const script = `<section class="panel r-idea r-gscript" aria-label="Your script"><h3>Your script</h3><p class="sub">Your own words, combining the videos above. ${ro ? 'Edited on the PC.' : 'It saves as you type. Research imports never change it.'}</p>
+      <textarea id="r-gdraft" rows="16" maxlength="100000" placeholder="Write your script or brief here, taking what works from each video…" ${ro ? 'readonly' : ''}>${e(g.draft)}</textarea>
+      <div class="row"><span class="sub" id="r-gsave" role="status">${saved}</span><button class="btn small" data-r-gcopydraft="1">Copy script</button><button class="btn small" data-r-gbundle="1">Copy all transcripts</button></div></section>`;
+    const del = ro ? '' : delAsk
+      ? `<section class="panel r-gdel" role="alertdialog" aria-labelledby="r-gdel-h"><h3 id="r-gdel-h">Delete this group and its script?</h3><p>Deleting the group also deletes the script you wrote in it. Your ideas are kept. Copy the script first if you want to keep it.</p>
+        <div class="row"><button class="btn" data-r-gcopydraft="1">Copy script</button><button class="btn" data-r-gdelno="1">Cancel</button><button class="btn danger" data-r-gdelyes="1">Yes, delete the group and its script</button></div></section>`
+      : `<div class="row"><button class="btn small" data-r-gdelete="1">Delete group</button><span class="sub">Only this removes the group. Its ideas are kept.</span></div>`;
+    return `${back}<div class="r-detail">${head}${rename}${cols}${add}${script}${del}</div>`;
+  }
+
   // ---- Searches ----
   function vSearches() {
     if (!searches) return '<p class="sub">Loading search history…</p>';
@@ -240,7 +344,7 @@
   // ---- one post ----
   const segs = a => a.map(x => (x.m ? `<mark>${e(x.t)}</mark>` : e(x.t))).join('');
   function vPost() {
-    const back = `<div><button class="back" data-r-back="1">Back to ${tab === 'ideas' ? 'Ideas' : tab === 'searches' ? 'Searches' : 'Signals'}</button></div>`;
+    const back = `<div><button class="back" data-r-back="1">Back to ${groupId ? 'the group' : tab === 'ideas' ? 'Ideas' : tab === 'searches' ? 'Searches' : 'Signals'}</button></div>`;
     if (!detail) return `${back}<p class="sub">Loading the saved post…</p>`;
     const d = detail, q = d.query;
     const facts = `<section class="panel" aria-label="Post"><dl class="kv">
@@ -278,13 +382,13 @@
     if (!root || !root.isConnected) return;
     const head = `<div class="r-head"><h2>Research</h2><span class="seg r-seg" role="group" aria-label="Research views"><button data-r-tab="signals" aria-current="${tab === 'signals'}">Signals</button><button data-r-tab="ideas" aria-current="${tab === 'ideas'}">Ideas</button><button data-r-tab="searches" aria-current="${tab === 'searches'}">Searches</button></span></div>`;
     const err = error ? `<div class="r-fail" role="alert">Could not read saved research: ${e(error)}</div>` : '';
-    root.innerHTML = detailId ? err + vPost() : head + err + (tab === 'signals' ? vSignals() : tab === 'ideas' ? vIdeas() : vSearches());
+    root.innerHTML = detailId ? err + vPost() : groupId ? err + vGroup() : head + err + (tab === 'signals' ? vSignals() : tab === 'ideas' ? vIdeas() : vSearches());
     schedulePoll();
   }
 
   function mount(app) {
     app.innerHTML = '<div id="research-root" style="display:grid;gap:16px"></div>'; root = app.firstChild; draw();
-    if (detailId) return; LOAD[tab]();
+    if (detailId) return; if (groupId) { loadGroup(); return; } LOAD[tab]();
   }
   // A filter change starts again from the top 50.
   function readForm() { const fd = new FormData(root.querySelector('#r-form')); for (const k of Object.keys(DEFAULTS)) F[k] = String(fd.get(k) ?? DEFAULTS[k]); F.limit = DEFAULTS.limit; }
@@ -293,7 +397,21 @@
     if (!root || !root.contains(ev.target)) return; const b = ev.target.closest('button'); if (!b) return; const d = b.dataset;
     if (d.rTab) { tab = d.rTab; draw(); LOAD[tab](); }
     else if (d.rOpen) openPost(d.rOpen);
-    else if (d.rBack) { detailId = null; detail = null; draw(); const refocus = () => { const again = returnTo && root.querySelector(`[data-r-open="${CSS.escape(returnTo)}"]`); if (again) { const h = again.closest('details'); if (h) h.open = true; again.focus({ preventScroll: true }); } window.scrollTo(0, returnY); }; if (tab !== 'signals' || !data) LOAD[tab]().then(refocus); else refocus(); }
+    else if (d.rBack) { detailId = null; detail = null; draw(); const refocus = () => { const again = returnTo && root.querySelector(`[data-r-open="${CSS.escape(returnTo)}"]`); if (again) { const h = again.closest('details'); if (h) h.open = true; again.focus({ preventScroll: true }); } window.scrollTo(0, returnY); }; if (groupId) loadGroup().then(refocus); else if (tab !== 'signals' || !data) LOAD[tab]().then(refocus); else refocus(); }
+    // groups
+    else if (d.rGroup) openGroup(d.rGroup);
+    else if (d.rGback) saveDraft().then(() => { const was = groupId; groupId = null; group = null; delAsk = false; tab = 'ideas'; draw(); loadIdeas().then(() => { const b = root.querySelector(`[data-r-group="${CSS.escape(was)}"]`); if (b) b.focus(); }); });
+    else if (d.rGcreate) { if (sel.size) act({ type: 'create-group', ideaIds: [...sel] }).then(j => { if (j && j.groupId) { sel = new Set(); openGroup(j.groupId); } }); }
+    else if (d.rGclear) { sel = new Set(); draw(); }
+    else if (d.rGremove) act({ type: 'remove-from-group', groupId, ideaId: d.rGremove }, '#r-gtitle');
+    else if (d.rGadd) { const s = root.querySelector('#r-gaddsel'); if (s && s.value) act({ type: 'add-to-group', groupId, ideaId: s.value }, '#r-gtitle'); }
+    else if (d.rGrename) act({ type: 'rename-group', groupId, name: root.querySelector('#r-gname').value }, '#r-gname');
+    else if (d.rGcopy !== undefined) copyText(group.members[Number(d.rGcopy)].transcriptText).then(() => toast('Transcript copied'), () => toast('Copy was blocked; select the text instead'));
+    else if (d.rGbundle) copyText(group.bundle).then(() => toast('All transcripts copied, each labelled'), () => toast('Copy was blocked'));
+    else if (d.rGcopydraft) { const t = (root.querySelector('#r-gdraft') || {}).value ?? group.group.draft; copyText(t).then(() => toast(t.trim() ? 'Script copied' : 'The script is empty'), () => toast('Copy was blocked; select the text instead')); }
+    else if (d.rGdelete) saveDraft().then(() => { const t = (root.querySelector('#r-gdraft') || {}).value ?? group.group.draft; if (String(t).trim()) { delAsk = true; draw(); const c = root.querySelector('[data-r-gdelno]'); if (c) c.focus(); } else deleteGroup(); });
+    else if (d.rGdelno) { delAsk = false; draw(); const b = root.querySelector('[data-r-gdelete]'); if (b) b.focus(); }
+    else if (d.rGdelyes) deleteGroup();
     else if (d.rReset) { F = { ...DEFAULTS }; loadList(); }
     else if (d.rFormat) { F = { ...F, format: d.rFormat, limit: DEFAULTS.limit }; loadList(); }
     else if (d.rWindow) { F = { ...F, window: d.rWindow, limit: DEFAULTS.limit }; loadList(); }
@@ -320,6 +438,20 @@
     else if (d.rCopytranscript) copyText(detail.transcriptText).then(() => toast('Transcript copied'), () => toast('Copy was blocked; select the text instead'));
   });
   document.addEventListener('submit', ev => { if (ev.target.id === 'r-form') { ev.preventDefault(); readForm(); loadList(); } });
+  // Picking ideas for a new group: at most 3.
+  document.addEventListener('change', ev => {
+    const id = ev.target && ev.target.dataset && ev.target.dataset.rSel; if (!id || !root || !root.contains(ev.target)) return;
+    if (ev.target.checked && sel.size < 3) sel.add(id); else sel.delete(id);
+    draw(); const again = root.querySelector('#' + CSS.escape('r-sel-' + id)); if (again) again.focus();
+  });
+  // The script saves itself a moment after typing stops, when the box loses focus, and as the page goes away.
+  document.addEventListener('input', ev => {
+    if (!root || ev.target.id !== 'r-gdraft' || !group || group.remote) return;
+    draftDirty = true; const s = root.querySelector('#r-gsave'); if (s) s.textContent = 'Unsaved changes…';
+    clearTimeout(draftTimer); draftTimer = setTimeout(() => saveDraft(), 1200);
+  });
+  document.addEventListener('focusout', ev => { if (root && ev.target.id === 'r-gdraft' && draftDirty) saveDraft(); });
+  window.addEventListener('pagehide', () => { if (draftDirty) saveDraft({ keepalive: true }); });
   document.addEventListener('change', ev => { if (root && ev.target.closest && ev.target.closest('#r-form') && (ev.target.tagName === 'SELECT' || ev.target.type === 'checkbox')) { readForm(); loadList().then(() => { const s = root.querySelector('#' + CSS.escape(ev.target.id)); if (s) s.focus(); }); } });
 
   window.Research = { mount, open: openPost };

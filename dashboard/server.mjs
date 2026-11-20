@@ -12,7 +12,7 @@ import { applyAction, readManifests, updateManifest, liveAfterUpload } from './l
 import { probeQueue, queueMission, runUpload, checkUpload, classifyUpload, approvalPrompt, approvalCommand, revisionPrompt } from './lib/jobs.mjs';
 import { loadPreflight } from './lib/workflow.mjs';
 import { researchList, researchSearches, researchPost, researchCsv } from './lib/research-view.mjs';
-import { readIdeas, ideaInfo, ideasView, ideaAction, withManualTranscript, ideaStages } from './lib/ideas.mjs';
+import { readIdeas, ideaInfo, ideasView, ideaAction, withManualTranscript, ideaStages, groupsSummary, groupView } from './lib/ideas.mjs';
 import * as zernio from './lib/zernio.mjs';
 import { insightsView, insightsAsset, refreshInsights } from './lib/insights.mjs';
 const STATIC = { '/icons.js': 'text/javascript; charset=utf-8', '/research.js': 'text/javascript; charset=utf-8', '/research.css': 'text/css; charset=utf-8', '/publish.js': 'text/javascript; charset=utf-8', '/publish.css': 'text/css; charset=utf-8', '/app.css': 'text/css; charset=utf-8',
@@ -150,7 +150,8 @@ export function createServer(cfg) {
       // Instagram insights: read-only view of reels-data/insights/, plus its report pages and their frame images.
       if (req.method === 'GET' && u.pathname === '/api/insights') return send(res, 200, { ...insightsView(cfg), remote });
       if (req.method === 'GET' && u.pathname.startsWith('/insights/')) { const a = insightsAsset(cfg, u.pathname); return a ? send(res, 200, readFileSync(a.full), a.type) : send(res, 404, { error: 'Not available' }); }
-      if (req.method === 'GET' && u.pathname === '/api/research/ideas') return send(res, 200, { ideas: ideasView(cfg, buildState(cfg).items), remote });
+      if (req.method === 'GET' && u.pathname === '/api/research/ideas') return send(res, 200, { ideas: ideasView(cfg, buildState(cfg).items), groups: groupsSummary(cfg), remote });
+      if (req.method === 'GET' && u.pathname === '/api/research/group') { const g = groupView(cfg, u.searchParams.get('id')); return g ? send(res, 200, { ...g, remote }) : send(res, 404, { error: 'That group no longer exists' }); }
       if (req.method === 'GET' && u.pathname === '/file') {
         const f = safeFile(cfg, u.searchParams.get('p')) || (remote ? null : linkedMedia(cfg, u.searchParams.get('p'))); if (!f) return send(res, 404, { error: 'Not available' });
         const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || ''); const head = { 'content-type': f.type, 'accept-ranges': 'bytes', 'cache-control': 'no-store' };
@@ -175,7 +176,8 @@ export function createServer(cfg) {
         const origin = req.headers.origin;
         if (origin && origin !== 'http://' + req.headers.host) return send(res, 403, { error: 'Cross-site request refused' });
         if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'JSON only' });
-        let body = ''; req.on('data', c => { body += c; if (body.length > 65536) req.destroy(); });
+        // A group's script can be long, so research actions get a larger limit than production ones.
+        let body = ''; const limit = research ? 524288 : 65536; req.on('data', c => { body += c; if (body.length > limit) req.destroy(); });
         req.on('end', () => { let parsed; try { parsed = JSON.parse(body); } catch { return send(res, 400, { error: 'Bad request' }); } if (remote && (research || !REMOTE_ACTIONS.includes((parsed || {}).type))) return send(res, 403, { error: 'Do this one on the PC. The phone can only record what you published.' });
           if (research) { try { return send(res, 200, { ok: true, ...ideaAction(cfg, parsed) }); } catch (e) { return send(res, 400, { error: e.message }); } }
           handleAction(cfg, parsed).then(message => send(res, 200, { ok: true, message }), e => send(res, 400, { error: e.message })); });

@@ -394,6 +394,20 @@ short-form export go through `POST /api/research/action`, on this PC only.
   kept and a removed idea stays removed. Instagram and TikTok are never fetched; their paste box is unchanged.
   Order when more than one exists: the research store's transcript, then fetched subtitles, then a pasted one.
   Paths: `LAST30FREE_DIR` (default `D:/Mits AI OS/Research-Assitant - Copy/last30free`), or `DASH_SUBTITLES_PYTHON`.
+- **Groups** (YouTube only) put up to 3 similar ideas side by side. On the Ideas tab, tick YouTube ideas ("Select
+  for a group", at most 3) and press **Group selected (n/3)**. A group is created with 1 to 3 ideas; afterwards it
+  holds 0 to 3, and an idea is in at most one group. Pressing Create again for the same ideas makes no duplicate.
+  The group page shows each video in its own column (stacked on a phone): title, creator, views, published date,
+  duration, link, your angle and the full transcript, with Copy transcript. **Copy all transcripts** copies every
+  video's details, angle and transcript, each labelled, for pasting into Claude. Under them, **Your script** is a
+  blank box for your own combined script; it saves itself a moment after typing stops, when it loses focus, before
+  anything that redraws or leaves the page, and as the page closes. Removing an idea from the group, or removing
+  the idea itself, never removes the group: an empty group keeps its script, also after a reload, and an idea can
+  be added back. Only **Delete group** removes a group. When it has a script, the page asks first and offers
+  **Copy script**; Copy and Cancel both leave the group as it is. Its ideas are always kept. Stored as `groups` in
+  `ideas.json` (`{ id, name, ideaIds, draft, draftSavedAt, createdAt, updatedAt }`). The phone can read groups but
+  not change them. Research actions accept requests up to 512 KB so a long script fits; a script is at most
+  100,000 characters.
 - `ideas.json` is written whole: an ideas write keeps every other key in the file. The first write after this
   change kept a copy at `reels-data/research/archive/ideas.before-transcript-fetch.json`.
 - **Copy brief** works for every saved idea, long-form included. It carries the source link, platform and format,

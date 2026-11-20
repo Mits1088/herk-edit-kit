@@ -27,12 +27,22 @@ export function readIdeas(cfg) { const j = readFile(cfg); return Array.isArray(j
 // Replaces the ideas list and keeps everything else in the file as it is (the file is re-read here, not cached).
 // The first write after this change keeps a copy of the file as it was, once.
 export const ideasBackup = cfg => join(cfg.researchDir, 'archive', 'ideas.before-transcript-fetch.json');
-function writeIdeas(cfg, ideas) {
+// change(j) returns the keys to replace; every other key in the file is kept.
+function writeAll(cfg, change) {
   mkdirSync(cfg.researchDir, { recursive: true });
   if (existsSync(ideasFile(cfg)) && !existsSync(ideasBackup(cfg))) { mkdirSync(join(cfg.researchDir, 'archive'), { recursive: true }); copyFileSync(ideasFile(cfg), ideasBackup(cfg)); }
-  const tmp = ideasFile(cfg) + '.tmp';
-  writeFileSync(tmp, JSON.stringify({ ...readFile(cfg), ideas }, null, 2) + '\n'); renameSync(tmp, ideasFile(cfg));
+  const j = readFile(cfg), tmp = ideasFile(cfg) + '.tmp';
+  writeFileSync(tmp, JSON.stringify({ ...j, ...change(j) }, null, 2) + '\n'); renameSync(tmp, ideasFile(cfg));
 }
+const writeIdeas = (cfg, ideas) => writeAll(cfg, () => ({ ideas }));
+
+// ---- Groups: up to 3 similar YouTube ideas side by side, with Mits's own script under them ----
+// groups: [{ id, name, ideaIds, draft, createdAt, updatedAt, draftSavedAt? }] in the same ideas.json.
+// Created with 1 to 3 YouTube ideas; afterwards a group holds 0 to 3. An idea is in at most one group. A group is
+// never deleted by anything but Delete group, so its script survives even with no ideas left in it.
+const MAX_GROUP = 3, MAX_NAME = 120, MAX_DRAFT = 100000;
+export function readGroups(cfg) { const j = readFile(cfg); return Array.isArray(j.groups) ? j.groups : []; }
+const writeGroups = (cfg, groups) => writeAll(cfg, () => ({ groups }));
 
 // ---- YouTube transcripts fetched on save (lib/transcripts.mjs runs the helper) ----
 // idea.fetched = { status: 'pending' | 'ok' | 'failed', requestedAt, fetchedAt?, text?, error? }. It is kept apart from a
@@ -167,11 +177,51 @@ export function ideaInfo(cfg, d, idea, items = []) {
 }
 
 export function ideasView(cfg, items = [], now = new Date()) {
+  const groups = readGroups(cfg), groupOf = id => { const g = groups.find(x => x.ideaIds.includes(id)); return g ? { id: g.id, name: g.name } : null; };
   return readIdeas(cfg).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).map(idea => {
     const d = withManualTranscript(researchPost(cfg, idea.postId, '', now), idea);
-    if (!d) return { idea, missing: true };
-    return { ...ideaInfo(cfg, d, idea, items), post: { id: d.id, title: d.title, platform: d.platform, format: d.format, url: d.url, creator: d.creator, evidence: d.evidence, publishedAt: d.publishedAt, publishedAgeDays: d.publishedAgeDays, durationSeconds: d.durationSeconds } };
+    if (!d) return { idea, missing: true, group: groupOf(idea.id) };
+    return { ...ideaInfo(cfg, d, idea, items), group: groupOf(idea.id), post: { id: d.id, title: d.title, platform: d.platform, format: d.format, url: d.url, creator: d.creator, evidence: d.evidence, publishedAt: d.publishedAt, publishedAgeDays: d.publishedAgeDays, durationSeconds: d.durationSeconds } };
   });
+}
+
+// ---- group views ----
+const creatorName = d => [d.creator.name, d.creator.handle && '@' + String(d.creator.handle).replace(/^@/, '')].filter(Boolean).join(' · ') || null;
+// One member of a group, with everything the side-by-side columns show.
+function memberOf(cfg, ideas, ideaId, now) {
+  const idea = ideas.find(x => x.id === ideaId); if (!idea) return { ideaId, missing: true };
+  const d = withManualTranscript(researchPost(cfg, idea.postId, '', now), idea); if (!d) return { ideaId, postId: idea.postId, missing: true, angle: idea.angle };
+  const m = d.metrics || {};
+  return { ideaId, postId: d.id, title: d.title, creator: creatorName(d), url: d.url, format: d.format, publishedAt: d.publishedAt, durationSeconds: d.durationSeconds,
+    views: m.views ?? null, viewsMeasuredAt: m.views != null ? m.measuredAt || null : null, angle: idea.angle,
+    transcriptText: d.transcriptText || null, transcriptWords: d.transcript ? d.transcript.words : null,
+    transcriptLabel: !d.transcriptText ? null : d.manualTranscript ? 'pasted by you' : d.fetchedOnSave ? 'YouTube subtitles fetched when you saved the idea' : d.transcript.origin === 'subtitles' ? 'YouTube subtitles' : 'transcript from the research store',
+    fetch: fetchView(cfg, d, idea) };
+}
+// Every member's transcript, labelled, for pasting into Claude. Titles and angles are marked as what they are.
+export function groupBundle(g, members) {
+  const L = [`GROUP: ${oneLine(g.name)}`, `${members.length} YouTube ${members.length === 1 ? 'video' : 'videos'}. TRANSCRIPT sections are the creators' spoken words; MY ANGLE lines are my own direction.`];
+  members.forEach((m, i) => {
+    L.push('', `=== VIDEO ${i + 1} of ${members.length}: ${m.missing ? 'source post no longer in the research store' : oneLine(m.title) || 'untitled'}`);
+    if (!m.missing) L.push(`Creator: ${m.creator || 'unknown'}`, `Source: ${m.url}`, `Published: ${m.publishedAt ? date(m.publishedAt) : 'unknown'} · Duration: ${m.durationSeconds > 0 ? clock(m.durationSeconds) : 'unknown'} · Views: ${m.views != null ? m.views + (m.viewsMeasuredAt ? ` (measured ${date(m.viewsMeasuredAt)})` : ' (measurement time unknown)') : 'unknown'}`);
+    L.push(`MY ANGLE: ${oneLine(m.angle) || 'not written yet'}`);
+    if (m.transcriptText) L.push(`TRANSCRIPT (${m.transcriptLabel}, ${m.transcriptWords} words):`, m.transcriptText.trim());
+    else L.push(`TRANSCRIPT: none yet${m.fetch && m.fetch.state === 'fetching' ? ' (still being fetched)' : m.fetch && m.fetch.state === 'failed' ? " (couldn't fetch subtitles)" : ''}.`);
+  });
+  return L.join('\n') + '\n';
+}
+export function groupsSummary(cfg) {
+  const ideas = readIdeas(cfg);
+  return readGroups(cfg).slice().sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).map(g => ({ id: g.id, name: g.name, count: g.ideaIds.length, hasDraft: !!String(g.draft || '').trim(), updatedAt: g.updatedAt,
+    titles: g.ideaIds.map(id => { const i = ideas.find(x => x.id === id); const d = i && researchPost(cfg, i.postId, ''); return d ? d.title || 'Untitled post' : 'Source post not found'; }) }));
+}
+// One group's page: its members side by side, the script, ideas that could join it, and the bundle to copy.
+export function groupView(cfg, id, now = new Date()) {
+  const groups = readGroups(cfg), g = groups.find(x => x.id === id); if (!g) return null;
+  const ideas = readIdeas(cfg), members = g.ideaIds.map(x => memberOf(cfg, ideas, x, now));
+  const grouped = new Set(groups.flatMap(x => x.ideaIds));
+  const candidates = g.ideaIds.length >= MAX_GROUP ? [] : ideas.filter(i => i.postId.startsWith('youtube-') && !grouped.has(i.id)).map(i => { const d = researchPost(cfg, i.postId, '', now); return d ? { ideaId: i.id, title: d.title || 'Untitled post' } : null; }).filter(Boolean);
+  return { group: { id: g.id, name: g.name, draft: g.draft || '', createdAt: g.createdAt, updatedAt: g.updatedAt, draftSavedAt: g.draftSavedAt || null }, members, candidates, max: MAX_GROUP, bundle: groupBundle(g, members) };
 }
 
 // One action from the Research page. Every one is safe to repeat.
@@ -246,7 +296,9 @@ export function ideaAction(cfg, body, now = new Date()) {
     const idea = find();
     if (idea.exports.length) throw new Error('This idea was exported to the script workflow, so its record is kept.');
     fetcherOf(cfg).drop(idea.id); // a fetch already running finishes, and its result is dropped
-    writeIdeas(cfg, ideas.filter(x => x !== idea)); return { message: 'Idea removed. The research post is unchanged.', ideaId: null };
+    // It leaves its group too; the group and its script stay, even if it was the last idea in it.
+    writeAll(cfg, j => ({ ideas: ideas.filter(x => x !== idea), ...(Array.isArray(j.groups) ? { groups: j.groups.map(g => g.ideaIds.includes(idea.id) ? { ...g, ideaIds: g.ideaIds.filter(x => x !== idea.id), updatedAt: at } : g) } : {}) }));
+    return { message: 'Idea removed. The research post is unchanged.', ideaId: null };
   }
   if (a.type === 'export-idea') {
     const idea = find(); const d = withManualTranscript(researchPost(cfg, idea.postId, '', now), idea);
@@ -264,6 +316,56 @@ export function ideaAction(cfg, body, now = new Date()) {
     idea.exports.push({ file: `Instagram_transcript/${name}`, at, sha256: sha(text), angleSha: sha(oneLine(idea.angle)), postId: d.id, sourceUrl: d.url });
     idea.updatedAt = at; writeIdeas(cfg, ideas);
     return { message: `Exported to Instagram_transcript/${name}. Run /rewrite-reels in Claude Code to start the scripts.`, ideaId: idea.id };
+  }
+  // ---- groups ----
+  const groups = readGroups(cfg);
+  const gfind = () => { const g = groups.find(x => x.id === a.groupId); if (!g) throw new Error('That group no longer exists'); return g; };
+  const grouped = id => groups.find(g => g.ideaIds.includes(id));
+  const youtubeIdea = id => { const i = ideas.find(x => x.id === id); if (!i) throw new Error('That idea no longer exists'); if (!i.postId.startsWith('youtube-')) throw new Error('Only YouTube ideas can be grouped.'); return i; };
+  const nameOf = v => { const t = oneLine(v); if (t.length > MAX_NAME) throw new Error(`Keep the group name under ${MAX_NAME} characters`); return t; };
+  // Created with 1 to 3 YouTube ideas. Pressing it twice for the same ideas returns the group already made.
+  if (a.type === 'create-group') {
+    const ids = [...new Set((Array.isArray(a.ideaIds) ? a.ideaIds : []).map(String))];
+    if (!ids.length) throw new Error('Choose at least one YouTube idea for the group.');
+    if (ids.length > MAX_GROUP) throw new Error(`A group holds at most ${MAX_GROUP} ideas.`);
+    ids.forEach(youtubeIdea);
+    const same = groups.find(g => g.ideaIds.length === ids.length && ids.every(i => g.ideaIds.includes(i)));
+    if (same) return { message: 'These ideas are already a group. Nothing was duplicated.', groupId: same.id };
+    const taken = ids.map(grouped).find(Boolean);
+    if (taken) throw new Error(`One of these ideas is already in the group “${taken.name}”. Remove it there first.`);
+    const first = researchPost(cfg, ideas.find(x => x.id === ids[0]).postId, '', now);
+    const name = nameOf(a.name) || oneLine((first && first.title) || 'New group').slice(0, MAX_NAME);
+    const g = { id: 'group-' + sha(at + ids.join(',')).slice(0, 12), name, ideaIds: ids, draft: '', createdAt: at, updatedAt: at };
+    writeGroups(cfg, [...groups, g]); return { message: 'Group created.', groupId: g.id };
+  }
+  if (a.type === 'add-to-group') {
+    const g = gfind(); const idea = youtubeIdea(String(a.ideaId));
+    if (g.ideaIds.includes(idea.id)) return { message: 'Already in this group.', groupId: g.id };
+    const other = grouped(idea.id); if (other) throw new Error(`That idea is already in the group “${other.name}”. Remove it there first.`);
+    if (g.ideaIds.length >= MAX_GROUP) throw new Error(`This group already holds ${MAX_GROUP} ideas.`);
+    g.ideaIds.push(idea.id); g.updatedAt = at; writeGroups(cfg, groups); return { message: 'Added to the group.', groupId: g.id };
+  }
+  // Removing the last idea leaves the group, and its script, in place.
+  if (a.type === 'remove-from-group') {
+    const g = gfind(); if (!g.ideaIds.includes(String(a.ideaId))) return { message: 'Not in this group.', groupId: g.id };
+    g.ideaIds = g.ideaIds.filter(x => x !== String(a.ideaId)); g.updatedAt = at; writeGroups(cfg, groups);
+    return { message: g.ideaIds.length ? 'Removed from the group. The idea is kept.' : 'Removed from the group. The group and its script are kept.', groupId: g.id };
+  }
+  if (a.type === 'rename-group') {
+    const g = gfind(); const name = nameOf(a.name); if (!name) throw new Error('Give the group a name.');
+    if (name === g.name) return { message: 'No change.', groupId: g.id };
+    g.name = name; g.updatedAt = at; writeGroups(cfg, groups); return { message: 'Group renamed.', groupId: g.id };
+  }
+  if (a.type === 'set-group-draft') {
+    const g = gfind(); const draft = String(a.draft ?? '').replace(/\r\n/g, '\n');
+    if (draft.length > MAX_DRAFT) throw new Error(`Keep the script under ${MAX_DRAFT.toLocaleString('en-GB')} characters`);
+    if (draft === (g.draft || '')) return { message: 'No change.', groupId: g.id, savedAt: g.draftSavedAt || null };
+    g.draft = draft; g.draftSavedAt = at; g.updatedAt = at; writeGroups(cfg, groups); return { message: 'Script saved.', groupId: g.id, savedAt: at };
+  }
+  // Only this removes a group. The page asks first when it has a script. Its ideas are kept.
+  if (a.type === 'delete-group') {
+    const g = groups.find(x => x.id === a.groupId); if (!g) return { message: 'That group was already deleted.', groupId: null };
+    writeGroups(cfg, groups.filter(x => x !== g)); return { message: 'Group deleted. Its ideas are kept.', groupId: null };
   }
   throw new Error('Unknown action');
 }

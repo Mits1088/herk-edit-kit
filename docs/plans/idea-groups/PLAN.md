@@ -55,8 +55,21 @@ Status: proposed, not built. Branch `research-command-centre`.
 
 ## Part B: idea groups (YouTube only, max 3)
 
-Open decision before building: removing the last idea from a group that has a saved script must never silently
-discard the script.
+Decided (Mits, after review of 26d1b13): create with 1 to 3 YouTube ideas; afterwards a group holds 0 to 3.
+Removing the last idea leaves the group and its script, also after a reload. Only Delete group removes a group; with
+script text it offers Copy script and asks for confirmation, and Copy and Cancel both leave the group intact.
+
+### Part B as built
+
+- Actions: `create-group`, `add-to-group`, `remove-from-group`, `rename-group`, `set-group-draft`, `delete-group`.
+  `remove-idea` also takes the idea out of its group and leaves the group.
+- Groups are written through the same whole-file writer, so a transcript fetch landing, or any idea action, keeps
+  them as they are (tested).
+- The script autosaves (1.2 s after typing, on blur, before redraws and navigation, keepalive on page close); the
+  text is captured when the save is triggered.
+- Not built, as planned: automatic "similar titles" suggestions, exporting a group into a workflow.
+- Checks: `tests/research-groups.test.mjs` (7 tests) and `dashboard/dev/check-groups.mjs` (52 headless checks,
+  desktop and phone).
 
 - Stored in the same `ideas.json` as `groups: [{ id, name, ideaIds, draft, createdAt, updatedAt }]`.
   **Important:** `writeIdeas` today writes only `{ ideas }`, which would wipe groups. It changes to keep the

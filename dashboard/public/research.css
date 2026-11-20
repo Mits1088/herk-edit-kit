@@ -112,3 +112,18 @@ details.r-stage[open]>summary{margin-bottom:6px}
 
 /* YouTube transcript fetched on save: status line with Retry */
 .r-fetch{margin:6px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+/* Groups: up to 3 YouTube ideas side by side, then Mits's own script */
+.r-gcols{display:grid;gap:16px;grid-template-columns:repeat(var(--cols,3),minmax(0,1fr));align-items:start}
+.r-gcol{display:grid;gap:12px;min-width:0}
+.r-gcol .kv{grid-template-columns:auto 1fr}
+.r-gtext{max-height:55vh}
+.r-gscript textarea{max-width:none;min-height:340px;font-size:15px;line-height:1.6}
+.r-gname input,.r-gadd select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:0;flex:1 1 220px;max-width:520px}
+.r-gtitles{margin:0;padding-left:18px;font-size:14px;display:grid;gap:4px}
+.r-ingroup{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
+.r-pick{justify-self:start}
+.r-gdel{border-left:4px solid var(--bad)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+@media (max-width:900px){.r-gcols{grid-template-columns:1fr}}
+@media (max-width:760px){.r-gcol .btn,.r-gscript .btn,.r-gdel .btn,.r-gbar .btn,.r-gname .btn,.r-gadd .btn,.r-gname input,.r-gadd select,.r-pick{min-height:44px}.r-pick{white-space:normal;height:auto}}
