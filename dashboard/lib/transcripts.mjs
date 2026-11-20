@@ -16,12 +16,13 @@ export function runSubtitles(cfg, videoId, { timeoutMs = cfg.subtitleTimeoutMs ?
   return new Promise(resolve => {
     if (!YOUTUBE_ID.test(String(videoId))) return resolve({ ok: false, error: `${FAILED}: "${videoId}" is not a YouTube video id.` });
     const dir = mkdtempSync(join(tmpdir(), 'subs-')), out = join(dir, 'subs.json');
-    const [cmd, ...pre] = cfg.subtitlesCommand; let p, timedOut = false, log = '';
-    const finish = r => { clearTimeout(timer); try { rmSync(dir, { recursive: true, force: true }); } catch { /* temp file only */ } resolve(r); };
+    // timer is declared before the spawn attempt: a spawn that throws calls finish() before any timer exists.
+    const [cmd, ...pre] = cfg.subtitlesCommand; let p, timer = null, timedOut = false, log = '';
+    const finish = r => { if (timer) clearTimeout(timer); try { rmSync(dir, { recursive: true, force: true }); } catch { /* temp file only */ } resolve(r); };
     try { p = spawn(cmd, [...pre, out, videoId], { cwd: cfg.last30freeDir, windowsHide: true }); }
     catch (e) { return finish({ ok: false, error: `${FAILED}: the subtitle helper did not start (${e.message}).` }); }
     // A stalled video must not hold up every save behind it: stop the helper and everything it started.
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       timedOut = true;
       if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(p.pid), '/T', '/F'], { windowsHide: true }); else p.kill('SIGKILL');
     }, timeoutMs);
@@ -46,21 +47,31 @@ export function runSubtitles(cfg, videoId, { timeoutMs = cfg.subtitleTimeoutMs ?
 // onResult(ideaId, result) is called once per fetch; it is the caller's job to write it.
 export function createFetcher(cfg, onResult) {
   const runner = cfg.subtitleRunner || runSubtitles, gapMs = cfg.subtitleGapMs ?? 3000;
-  const waiting = [], busy = new Set(); let running = null, cooling = false, idleWaiters = [];
+  // notBefore: the earliest a fetch may start, gapMs after the last one finished. It holds across idle periods, so a
+  // save arriving just after the queue emptied still waits out the gap.
+  const waiting = [], busy = new Set(); let running = null, timer = null, notBefore = 0, idleWaiters = [];
   const settle = () => { if (!running && !waiting.length) { const w = idleWaiters; idleWaiters = []; w.forEach(f => f()); } };
-  async function next() {
-    if (running || !waiting.length) return settle();
-    running = waiting.shift();
-    let r; try { r = await runner(cfg, running.videoId); } catch (e) { r = { ok: false, error: `${FAILED}: ${e.message}` }; }
-    try { onResult(running.ideaId, r); } catch { /* an unreadable ideas file is left alone */ }
-    busy.delete(running.ideaId); running = null;
-    if (waiting.length) { cooling = true; setTimeout(() => { cooling = false; next(); }, gapMs); } else settle();
+  function next() {
+    if (running || timer) return;
+    if (!waiting.length) return settle();
+    const wait = notBefore - Date.now();
+    if (wait > 0) { timer = setTimeout(() => { timer = null; next(); }, wait); return; }
+    const job = running = waiting.shift();
+    let started; try { started = Promise.resolve(runner(cfg, job.videoId)); } catch (e) { started = Promise.reject(e); }
+    started.catch(e => ({ ok: false, error: `${FAILED}: ${e.message}` })).then(r => {
+      try { onResult(job.ideaId, r); } catch { /* an unreadable ideas file is left alone */ }
+      busy.delete(job.ideaId); running = null; notBefore = Date.now() + gapMs; next();
+    });
   }
   return {
-    enqueue(ideaId, videoId) { if (busy.has(ideaId)) return false; busy.add(ideaId); waiting.push({ ideaId, videoId }); if (!running && !cooling) next(); return true; },
+    enqueue(ideaId, videoId) { if (busy.has(ideaId)) return false; busy.add(ideaId); waiting.push({ ideaId, videoId }); next(); return true; },
     has: ideaId => busy.has(ideaId),
     // A removed idea leaves the queue. One already running finishes, and its result is then dropped by the caller.
-    drop(ideaId) { const i = waiting.findIndex(x => x.ideaId === ideaId); if (i >= 0) { waiting.splice(i, 1); busy.delete(ideaId); } },
+    drop(ideaId) {
+      const i = waiting.findIndex(x => x.ideaId === ideaId); if (i < 0) return;
+      waiting.splice(i, 1); busy.delete(ideaId);
+      if (!waiting.length && timer) { clearTimeout(timer); timer = null; settle(); }
+    },
     idle: () => new Promise(r => { idleWaiters.push(r); settle(); }),
   };
 }

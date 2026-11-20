@@ -9,7 +9,7 @@ const { loadConfig } = await import('../dashboard/lib/config.mjs');
 const { importBatch } = await import('../dashboard/lib/research.mjs');
 const { researchPost } = await import('../dashboard/lib/research-view.mjs');
 const { readIdeas, ideaAction, ideasView, ideaInfo, withManualTranscript, fetchesIdle, ideasBackup } = await import('../dashboard/lib/ideas.mjs');
-const { runSubtitles, FAILED } = await import('../dashboard/lib/transcripts.mjs');
+const { runSubtitles, createFetcher, FAILED } = await import('../dashboard/lib/transcripts.mjs');
 
 const NOW = new Date('2026-11-20T12:00:00Z'), AT = '2026-11-20T09:00:00Z';
 const VID = 'AbC-_12xYz9', HAS = 'EuUF53Wwfm0', TT = '7708502162103438612';
@@ -137,6 +137,34 @@ test('every write keeps the rest of ideas.json, and the file as it was is backed
   // a brand-new store has nothing to back up
   const c2 = store({ subtitleRunner: fakeRunner().runner }); ideaAction(c2, { type: 'save-idea', postId: 'tiktok-' + TT }, NOW);
   assert.equal(existsSync(ideasBackup(c2)), false);
+});
+
+test('the gap between fetches holds when the queue empties and a save arrives just after', async () => {
+  const starts = [], ends = [];
+  const runner = () => { starts.push(Date.now()); return new Promise(r => setTimeout(() => { ends.push(Date.now()); r({ ok: true, text: 'x' }); }, 20)); };
+  const q = createFetcher({ subtitleRunner: runner, subtitleGapMs: 300 }, () => {});
+  q.enqueue('idea-a', VID); await q.idle();
+  q.enqueue('idea-b', HAS); // the queue was empty: this one must still wait out the gap
+  assert.equal(starts.length, 1); await q.idle();
+  assert.equal(starts.length, 2); assert.ok(starts[1] - ends[0] >= 290, `second start ${starts[1] - ends[0]} ms after the first ended`);
+  // after the gap has passed, a new one starts at once
+  await new Promise(r => setTimeout(r, 320)); const t = Date.now(); q.enqueue('idea-c', VID);
+  assert.equal(starts.length, 3); assert.ok(starts[2] - t < 50);
+  await q.idle();
+  // a queued one dropped during the wait: the queue goes idle without running it
+  q.enqueue('idea-d', VID); q.drop('idea-d'); await q.idle(); assert.equal(starts.length, 3);
+  // a runner that throws at once is reported as a failure, and the queue carries on
+  const seen = []; const q2 = createFetcher({ subtitleRunner: () => { throw new Error('boom'); }, subtitleGapMs: 0 }, (id, r) => seen.push([id, r]));
+  q2.enqueue('idea-e', VID); await q2.idle(); assert.deepEqual(seen, [['idea-e', { ok: false, error: `${FAILED}: boom` }]]);
+});
+
+test('a helper that cannot start reports why, instead of hiding it', async () => {
+  const cfg = loadConfig({ root: mkdtempSync(join(tmpdir(), 'subs-')), last30freeDir: tmpdir(), subtitlesCommand: ['bad\0command'] }); // spawn throws synchronously
+  const r = await runSubtitles(cfg, VID);
+  assert.equal(r.ok, false); assert.match(r.error, /^Couldn't fetch subtitles: the subtitle helper did not start \(.*(null bytes|ERR_INVALID_ARG_VALUE|must be a string without null)/);
+  assert.ok(!/before initialization/.test(r.error));
+  const missing = loadConfig({ root: cfg.root, last30freeDir: tmpdir(), subtitlesCommand: [join(tmpdir(), 'no-such-python.exe')] }); // spawn fails asynchronously
+  assert.match((await runSubtitles(missing, VID)).error, /^Couldn't fetch subtitles: the subtitle helper did not start \(.*ENOENT/);
 });
 
 test('the real runner stops a stalled helper at its timeout and refuses a bad id without starting it', async () => {
