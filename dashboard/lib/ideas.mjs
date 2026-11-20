@@ -1,10 +1,11 @@
 // Saved ideas: a research post plus Mits's own angle. Kept in reels-data/research/ideas.json, which the research
 // importer never writes. The one workflow file this module creates is a transcript in Instagram_transcript/, and
 // only when "Export to the script workflow" is pressed for a post that qualifies. It never overwrites a file.
-import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { researchPost } from './research-view.mjs';
+import { createFetcher, YOUTUBE_ID } from './transcripts.mjs';
 
 const MAX_ANGLE = 2000;
 const MAX_TRANSCRIPT = 60000;
@@ -18,20 +19,66 @@ const date = iso => String(iso).slice(0, 10);
 const clock = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 
 // An unreadable ideas file throws, so it is never replaced by an empty one.
-export function readIdeas(cfg) {
-  if (!existsSync(ideasFile(cfg))) return [];
-  const j = JSON.parse(readFileSync(ideasFile(cfg), 'utf8')); return Array.isArray(j.ideas) ? j.ideas : [];
+function readFile(cfg) {
+  if (!existsSync(ideasFile(cfg))) return {};
+  const j = JSON.parse(readFileSync(ideasFile(cfg), 'utf8')); return j && typeof j === 'object' && !Array.isArray(j) ? j : {};
 }
+export function readIdeas(cfg) { const j = readFile(cfg); return Array.isArray(j.ideas) ? j.ideas : []; }
+// Replaces the ideas list and keeps everything else in the file as it is (the file is re-read here, not cached).
+// The first write after this change keeps a copy of the file as it was, once.
+export const ideasBackup = cfg => join(cfg.researchDir, 'archive', 'ideas.before-transcript-fetch.json');
 function writeIdeas(cfg, ideas) {
-  mkdirSync(cfg.researchDir, { recursive: true }); const tmp = ideasFile(cfg) + '.tmp';
-  writeFileSync(tmp, JSON.stringify({ ideas }, null, 2) + '\n'); renameSync(tmp, ideasFile(cfg));
+  mkdirSync(cfg.researchDir, { recursive: true });
+  if (existsSync(ideasFile(cfg)) && !existsSync(ideasBackup(cfg))) { mkdirSync(join(cfg.researchDir, 'archive'), { recursive: true }); copyFileSync(ideasFile(cfg), ideasBackup(cfg)); }
+  const tmp = ideasFile(cfg) + '.tmp';
+  writeFileSync(tmp, JSON.stringify({ ...readFile(cfg), ideas }, null, 2) + '\n'); renameSync(tmp, ideasFile(cfg));
 }
+
+// ---- YouTube transcripts fetched on save (lib/transcripts.mjs runs the helper) ----
+// idea.fetched = { status: 'pending' | 'ok' | 'failed', requestedAt, fetchedAt?, text?, error? }. It is kept apart from a
+// pasted idea.transcript, and only ever written for a YouTube idea whose post had no transcript of its own.
+const fetcherOf = cfg => ((cfg.runtime ||= {}).transcripts ||= createFetcher(cfg, (ideaId, r) => {
+  // Re-read now: the angle may have changed while the fetch ran, or the idea may have been removed.
+  const ideas = readIdeas(cfg); const idea = ideas.find(x => x.id === ideaId);
+  if (!idea || idea.exports.length || idea.transcript) return; // removed, exported or pasted meanwhile: nothing is written
+  const at = new Date().toISOString(), requestedAt = (idea.fetched || {}).requestedAt || at;
+  idea.fetched = r.ok ? { status: 'ok', requestedAt, fetchedAt: at, text: r.text } : { status: 'failed', requestedAt, fetchedAt: at, error: r.error };
+  writeIdeas(cfg, ideas);
+}));
+// The post's own id, as YouTube spells it (the post key carries it in hex).
+const videoIdOf = d => (d && d.platform === 'youtube' && YOUTUBE_ID.test(String(d.nativeId)) ? String(d.nativeId) : null);
+// Whether a fetch may start for this idea now. d is the post as the research store holds it.
+function canFetch(cfg, d, idea) {
+  if (!videoIdOf(d) || d.transcriptText || !idea || idea.transcript || idea.exports.length) return false;
+  const f = idea.fetched; if (!f) return true;
+  return f.status === 'failed' || (f.status === 'pending' && !fetcherOf(cfg).has(idea.id));
+}
+function startFetch(cfg, d, idea, at) { idea.fetched = { status: 'pending', requestedAt: at }; return () => fetcherOf(cfg).enqueue(idea.id, videoIdOf(d)); }
+// What the page shows about a fetch. A pending fetch this server is not running (it was restarted) reads as failed.
+export function fetchView(cfg, d, idea) {
+  if (!d || d.platform !== 'youtube') return null;
+  const f = idea && idea.fetched;
+  // A transcript from the research store, or one pasted by hand, needs no fetch status.
+  if ((d.transcriptText && !d.fetchedOnSave) || (idea && idea.transcript && !(f && f.status === 'ok'))) return null;
+  if (!f) return canFetch(cfg, d, idea) ? { state: 'none', canFetch: true } : null;
+  if (f.status === 'ok') return { state: 'ok', fetchedAt: f.fetchedAt, words: f.text.trim().split(/\s+/).filter(Boolean).length };
+  if (f.status === 'pending' && fetcherOf(cfg).has(idea.id)) return { state: 'fetching', requestedAt: f.requestedAt };
+  const error = f.status === 'pending' ? "Couldn't fetch subtitles: the dashboard was restarted before the fetch finished." : f.error;
+  return { state: 'failed', error, fetchedAt: f.fetchedAt || null, canFetch: canFetch(cfg, d, idea) };
+}
+// For tests and the server: resolves once no fetch is waiting or running.
+export const fetchesIdle = cfg => fetcherOf(cfg).idle();
 
 // A transcript Mits pasted himself, for a post whose search fetched none. It lives on the idea in ideas.json
 // (research imports rewrite the post store, so it would not survive there) and is always labelled as pasted.
 // A fetched transcript always wins: the paste box is only offered when none was fetched.
+// Order: the research store's own transcript, then YouTube subtitles fetched on save, then one pasted by hand.
 export function withManualTranscript(d, idea) {
-  if (!d || d.transcriptText || !(idea && idea.transcript && idea.transcript.text)) return d;
+  if (!d || d.transcriptText || !idea) return d;
+  const f = idea.fetched;
+  if (f && f.status === 'ok' && f.text) return { ...d, transcriptText: f.text, transcriptPassage: null, evidence: 'transcript', fetchedOnSave: true,
+    transcript: { origin: 'subtitles', provider: null, capturedAt: f.fetchedAt, words: f.text.trim().split(/\s+/).filter(Boolean).length } };
+  if (!(idea.transcript && idea.transcript.text)) return d;
   const text = idea.transcript.text;
   return { ...d, transcriptText: text, transcriptPassage: null, evidence: 'manual', manualTranscript: true,
     transcript: { origin: 'manual', provider: null, capturedAt: idea.transcript.savedAt, words: text.trim().split(/\s+/).filter(Boolean).length } };
@@ -80,7 +127,7 @@ export function briefText(d, idea) {
   L.push('', 'CAPTION OR DESCRIPTION (written by the creator, not spoken)', d.caption ? d.caption.trim() : 'None saved.');
   if (d.transcriptText) {
     const words = d.transcriptText.trim().split(/\s+/); const cut = words.length > 250;
-    const by = d.manualTranscript ? ', pasted by Mits' : '';
+    const by = d.manualTranscript ? ', pasted by Mits' : d.fetchedOnSave ? ', YouTube subtitles fetched when the idea was saved' : '';
     L.push('', cut ? `TRANSCRIPT EXCERPT (spoken words${by}: the first 250 of ${words.length}; the full transcript is on the post's page)` : `FULL TRANSCRIPT (spoken words${by}, ${words.length} words)`, cut ? words.slice(0, 250).join(' ') + ' …' : d.transcriptText.trim());
   } else L.push('', 'TRANSCRIPT', 'No transcript was fetched for this post.');
   return L.join('\n') + '\n';
@@ -114,7 +161,9 @@ export function ideaInfo(cfg, d, idea, items = []) {
     const item = linkedItem(idea, items);
     exported = { file: ex.file, at: ex.at, waiting, pipelineId: item ? item.id : null, pipelineTitle: item ? item.title : null, pipelineStatus: item ? (item.needs[0] || {}).label || item.note || null : null, angleChanged: sha(oneLine(idea.angle)) !== ex.angleSha, command: '/rewrite-reels' };
   }
-  return { idea: idea || null, handoff: h, brief: idea ? briefText(d, idea) : null, exported, stage: ideaStage(idea, items) };
+  // The page never needs the fetched text twice: it is already in transcriptText.
+  const pub = idea && idea.fetched && idea.fetched.text ? { ...idea, fetched: { ...idea.fetched, text: undefined } } : idea;
+  return { idea: pub || null, handoff: h, brief: idea ? briefText(d, idea) : null, exported, stage: ideaStage(idea, items), fetch: fetchView(cfg, d, idea) };
 }
 
 export function ideasView(cfg, items = [], now = new Date()) {
@@ -136,7 +185,26 @@ export function ideaAction(cfg, body, now = new Date()) {
     const have = ideas.find(x => x.postId === a.postId);
     if (have) return { message: 'Already saved. Nothing was duplicated.', ideaId: have.id }; // a second click changes nothing, not even the angle
     const idea = { id: 'idea-' + a.postId, postId: a.postId, angle: angleOf(a.angle), createdAt: at, updatedAt: at, exports: [] };
-    writeIdeas(cfg, [...ideas, idea]); return { message: 'Idea saved.', ideaId: idea.id };
+    // A YouTube post with no transcript: its subtitles are fetched in the background. Instagram and TikTok: no fetch.
+    const d = researchPost(cfg, a.postId, '', now), go = canFetch(cfg, d, idea) ? startFetch(cfg, d, idea, at) : null;
+    writeIdeas(cfg, [...ideas, idea]); if (go) go();
+    return { message: go ? 'Idea saved. Fetching its YouTube transcript now.' : 'Idea saved.', ideaId: idea.id };
+  }
+  // Fetch (or retry) the YouTube transcript for one saved idea. Repeat-safe: one already waiting or running is left alone.
+  if (a.type === 'fetch-transcript') {
+    const idea = find(); const d = researchPost(cfg, idea.postId, '', now);
+    if (idea.fetched && idea.fetched.status === 'pending' && fetcherOf(cfg).has(idea.id)) return { message: 'Already fetching this transcript.', ideaId: idea.id };
+    if (!canFetch(cfg, d, idea)) return { message: videoIdOf(d) ? 'This idea already has a transcript, so nothing was fetched.' : 'Transcripts are fetched for YouTube ideas only.', ideaId: idea.id };
+    const go = startFetch(cfg, d, idea, at); idea.updatedAt = at; writeIdeas(cfg, ideas); go();
+    return { message: 'Fetching the YouTube transcript now.', ideaId: idea.id };
+  }
+  // Every saved YouTube idea still without a transcript, queued one at a time. Ones already queued are not added again.
+  if (a.type === 'fetch-missing') {
+    const go = [];
+    for (const idea of ideas) { const d = researchPost(cfg, idea.postId, '', now); if (canFetch(cfg, d, idea)) { go.push(startFetch(cfg, d, idea, at)); idea.updatedAt = at; } }
+    if (!go.length) return { message: 'No saved YouTube idea is missing a transcript, or they are already being fetched.', ideaId: null };
+    writeIdeas(cfg, ideas); go.forEach(f => f());
+    return { message: `Fetching ${go.length} YouTube ${go.length === 1 ? 'transcript' : 'transcripts'}, one at a time.`, ideaId: null };
   }
   // Close an idea as used (made outside the dashboard) or dropped, or reopen it (as: ''). Nothing else changes.
   if (a.type === 'close-idea') {
@@ -155,6 +223,9 @@ export function ideaAction(cfg, body, now = new Date()) {
   if (a.type === 'set-transcript') {
     const d = researchPost(cfg, a.postId, '', now); if (!d) throw new Error('Unknown post');
     if (d.transcriptText) throw new Error('This post already has a fetched transcript, so a pasted one is not needed.');
+    const had = ideas.find(x => x.postId === a.postId);
+    if (had && had.fetched && had.fetched.status === 'ok') throw new Error('This idea already has its YouTube subtitles, so a pasted transcript is not needed.');
+    if (had && had.fetched && had.fetched.status === 'pending' && fetcherOf(cfg).has(had.id)) throw new Error('The YouTube transcript is still being fetched. Paste one only if that fails.');
     const text = String(a.text ?? '').replace(/\r\n/g, '\n').trim();
     if (!text) throw new Error('Paste the transcript first.');
     if (text.length > MAX_TRANSCRIPT) throw new Error(`Keep the transcript under ${MAX_TRANSCRIPT.toLocaleString('en-GB')} characters`);
@@ -174,6 +245,7 @@ export function ideaAction(cfg, body, now = new Date()) {
   if (a.type === 'remove-idea') {
     const idea = find();
     if (idea.exports.length) throw new Error('This idea was exported to the script workflow, so its record is kept.');
+    fetcherOf(cfg).drop(idea.id); // a fetch already running finishes, and its result is dropped
     writeIdeas(cfg, ideas.filter(x => x !== idea)); return { message: 'Idea removed. The research post is unchanged.', ideaId: null };
   }
   if (a.type === 'export-idea') {

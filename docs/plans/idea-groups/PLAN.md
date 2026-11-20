@@ -19,8 +19,10 @@ Status: proposed, not built. Branch `research-command-centre`.
 - Runs backfilled from saved last30free folders carry no transcripts, so most YouTube posts have none.
 - A pasted transcript is stored on the idea (`idea.transcript`, origin `manual`), because research imports
   rewrite the post store.
-- Baseline tests: `tests/dashboard.test.mjs:454` already fails (a date assertion, 15 Nov vs 17 Nov), before any
-  change. Not caused by this work.
+- Baseline tests (corrected after running them on 3d35a6d in a clean worktree): 6 tests in
+  `tests/dashboard.test.mjs` already fail, all about due dates and publication, none about ideas. And
+  `dashboard/dev/check-ideas.mjs` already stops, looking for the format-unknown fixture in the short-form list.
+  Neither is caused by this work.
 
 ## Part A: fetch the transcript on save (YouTube only)
 
@@ -39,7 +41,22 @@ Status: proposed, not built. Branch `research-command-centre`.
 - A fetch left `pending` by a server restart counts as failed after 5 minutes, so it can be retried.
 - Instagram and TikTok: no change.
 
+### Part A as built (after Codex's review of 3d35a6d)
+
+- The whole-file write and the one-time backup moved forward into Part A.
+- A finished fetch re-reads `ideas.json` and writes only `fetched` on its own idea; a removed idea stays removed.
+- The helper gets `nativeId` (YouTube's own spelling), checked against the 11-character id format, never the hex
+  key. The queue is keyed by idea, so Save, Retry and Fetch missing pressed together still run one fetch.
+- Each run stops after 90 seconds, killing the process tree.
+- Failures read "Couldn't fetch subtitles" with Retry. A 429 in the helper's log is named as YouTube refusing.
+- Instead of the 5-minute rule: a `pending` fetch this server is not running reads as failed straight away.
+- Checks: `tests/research-transcripts.test.mjs` (8 tests, fake runner) and `dashboard/dev/check-transcript-fetch.mjs`
+  (34 headless checks, desktop and phone).
+
 ## Part B: idea groups (YouTube only, max 3)
+
+Open decision before building: removing the last idea from a group that has a saved script must never silently
+discard the script.
 
 - Stored in the same `ideas.json` as `groups: [{ id, name, ideaIds, draft, createdAt, updatedAt }]`.
   **Important:** `writeIdeas` today writes only `{ ideas }`, which would wipe groups. It changes to keep the

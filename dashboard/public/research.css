@@ -109,3 +109,6 @@ details.r-stage>summary:hover{border-color:color-mix(in srgb,var(--accent) 45%,v
 details.r-stage>summary::marker{content:''}
 details.r-stage[open]>summary{margin-bottom:6px}
 .r-stage-used .r-group-head{color:var(--ok)}.r-stage-dropped .r-group-head{color:var(--wait)}
+
+/* YouTube transcript fetched on save: status line with Retry */
+.r-fetch{margin:6px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}

@@ -34,6 +34,8 @@ export function loadConfig(overrides = {}) {
     rawMedia: join(root, 'raw-media'),
     contentDir: join(root, 'reels-data', 'content'), // the only folder the dashboard writes to
     researchDir: join(root, 'reels-data', 'research'), // written by dashboard/research-import.mjs; ideas.json in it by lib/ideas.mjs
+    // Saving a YouTube idea fetches its subtitles with research-signals' helper, run by last30free's Python (lib/transcripts.mjs).
+    last30freeDir: process.env.LAST30FREE_DIR || 'D:/Mits AI OS/Research-Assitant - Copy/last30free',
     uploadsDir: process.env.DASH_UPLOADS || 'D:/Uploads',
     approver: process.env.DASH_APPROVER || 'Mits', // the name written into hook and candidate approvals
     // The real Reel Studio scripts, found from this file's own place in the repo (not from the data root).
@@ -45,6 +47,8 @@ export function loadConfig(overrides = {}) {
     ...overrides,
   };
   cfg.gumroadScript = overrides.gumroadScript || join(cfg.root, '.claude', 'skills', 'approve-reel', 'gumroad_upload.mjs');
+  cfg.subtitlesCommand = overrides.subtitlesCommand || [process.env.DASH_SUBTITLES_PYTHON || join(cfg.last30freeDir, '.venv', 'Scripts', 'python.exe'), '-I', '-X', 'utf8',
+    join(import.meta.dirname, '..', '..', '.claude', 'skills', 'research-signals', 'yt-subtitles.py')];
   cfg.approvalsFile = join(cfg.contentDir, 'pdf-approvals.json'); // read by gumroad_upload.mjs before any upload
   cfg.tokenFile = join(cfg.contentDir, 'phone-token.txt'); // created the first time the server starts with DASH_LAN=1
   cfg.runtime = { queue: { available: false, running: false, reason: 'not checked yet', missions: [] }, uploads: {} };

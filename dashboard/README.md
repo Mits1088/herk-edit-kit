@@ -382,6 +382,20 @@ short-form export go through `POST /api/research/action`, on this PC only.
 - **Save idea** is on every post's page, with or without a transcript. One idea per post: a second click changes
   nothing. Your angle (up to 2,000 characters) can be edited at any time and is shown in its own panel, above a
   "Source evidence" heading. An idea can be removed until it has been exported.
+- **YouTube transcripts are fetched on save.** Saving a YouTube idea whose post has no transcript queues a
+  background fetch of its subtitles (`lib/transcripts.mjs` runs research-signals' `yt-subtitles.py` with
+  last30free's Python, `-I`, with the video id as YouTube spells it). One video at a time, a few seconds apart, and
+  90 seconds at most each (then the helper and what it started are stopped). The text is kept on the idea as
+  `fetched` in `ideas.json`, never in the research store, and labelled "YouTube subtitles fetched when you saved
+  this idea". A failure reads "Couldn't fetch subtitles" with **Retry** (the helper reports a video without captions
+  and a refused request the same way; a 429 in its log is named). **Fetch missing transcripts** on the Ideas tab
+  queues every saved YouTube idea still without one. A fetch left unfinished by a restart reads as failed. When a
+  fetch lands, `ideas.json` is re-read and only that idea's `fetched` is written, so an angle edited meanwhile is
+  kept and a removed idea stays removed. Instagram and TikTok are never fetched; their paste box is unchanged.
+  Order when more than one exists: the research store's transcript, then fetched subtitles, then a pasted one.
+  Paths: `LAST30FREE_DIR` (default `D:/Mits AI OS/Research-Assitant - Copy/last30free`), or `DASH_SUBTITLES_PYTHON`.
+- `ideas.json` is written whole: an ideas write keeps every other key in the file. The first write after this
+  change kept a copy at `reels-data/research/archive/ideas.before-transcript-fetch.json`.
 - **Copy brief** works for every saved idea, long-form included. It carries the source link, platform and format,
   your angle under its own heading, the measurements, and each text under what it is: search excerpt, caption or
   description, transcript (the first 250 words when longer). Long-form has no production workflow connected yet,

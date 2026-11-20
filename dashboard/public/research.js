@@ -120,6 +120,38 @@
   }
   const note = () => `<div class="r-note"><span>These filters search research already saved on this PC. They do not run a new search.</span><span>New research runs in Claude Code:</span><code>/research-signals &lt;topic&gt;</code><button class="btn small" data-r-copy="/research-signals ">Copy command</button></div>`;
 
+  // ---- YouTube transcripts fetched on save (lib/transcripts.mjs) ----
+  // where: 'card' on the Ideas tab, 'post' on a post's page. The helper cannot tell "no captions" from "YouTube
+  // refused", so a failure says only that it could not fetch, with Retry.
+  function fetchLine(f, ideaId, where, isRemote) {
+    if (!f) return '';
+    const btn = label => (!isRemote && ideaId && f.canFetch ? ` <button class="btn small" data-r-fetch="${e(ideaId)}">${label}</button>` : '');
+    if (f.state === 'fetching') return `<p class="r-fetch" role="status"><strong>Fetching the YouTube transcript…</strong> <span class="sub">One video at a time. This page updates by itself.</span></p>`;
+    if (f.state === 'ok') return where === 'card' ? `<p class="sub">Transcript fetched: ${n(f.words)} words of YouTube subtitles.</p>` : '';
+    if (f.state === 'failed') return `<p class="r-fetch"><span class="r-warn">${e(f.error)}</span>${btn('Retry')}</p>`;
+    return `<p class="r-fetch"><span class="sub">No transcript yet.</span>${btn('Fetch transcript')}</p>`;
+  }
+  // While a fetch runs, look again every few seconds. Text being typed in the page is kept across the redraw.
+  let pollTimer = null;
+  const fetchingNow = () => (detailId ? !!(detail && detail.fetch && detail.fetch.state === 'fetching') : tab === 'ideas' && !!ideas && ideas.some(x => x.fetch && x.fetch.state === 'fetching'));
+  function schedulePoll() { clearTimeout(pollTimer); pollTimer = fetchingNow() ? setTimeout(poll, 4000) : null; }
+  async function poll() {
+    pollTimer = null; if (!root || !root.isConnected) return;
+    if (busy) return schedulePoll();
+    const sig = () => JSON.stringify(detailId ? detail && detail.fetch : (ideas || []).map(x => x.fetch));
+    const before = sig(), forId = detailId;
+    try {
+      if (forId) { const d = await get('/api/research/post?' + new URLSearchParams({ id: forId, q: F.q || F.search })); if (detailId !== forId || busy) return schedulePoll(); detail = d; }
+      else if (tab === 'ideas') { const j = await get('/api/research/ideas'); if (detailId || tab !== 'ideas' || busy) return schedulePoll(); ideas = j.ideas; }
+    } catch { return schedulePoll(); }
+    if (sig() === before) return schedulePoll();
+    const typed = [...root.querySelectorAll('textarea[id], input[type="text"][id]')].map(x => [x.id, x.value]);
+    const focus = document.activeElement && root.contains(document.activeElement) ? [document.activeElement.id, document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
+    draw();
+    for (const [id, v] of typed) { const x = root.querySelector('#' + CSS.escape(id)); if (x && x.value !== v) x.value = v; }
+    if (focus && focus[0]) { const x = root.querySelector('#' + CSS.escape(focus[0])); if (x) { x.focus({ preventScroll: true }); try { x.setSelectionRange(focus[1], focus[2]); } catch { /* not a text field */ } } }
+  }
+
   // ---- Ideas ----
   const PF = p => `${PLATFORM[p.platform]} · ${FORMAT[p.format]}`;
   function ideaState(x) {
@@ -135,6 +167,7 @@
       const [cls, label, why] = ideaState(x), s = x.stage || { key: 'todo' };
       return `<section class="panel" aria-label="Idea: ${e(x.post.title || 'Untitled post')}"><div class="r-head"><div><button class="r-open" data-r-open="${e(x.post.id)}">${e(x.post.title || 'Untitled post')}</button><span class="r-tags"><span class="r-tag">${e(PF(x.post))}</span><span class="r-tag">${EVIDENCE[x.post.evidence]}</span></span></div>${s.key === 'todo' ? `<span class="pill ${cls}">${label}</span>` : stageBadge(s)}</div>
         <div><p class="r-kind">Your angle</p>${x.idea.angle ? `<div class="r-angle">${e(x.idea.angle)}</div>` : '<p class="sub">No angle written yet.</p>'}</div>
+        ${fetchLine(x.fetch, x.idea.id, 'card', remote)}
         <p class="sub">${s.key === 'used' ? (s.manual ? `Marked as used ${when(s.at)}.` : `${s.reel ? `“${e(s.reel.title)}” went` : 'Its reel went'} on Instagram${s.at ? ' ' + when(s.at) : ''}.`) : s.key === 'dropped' ? `Dropped ${when(s.at)}.` : e(why)}</p>
         <div class="row"><button class="btn small" data-r-open="${e(x.post.id)}" aria-label="Open idea and evidence: ${e(x.post.title || 'Untitled post')}">Open idea and evidence</button><button class="btn small" data-r-briefof="${i}">Copy brief</button>${x.exported && x.exported.pipelineId ? `<button class="btn small" data-r-pipeline="${e(x.exported.pipelineId)}" aria-label="Open in Pipeline: ${e(x.post.title || 'Untitled post')}">Open in Pipeline</button>` : ''}${closeButtons(x)}</div></section>`;
     };
@@ -144,7 +177,9 @@
     const head = k => `<h3 class="r-group-head">${UiIcon(STAGE[k][1])}${k === 'todo' ? 'To do' : STAGE[k][0]} <span class="count">${groups[k].length}</span></h3>`;
     const open = k => `<section class="r-stage r-stage-${k}" aria-label="${k === 'todo' ? 'To do' : STAGE[k][0]}">${head(k)}<p class="sub">${HELP[k]}</p>${groups[k].length ? `<div class="r-ideas">${groups[k].join('')}</div>` : '<p class="sub">None right now.</p>'}</section>`;
     const folded = k => groups[k].length ? `<details class="r-stage r-stage-${k}"><summary>${head(k)}<span class="sub">${HELP[k]}</span></summary><div class="r-ideas">${groups[k].join('')}</div></details>` : '';
-    return `<p class="sub">An idea moves on by itself: exporting it puts it In production, and it counts as Used once its reel is on Instagram. Research imports never change an idea.</p>${open('todo')}${open('production')}${folded('used')}${folded('dropped')}`;
+    const missing = ideas.filter(x => x.fetch && x.fetch.canFetch).length;
+    const fetchAll = !remote && missing ? `<div class="row"><button class="btn" data-r-fetchmissing="1">Fetch missing transcripts (${missing})</button><span class="sub">YouTube ideas only, one video at a time.</span></div>` : '';
+    return `<p class="sub">An idea moves on by itself: exporting it puts it In production, and it counts as Used once its reel is on Instagram. Research imports never change an idea.</p>${fetchAll}${open('todo')}${open('production')}${folded('used')}${folded('dropped')}`;
   }
   // Close or reopen an idea by hand (made elsewhere, or not making it). Not on the phone.
   function closeButtons(x) {
@@ -160,7 +195,7 @@
     const intro = '<p class="sub">Your own direction. It is kept apart from the source evidence below, and research imports never change it.</p>';
     if (d.remote) return `<section class="panel r-idea" aria-label="Your idea"><h3>Your idea</h3><p class="sub">${i ? 'Saved.' : 'Not saved.'} Ideas are saved, edited and exported on the PC.</p>${i && i.angle ? `<div class="r-angle">${e(i.angle)}</div>` : ''}</section>`;
     const field = `<div class="r-field r-angle-field"><label for="r-angle">Your angle or note${i ? '' : ' (optional)'}</label><textarea id="r-angle" rows="3" maxlength="2000" placeholder="For example: show the build live instead of describing it">${e(i ? i.angle : '')}</textarea></div>`;
-    if (!i) return `<section class="panel r-idea" aria-label="Your idea"><h3>Your idea</h3>${intro}${field}<div class="row"><button class="btn primary" data-r-save="1">Save idea</button><span class="sub">Works with or without a transcript.</span></div></section>`;
+    if (!i) return `<section class="panel r-idea" aria-label="Your idea"><h3>Your idea</h3>${intro}${field}<div class="row"><button class="btn primary" data-r-save="1">Save idea</button><span class="sub">${d.platform === 'youtube' && !d.transcriptText ? 'Saving also fetches its full YouTube transcript in the background.' : 'Works with or without a transcript.'}</span></div></section>`;
     let hand;
     if (x) hand = `<p>Exported ${when(x.at)} as <span class="mono">${e(x.file)}</span>. ${x.waiting ? 'The file is waiting in Instagram_transcript.' : 'The file is no longer in the drop folder: the script workflow has taken it, or it was moved.'}</p>
       ${x.angleChanged ? '<p class="r-warn">You changed your angle after exporting. The exported file still carries the earlier one.</p>' : ''}
@@ -230,8 +265,9 @@
       ${d.excerpts.map(x => `<div><p class="r-kind">Search excerpt (${x.kind === 'hook' ? 'opening lines' : 'passage around the match'}) from ${e(SOURCE[x.provider])}, batch ${e(x.batchId)}. ${x.complete === false ? 'Word for word, but only part of what the search returned was copied.' : 'Word for word as the search returned it.'} Not the full transcript.</p><div class="r-text">${segs(x.segments)}</div></div>`).join('')}
       ${d.excerpts.length ? '' : '<p class="sub">No search excerpt was saved for this post.</p>'}
       <div><p class="r-kind">Caption or description (written by the creator, not spoken)</p>${d.caption ? `<div class="r-text">${d.captionSegments ? segs(d.captionSegments) : e(d.caption)}</div>` : '<p class="sub">No caption was saved.</p>'}</div>
-      <div><p class="r-kind">Full transcript (spoken words)${d.manualTranscript ? ', pasted by you' : ''}</p>${d.manualTranscript ? manualTranscript(d) : d.transcriptText ? `<p class="sub">${n(d.transcript.words)} words, ${d.transcript.origin === 'subtitles' ? 'YouTube subtitles fetched through' : d.transcript.origin === 'whisper' ? 'speech-to-text through' : 'transcript held by'} ${e(SOURCE[d.transcript.provider])}${d.transcript.capturedAt ? ', captured ' + when(d.transcript.capturedAt) : ', capture time unknown'}.</p>
-        <div class="row" style="margin:8px 0"><button class="btn small" data-r-copytranscript="1">Copy transcript</button></div><div class="r-text" id="r-transcript">${e(d.transcriptText)}</div>` : `<p><strong>No transcript was fetched for this post.</strong> <span class="sub">Excerpts and captions above are not a transcript.</span></p>${pasteBox(d, '')}`}</div></section>`;
+      <div><p class="r-kind">Full transcript (spoken words)${d.manualTranscript ? ', pasted by you' : ''}</p>${d.manualTranscript ? manualTranscript(d) : d.transcriptText ? `<p class="sub">${n(d.transcript.words)} words, ${d.fetchedOnSave ? `YouTube subtitles fetched when you saved this idea, ${when(d.transcript.capturedAt)}` : `${d.transcript.origin === 'subtitles' ? 'YouTube subtitles fetched through' : d.transcript.origin === 'whisper' ? 'speech-to-text through' : 'transcript held by'} ${e(SOURCE[d.transcript.provider])}${d.transcript.capturedAt ? ', captured ' + when(d.transcript.capturedAt) : ', capture time unknown'}`}.</p>
+        <div class="row" style="margin:8px 0"><button class="btn small" data-r-copytranscript="1">Copy transcript</button></div><div class="r-text" id="r-transcript">${e(d.transcriptText)}</div>` : d.fetch && d.fetch.state === 'fetching' ? fetchLine(d.fetch, d.idea && d.idea.id, 'post', d.remote)
+        : `<p><strong>No transcript was fetched for this post.</strong> <span class="sub">Excerpts and captions above are not a transcript.</span></p>${fetchLine(d.fetch, d.idea && d.idea.id, 'post', d.remote)}${pasteBox(d, '')}`}</div></section>`;
     const inputs = `<section class="panel" aria-label="Builder inputs"><h3>Original records</h3><p class="sub">What the batch was built from, kept so a copied number can be checked against its source.</p>
       ${d.builderInputs.map(b => `<div><p><span class="mono">${e(b.batchId)}</span> · ${e(SOURCE[b.provider])} · ${b.kept ? `kept in <span class="mono">${e(b.folder)}</span>` : '<span class="r-warn">not kept for this batch</span>'}</p>
         ${b.records.length ? b.records.map(r => `<details><summary class="sub">${e(r.what)}</summary><pre class="r-json">${e(JSON.stringify(r.data, null, 2))}</pre></details>`).join('') : b.kept ? '<p class="sub">This post was not found in the kept records.</p>' : ''}</div>`).join('') || '<p class="sub">No batch is recorded for this post.</p>'}</section>`;
@@ -243,6 +279,7 @@
     const head = `<div class="r-head"><h2>Research</h2><span class="seg r-seg" role="group" aria-label="Research views"><button data-r-tab="signals" aria-current="${tab === 'signals'}">Signals</button><button data-r-tab="ideas" aria-current="${tab === 'ideas'}">Ideas</button><button data-r-tab="searches" aria-current="${tab === 'searches'}">Searches</button></span></div>`;
     const err = error ? `<div class="r-fail" role="alert">Could not read saved research: ${e(error)}</div>` : '';
     root.innerHTML = detailId ? err + vPost() : head + err + (tab === 'signals' ? vSignals() : tab === 'ideas' ? vIdeas() : vSearches());
+    schedulePoll();
   }
 
   function mount(app) {
@@ -278,6 +315,8 @@
     else if (d.rTredit) { trEdit = true; draw(); const t = root.querySelector('#r-trtext'); if (t) t.focus(); }
     else if (d.rTrcancel) { trEdit = false; draw(); }
     else if (d.rTrremove) act({ type: 'remove-transcript', ideaId: detail.idea.id }, '#r-trtext');
+    else if (d.rFetch) act({ type: 'fetch-transcript', ideaId: d.rFetch });
+    else if (d.rFetchmissing) act({ type: 'fetch-missing' });
     else if (d.rCopytranscript) copyText(detail.transcriptText).then(() => toast('Transcript copied'), () => toast('Copy was blocked; select the text instead'));
   });
   document.addEventListener('submit', ev => { if (ev.target.id === 'r-form') { ev.preventDefault(); readForm(); loadList(); } });
