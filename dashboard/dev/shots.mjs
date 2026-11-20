@@ -23,7 +23,7 @@ for (const [name, w, h] of [['desk', 1280, 900], ['phone', 390, 844]]) {
   await go('schedule'); await shot('5-schedule');
   await go('research'); await page.waitForSelector('.r-seg'); await shot('6-research-signals');
   await page.selectOption('#r-window', 'all'); await page.waitForTimeout(300);
-  const saved = page.locator('tr:has(.r-saved) .r-open').first(); if (await saved.count()) { await saved.click(); await page.waitForSelector('#r-title'); await shot('7-research-post-with-idea'); await page.click('[data-r-back]'); }
+  const saved = page.locator('tr:has(.r-status) .r-open').first(); if (await saved.count()) { await saved.click(); await page.waitForSelector('#r-title'); await shot('7-research-post-with-idea'); await page.click('[data-r-back]'); }
   await page.click('[data-r-tab="ideas"]'); await shot('8-research-ideas');
   await page.click('[data-r-tab="searches"]'); await shot('9-research-searches');
   await ctx.close();

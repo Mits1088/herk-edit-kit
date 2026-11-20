@@ -1,6 +1,6 @@
 ---
 name: reel-reviewer
-description: Independently reviews a finished Reel batch for /rewrite-reels in Claude Code. Only this review can award READY TO RECORD.
+description: Independently reviews a finished Reel batch for /rewrite-reels, and the captions /approve-reel writes, in Claude Code. Only this review can award READY TO RECORD.
 tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch
 model: sonnet
 skills:

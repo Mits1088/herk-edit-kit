@@ -2,20 +2,21 @@
 name: approve-reel
 description: Approve a finished Reel script and create the resource its comment CTA promises. Use for /approve-reel, /approvereel, or when Mits names a chosen script, such as "approve reel 2 version A".
 user_invocable: true
-argument-hint: "[batch, Reel number or title, version A or B]"
+argument-hint: "[batch, Reel number or title, version A, B or C]"
 ---
 
 # /approve-reel
 
 Only scripts Mits likes get recorded, so a resource is built only after one is approved. Never post, message, publish or set up delivery. Never upload to Gumroad either: since 2026-11-16 Mits reviews every resource PDF in the content dashboard first, and the dashboard uploads it only when he presses its separate upload button (step 9).
 
-Input: a Reel number or title and a version, plus a batch. Several Reels can be approved at once. Use the newest batch in `D:/herk-edit-kit/instagram_scripts_output/` if none is named. If the version is missing, ask for it in one line.
+Input: a Reel number or title and a version (A, B, or C for Mits's own script), plus a batch. Several Reels can be approved at once. Use the newest batch in `D:/herk-edit-kit/instagram_scripts_output/` if none is named. If the version is missing, ask for it in one line.
 
 ## 1. Save the approved script
 
 1. Read the Reel from `D:/herk-edit-kit/instagram_scripts_output/<batch-id>/`: its newest `.txt` file, or the `.md` file in an older batch. If a `-v2` or later file exists, that one is current.
 2. If its status is REVIEW REQUIRED, show what needs checking and stop, unless Mits has said to approve it anyway. If so, keep those checks in the approved file.
-3. Save the chosen script, the Instagram, TikTok and YouTube Shorts captions, the search phrases and the CTA line to `D:/herk-edit-kit/instagram_scripts_output/approved/<batch-id>/<reel-file-name>-version-<a or b>.txt`, as plain text with no Markdown symbols. Start with a `Status at approval: <status>` line, then sections whose headings sit between lines of `=` signs, as in the exported Reel files, named exactly `SCRIPT`, `INSTAGRAM CAPTION`, `TIKTOK CAPTION`, `YOUTUBE SHORTS` and `CTA`. `ig-insights` reads these names. Never overwrite a file.
+3. The approved file is `D:/herk-edit-kit/instagram_scripts_output/approved/<batch-id>/<reel-file-name>-version-<a, b or c>.txt`: plain text with no Markdown symbols, starting with a `Status at approval: <status>` line, then sections whose headings sit between lines of `=` signs, as in the exported Reel files, named exactly `SCRIPT`, `INSTAGRAM CAPTION`, `TIKTOK CAPTION`, `YOUTUBE SHORTS` and `CTA`. `ig-insights` and the content dashboard read these names. Build it as a draft in `D:/herk-edit-kit/reels-data/outputs/<batch-id>/.work/approve-<NN>-<a, b or c>.txt`, write and review the captions there (section 3), then save it to the approved path. Never overwrite an approved file.
+   **Version C** is Mits's own script, written in the content dashboard (from scratch, or by combining and changing A and B). Its words are in `D:/herk-edit-kit/reels-data/content/version-c/<batch date>-<NNN>-<reel number, two digits>.txt` (the dashboard's approval command names the exact file). Use those words exactly as the `SCRIPT`; never rewrite or "improve" them. If the file is missing or empty, stop and say so. The CTA, search phrases and caption notes still come from the batch file, as for A and B. If Version C uses a different keyword or resource from the batch's CTA, or makes a claim that the caption notes, the batch's records or `corrections.md` contradict, list the mismatches and stop for Mits to decide. A Version C claim the caption notes simply do not cover is never repeated in the captions; list it in your reply as unchecked. The batch's review status applies to Versions A and B and the caption notes: say plainly in your reply that Version C's script was not through the independent review. (In an older batch that already has reviewed captions, a Version C promise the captions or CTA do not make is a mismatch too: list it and stop, and do not edit those captions yourself.)
 4. In the `SCRIPT` section only, put every sentence on its own line and leave a blank line between the script's paragraphs, so Mits can read it while recording. Do not change any words, and keep a quoted line such as an example prompt whole on one line. Captions keep their normal layout.
 
 ## 2. Create the resource
@@ -63,42 +64,58 @@ Add this line to `resources.md`, with the delivery method as `to confirm` unless
 
 When the reel is published later and its link appears in `links.json`, add the `url` to the `.pdf.json` and rebuild, so the guide links back to the video.
 
-## 3. YouTube Shorts and TikTok captions
+## 3. Captions for Instagram, TikTok and YouTube Shorts
 
-Batches from `/rewrite-reels` now include reviewed Instagram, TikTok and YouTube Shorts captions, shared by both versions. Copy them into the approved file unchanged and skip the rest of this step.
+Since 2026-11-18, `/rewrite-reels` no longer writes captions. Its Reel files carry a `CAPTION NOTES` section instead: verified facts, each with its source. You write the three captions here, from the script Mits approved, so they always match what he records.
 
-Only an older batch with `Caption A` and `Caption B` lacks them. The same video is posted to YouTube Shorts and TikTok, so append two sections to the approved file after the Instagram caption, written as plain text in the same heading style (no `##` or `**`). Base them on the approved script and caption only: no new claims, figures or tools. Everything in `corrections.md` applies here too. Plain British English, no emojis, no em dashes, no links (neither platform makes caption links clickable on Shorts or TikTok videos).
+**Older batches.** If the batch file already has reviewed `INSTAGRAM CAPTION`, `TIKTOK CAPTION` and `YOUTUBE SHORTS` sections, copy them into the approved file unchanged and skip the rest of this section. A batch with only `Caption A` and `Caption B` has no notes: write the TikTok and YouTube Shorts captions below from the approved script and the Instagram caption.
 
-Pick two or three search phrases first: the words someone would actually type to find this video, such as "claude code plugins" or "claude skills". Use them naturally in the text, not as stuffed lists.
+**1. Load and read.** Load `ig-caption` and `ig-human` with the Skill tool. Read the batch's Reel file in `D:/herk-edit-kit/reels-data/outputs/<batch-id>/` (the `reel-NN-*.md` file) for its `CAPTION NOTES`, and its Final Comparison for the `Search phrases`, `CTA` and `Factual warnings` lines. Read `corrections.md`. These rules win over `ig-caption` where they differ.
+
+**2. Use only checked facts.** A caption may state only what the approved script says or what a caption note lists, at the scope the note words it. Never add a figure, tool, command or claim from anywhere else, including your own knowledge. If a caption would be weak without a fact the notes lack, leave it out and say so in your reply.
+
+**3. Rules for all three captions**
+
+1. Absolutely no emojis, decorative symbols, em dashes, excessive punctuation or unnecessary formatting.
+2. No links or bare URLs, because none of the three platforms makes them clickable. Verified install commands and prompts from the notes are allowed.
+3. Complement the video rather than summarising it. Add what helps someone who has already watched: the exact name, the command, the setup cost, a quick test, or the caveat that was kept out of the script.
+4. Natural, conversational British English in short paragraphs. No marketing language, clickbait, exaggerated claims, forced urgency or generic motivation.
+5. One ask, matching the script's CTA, with the same keyword on every platform.
+6. Hashtags are topic labels on their own last line, never `#fyp`, `#foryou`, `#viral`, `#explorepage`, `#trending` or `#reels`.
+7. Write each caption for its platform. Do not paste the Instagram caption three times.
+8. No generic "follow for more" ending. Tie any follow ask to the video's topic.
+9. Use the search phrases naturally: the main one in the Instagram and TikTok first lines and in the YouTube title, the others in the body. Never stuff keyword lists. Keep names in their normal spelling.
+
+**4. Instagram caption** (`ig-caption` Job A: the video carries the hook). First line under 125 characters, the part shown before "more", stating the payoff with the main search phrase. Body of 50 to 100 words, not counting hashtags, unless useful commands need more. The ask, then 3 to 5 hashtags.
+
+**5. TikTok caption.** First line under 100 characters, a hook-style line built on the main search phrase, because TikTok cuts the caption early. One or two short paragraphs of specifics, 25 to 80 words without hashtags. The ask, then 3 to 5 hashtags.
+
+**6. YouTube Shorts**, laid out as plain text exactly like this:
 
 ```
-## YouTube Shorts
+Title: (under 70 characters, main search phrase near the start, says what the viewer gets, no hashtags)
 
-**Title:** (under 70 characters, main search phrase near the start, says what the viewer gets; no clickbait the video doesn't pay off)
+Description:
+(One sentence restating the payoff with the main search phrase, because it shows in search.
+Two or three short lines of specifics. Then the ask.
+Last line: 3 hashtags, the most specific first; #Shorts may be the third if it fits.
+30 to 100 words without hashtags.)
 
-**Description:**
-(Line 1: one sentence that restates the payoff with the main search phrase; it shows in search results.
-Then two or three short lines with the specifics from the Instagram caption, such as the repo name or the command.
-Then the ask.
-Last line: 3 hashtags, the first being #Shorts only if it fits, otherwise the most specific topic tag.)
-
-**Tags:** (8 to 12 comma-separated search phrases, most specific first, under 400 characters in total)
-
-## TikTok
-
-**Caption:**
-(Line 1: hook-style line with the main search phrase, under 100 characters, because TikTok cuts the caption early.
-One or two short lines of specifics.
-The ask.
-3 to 5 hashtags: specific topic tags only, never #fyp, #foryou or #viral.)
-
-**Search phrases:** (the 2 or 3 phrases used, for reference)
+Tags: (8 to 12 comma-separated search phrases, most specific first, under 400 characters)
 ```
 
-The ask: if the CTA is Comment KEYWORD, keep the same keyword on both platforms and add under each section `Delivery on this platform: to confirm`, because the Instagram delivery tool may not cover YouTube or TikTok comments. Otherwise reuse the Instagram ask.
+**7. Delivery.** If the CTA is Comment KEYWORD, add `Delivery on this platform: to confirm` as the last line of the TikTok caption section and of the YouTube Shorts section, unless `resources.md` gives the delivery for that platform, because the Instagram delivery tool may not cover YouTube or TikTok comments.
 
-If the approved file already has these sections, leave them alone unless Mits asks for a rewrite.
+**8. Lint.** Write the draft file, then run:
+
+```bash
+python -I -X utf8 D:/herk-edit-kit/.agents/skills/approve-reel/check_captions.py <draft> --search "<the batch's search phrases>"
+```
+
+Fix every FAIL and review each WARN.
+
+**9. Independent caption review.** You wrote these captions, so someone else checks them. In terminal Claude Code, launch the `reel-reviewer` subagent with: `Run the reel-review skill, caption pass, on <draft path>. Batch <batch-id>, Reel file <reel file path>.` If subagents are unavailable (for example in Codex or a headless mission), run the `reel-review` skill's caption pass yourself, treating the captions as someone else's work, and say so in your reply. Put the line it returns as the approved file's second line, directly under `Status at approval:`: `Caption review: passed`, or `Caption review: needs manual review: <what to check>`. Then save the approved file.
 
 ## 4. Reply
 
-Give the approved file path, the PDF's filename and path, its cover preview path, and anything left out. Say the PDF is waiting for his approval in the content dashboard and has not been uploaded. Then list what Mits does next: review and approve the guide in the dashboard, then upload it from the dashboard (once Gumroad verifies the upload, the dashboard marks the keyword `live` in `resources.md` by itself), and decide how YouTube and TikTok commenters get it.
+Give the approved file path, the caption review result (with anything it says to check), the PDF's filename and path, its cover preview path, and anything left out. Say the PDF is waiting for his approval in the content dashboard and has not been uploaded. Then list what Mits does next: review and approve the guide in the dashboard, then upload it from the dashboard (once Gumroad verifies the upload, the dashboard marks the keyword `live` in `resources.md` by itself), and decide how YouTube and TikTok commenters get it.

@@ -99,7 +99,9 @@ export async function accounts(cfg, { fresh = false } = {}) {
 export function gate(item) {
   const reasons = []; const p = item.project; const r = item.resource || {};
   if (item.videoOnly || !(item.files && item.files.approved)) reasons.push('No approved script is linked to this video.');
-  if (/PENDING REVIEW|REVIEW REQUIRED/i.test(item.review || '')) reasons.push('The script still requires review.');
+  // REVIEW REQUIRED is the batch's status. approve-reel saves an approved file from such a batch only when Mits
+  // says to approve it anyway, so that file is his sign-off. PENDING REVIEW (no independent review yet) always blocks.
+  if (/PENDING REVIEW/i.test(item.review || '') || (/REVIEW REQUIRED/i.test(item.review || '') && !(item.files && item.files.approved))) reasons.push('The script still requires review.');
   if (!p) reasons.push('There is no video project, so there is no final video.');
   else if (!p.approval || !p.finalExists) reasons.push('The final video is not approved yet. Approve a QA-passed candidate first.');
   else {
@@ -123,7 +125,7 @@ export function finalVideo(cfg, item) {
     let seconds = null; try { const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', full], { encoding: 'utf8', timeout: 8000, windowsHide: true }); const n = Number(String(r.stdout || '').trim()); if (r.status === 0 && n > 0) seconds = Math.round(n * 10) / 10; } catch { /* ffprobe is optional */ }
     cache[tag] = { sha: sha(readFileSync(full)), seconds };
   }
-  return { file: p.finalFile, full, size: st.size, sha: cache[tag].sha, seconds: cache[tag].seconds, matchesApproval: /^[a-f0-9]{64}$/.test(p.approval.sha || '') && p.approval.sha === cache[tag].sha, approvedAt: p.approval.at || null };
+  return { file: p.finalFile, full, size: st.size, sha: cache[tag].sha, seconds: cache[tag].seconds, matchesApproval: /^[a-f0-9]{64}$/.test(p.approval.sha || '') && p.approval.sha === cache[tag].sha, approvedAt: p.approval.at || null, from: (p.approval.kind === 'external-edit' ? p.approval.file : p.approval.candidate) || null, external: p.approval.kind === 'external-edit' };
 }
 
 // ---- time: the page gives a wall-clock time in Europe/London ----

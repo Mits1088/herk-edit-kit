@@ -15,33 +15,39 @@
   const SOURCE = { 'signal-room': 'Signal Room', last30free: 'last30free' };
   const SOURCE_KIND = { 'signal-room': 'tracked creators', last30free: 'discovery' };
   const FIELD = { transcript: 'transcript', excerpt: 'search excerpt', title: 'title', caption: 'caption' };
-  const EVIDENCE = { transcript: 'Full transcript', excerpt: 'Search excerpt only', caption: 'Caption only', none: 'Title only' };
+  const EVIDENCE = { transcript: 'Full transcript', manual: 'Transcript pasted by you', excerpt: 'Search excerpt only', caption: 'Caption only', none: 'Title only' };
   const WINDOW = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months', all: 'any date' };
-  const DEFAULTS = { search: '', q: '', platform: '', format: 'short', window: '30', sort: 'speed', limit: '50' };
+  const DEFAULTS = { search: '', q: '', platform: '', format: 'short', window: '30', sort: 'speed', hideUsed: '', limit: '50' };
+  // An idea's stage: label and icon. Worked out on the server (lib/ideas.mjs ideaStage).
+  const STAGE = { todo: ['Saved idea', 'bookmark'], production: ['In production', 'progress'], used: ['Used', 'check'], dropped: ['Dropped', 'dropped'] };
+  // The badge stays short so a row keeps its height; the reel's name is in the tooltip and on the Ideas tab.
+  const stageBadge = s => { if (!s) return ''; const reel = s.reel && s.key !== 'todo' ? (typeof s.reel === 'string' ? s.reel : s.reel.title) : '';
+    return `<span class="r-status r-st-${s.key}"${reel ? ` title="Reel: ${e(reel)}"` : ''}>${UiIcon(STAGE[s.key][1])}${STAGE[s.key][0]}</span>`; };
 
-  let root = null, tab = 'signals', F = { ...DEFAULTS }, data = null, searches = null, ideas = null, detail = null, detailId = null, error = null, returnTo = null, returnY = 0, removeAsk = false, busy = false;
+  let remote = false, root = null, tab = 'signals', F = { ...DEFAULTS }, data = null, searches = null, ideas = null, detail = null, detailId = null, error = null, returnTo = null, returnY = 0, removeAsk = false, busy = false, trEdit = false;
   const get = async url => { const r = await fetch(url); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Request failed'); return j; };
 
   async function loadList() { error = null; try { data = await get('/api/research?' + new URLSearchParams(F)); } catch (x) { error = x.message; } draw(); }
-  async function loadIdeas() { error = null; try { ideas = (await get('/api/research/ideas')).ideas; } catch (x) { error = x.message; } draw(); }
+  async function loadIdeas() { error = null; try { const j = await get('/api/research/ideas'); ideas = j.ideas; remote = !!j.remote; } catch (x) { error = x.message; } draw(); }
   const LOAD = { signals: () => loadList(), searches: () => loadSearches(), ideas: () => loadIdeas() };
   // One saved-idea action. A click is ignored while a request is in flight, and every action is repeat-safe on the server.
   async function act(body, focusSel) {
     if (busy) return; busy = true;
     try { const r = await fetch('/api/research/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); toast(r.ok ? j.message : j.error || 'That did not work'); }
     catch (x) { toast('That did not work: ' + x.message); }
-    busy = false; removeAsk = false; data = null; ideas = null;
+    busy = false; removeAsk = false; trEdit = false; data = null; ideas = null;
     if (detailId) { try { detail = await get('/api/research/post?' + new URLSearchParams({ id: detailId, q: F.q || F.search })); } catch (x) { error = x.message; } draw(); const f = focusSel && root.querySelector(focusSel); if (f) f.focus(); }
+    else if (tab === 'ideas') await loadIdeas();
   }
   async function loadSearches() { error = null; try { searches = (await get('/api/research/searches')).searches; } catch (x) { error = x.message; } draw(); }
   async function openPost(id) {
-    returnTo = id; returnY = window.scrollY; detailId = id; detail = null; removeAsk = false; draw(); window.scrollTo(0, 0);
+    returnTo = id; returnY = window.scrollY; detailId = id; detail = null; removeAsk = false; trEdit = false; draw(); window.scrollTo(0, 0);
     try { detail = await get('/api/research/post?' + new URLSearchParams({ id, q: F.q || F.search })); } catch (x) { error = x.message; detailId = null; }
     draw(); const h = root && root.querySelector('#r-title'); if (h) h.focus();
   }
 
   // ---- pieces ----
-  const tags = (r, saved) => `<span class="r-tags">${saved ? '<span class="r-tag r-saved">Saved idea</span>' : ''}${r.providers.map(p => `<span class="r-tag" title="${e(SOURCE_KIND[p])}">${e(SOURCE[p] || p)} · ${e(SOURCE_KIND[p] || '')}</span>`).join('')}</span>`;
+  const tags = r => `<span class="r-tags">${r.providers.map(p => `<span class="r-tag" title="${e(SOURCE_KIND[p])}">${e(SOURCE[p] || p)} · ${e(SOURCE_KIND[p] || '')}</span>`).join('')}</span>`;
   const fresh = m => m.measuredAt ? `<span class="${m.stale ? 'r-warn' : ''}">Measured ${ago(m.ageDays)}${m.stale ? ' (stale)' : ''}</span>` : '<span class="r-warn">Measurement time unknown</span>';
   function engagementCell(r) {
     const g = r.engagement; if (!g) return '<span class="sub">No count recorded</span>';
@@ -72,8 +78,8 @@
   function table(rows, caption) {
     return `<div class="r-frame"><table class="r-table r-list r-metrics"><caption class="sub" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">${e(caption)}</caption>
     <thead><tr><th scope="col">Post</th><th scope="col">Published</th><th scope="col" class="num">Views</th><th scope="col" class="num" title="Views divided by the post's age when it was measured">Avg views/day</th><th scope="col" class="num">Likes</th><th scope="col" class="num">Comments</th><th scope="col" class="num">Shares</th><th scope="col" class="num" title="(likes + comments) ÷ views">Engagement</th><th scope="col" class="num" title="shares ÷ views">Share rate</th><th scope="col" class="num" title="last30free's original score; compare within one platform">Score</th><th scope="col" class="num" title="Since the previous measurement by the same source">Growth</th><th scope="col">Last checked</th></tr></thead><tbody>
-    ${rows.map(r => { const m = r.metrics || {}; return `<tr><td class="post" data-label="Post"><button class="r-open" data-r-open="${e(r.id)}">${e(r.title || 'Untitled post')}</button>
-      <span class="sub">${e(PLATFORM[r.platform])} · ${e(r.creator.handle ? '@' + String(r.creator.handle).replace(/^@/, '') : r.creator.name || 'Creator unknown')} · ${dur(r.durationSeconds)}</span>${tags(r, data.ideaPosts.includes(r.id))}${r.match && !r.match.matched ? `<span class="sub">“${e(r.match.query)}” not found in the saved text</span>` : ''}</td>
+    ${rows.map(r => { const m = r.metrics || {}, st = (data.ideaStage || {})[r.id]; return `<tr${st ? ` class="r-row-${st.key}"` : ''}><td class="post" data-label="Post">${stageBadge(st)}<button class="r-open" data-r-open="${e(r.id)}">${e(r.title || 'Untitled post')}</button>
+      <span class="sub">${BrandIcon(r.platform)}${e(PLATFORM[r.platform])} · ${e(r.creator.handle ? '@' + String(r.creator.handle).replace(/^@/, '') : r.creator.name || 'Creator unknown')} · ${dur(r.durationSeconds)}</span>${tags(r)}${r.match && !r.match.matched ? `<span class="sub">“${e(r.match.query)}” not found in the saved text</span>` : ''}</td>
       <td class="nowrap" data-label="Published">${publishedCell(r)}</td>
       ${cell(big(m.views), 'Views')}${cell(big(m.avgViewsPerDay), 'Avg views/day')}${cell(big(m.likes), 'Likes')}${cell(big(m.comments), 'Comments')}${cell(big(m.shares), 'Shares')}
       ${cell(pct(m.engagementRate), 'Engagement')}${cell(pct(m.shareRate), 'Share rate')}${cell(r.score ? `${n(r.score.value)}<span class="sub">${e(PLATFORM[r.score.platform])}${r.score.measuredAt && r.score.measuredAt !== (r.metrics || {}).measuredAt ? ` · from ${day(r.score.measuredAt)}` : ''}</span>` : null, 'Score')}
@@ -98,13 +104,14 @@
       <div class="r-field wide full"><label for="r-q">Words in the saved text</label><input id="r-q" name="q" type="search" value="${e(f.q)}" placeholder='n8n, or "claude code" for an exact phrase' autocomplete="off"></div>
       <div class="r-actions"><button class="btn primary" type="submit">Filter saved research</button><button class="btn" type="button" data-r-reset="1">Reset filters</button>
       <a class="btn" href="/api/research/export.csv?${e(new URLSearchParams({ ...f, limit: '' }).toString())}" download>Export CSV</a>
+      <label class="r-check" for="r-hideused"><input type="checkbox" id="r-hideused" name="hideUsed" value="1" ${f.hideUsed ? 'checked' : ''}>Hide used and dropped ideas</label>
       <span class="sub">${data.scoreNeedsPlatform ? '<span class="r-warn">Scores are only comparable within one platform: choose a platform to sort by score. Sorted by average views per day instead.</span>' : f.sort === 'outlier' ? 'Creator outlier compares a post with its own creator. Posts with only an unstable signal, or none, sort last.' : 'Every number in a row comes from one measurement. A dash means the source did not give it.'}</span></div></form>`;
     // One quiet line per search, so a gap is not read as "nothing found". The exact errors live on the Searches tab.
     const byQuery = new Map(); for (const x of data.failures) { if (!byQuery.has(x.query)) byQuery.set(x.query, { at: x.retrievedAt, lanes: [] }); byQuery.get(x.query).lanes.push(x.laneLabel); }
     const fails = [...byQuery].map(([q, v]) => `<p class="r-gap" role="status">Latest “${e(q)}” search (${when(v.at)}): ${e(v.lanes.join(', '))} did not run, so ${v.lanes.length === 1 ? 'that source has' : 'those sources have'} no new results. <button class="r-link" data-r-tab="searches">See why</button></p>`).join('')
       + data.partials.map(x => `<p class="r-gap" role="status">Latest “${e(x.query)}” search: ${e(x.laneLabel)} returned partial results (its paid run stopped early); what it returned is included. <button class="r-link" data-r-tab="searches">See why</button></p>`).join('');
     const hidden = [t.historical ? `${t.historical} published before the ${win}` : '', t.undated && f.window !== 'all' ? `${t.undated} with no publication date` : ''].filter(Boolean);
-    const summary = `<p class="r-summary" role="status"><strong>${t.recent}</strong> ${FORMAT[f.format].toLowerCase()} ${t.recent === 1 ? 'post' : 'posts'} ${f.window === 'all' ? 'with a publication date' : `published in the ${win}`}, sorted by ${e(SORT[data.sortedBy].toLowerCase())}${data.rows.length < t.recent ? `, top ${data.rows.length} shown` : ''}.${hidden.length ? ` Not listed: ${hidden.join(' and ')}${f.window !== 'all' ? ` <button class="r-link" data-r-window="all">Show any date</button>` : ''}.` : ''} Saved posts stay stored when they leave this view.</p>`;
+    const summary = `<p class="r-summary" role="status"><strong>${t.recent}</strong> ${FORMAT[f.format].toLowerCase()} ${t.recent === 1 ? 'post' : 'posts'} ${f.window === 'all' ? 'with a publication date' : `published in the ${win}`}, sorted by ${e(SORT[data.sortedBy].toLowerCase())}${data.rows.length < t.recent ? `, top ${data.rows.length} shown` : ''}.${hidden.length ? ` Not listed: ${hidden.join(' and ')}${f.window !== 'all' ? ` <button class="r-link" data-r-window="all">Show any date</button>` : ''}.` : ''} Saved posts stay stored when they leave this view.${data.hiddenUsed ? ` ${data.hiddenUsed} used or dropped ${data.hiddenUsed === 1 ? 'idea is' : 'ideas are'} hidden. <button class="r-link" data-r-showused="1">Show them</button>` : ''}</p>`;
     const list = data.rows.length ? table(data.rows, `${FORMAT[f.format]}, ${win}`) : `<div class="panel"><p>No saved ${FORMAT[f.format].toLowerCase()} post matches these filters${f.window === 'all' ? '' : ` in the ${win}`}.</p></div>`;
     const more = (data.more ? `<div class="row"><button class="btn" data-r-more="1">Show ${Math.min(data.pageSize, data.more)} more</button><span class="sub">${data.more} more match these filters.</span></div>` : '')
       + (!data.more && data.capped ? `<p class="sub">${data.capped.toLocaleString('en-GB')} more match these filters than one page can list. Narrow the filters, or export the full table as CSV.</p>` : '');
@@ -123,14 +130,28 @@
   function vIdeas() {
     if (!ideas) return '<p class="sub">Loading saved ideas…</p>';
     if (!ideas.length) return '<div class="panel"><h3>No idea is saved yet</h3><p>Open a post in Signals and choose Save idea. A post can be saved with or without a transcript.</p></div>';
-    return `<p class="sub">Your saved ideas, newest first. Your angle is your own direction; the source evidence stays on the post's page. Research imports never change an idea.</p><div class="r-ideas">` + ideas.map((x, i) => {
+    const cardOf = (x, i) => {
       if (x.missing) return `<section class="panel"><h3>Source post not found</h3><p class="sub">The post <span class="mono">${e(x.idea.postId)}</span> is no longer in the research store. Your angle is kept.</p><div class="r-angle">${e(x.idea.angle || 'No angle written.')}</div></section>`;
-      const [cls, label, why] = ideaState(x);
-      return `<section class="panel" aria-label="Idea: ${e(x.post.title || 'Untitled post')}"><div class="r-head"><div><button class="r-open" data-r-open="${e(x.post.id)}">${e(x.post.title || 'Untitled post')}</button><span class="r-tags"><span class="r-tag">${e(PF(x.post))}</span><span class="r-tag">${EVIDENCE[x.post.evidence]}</span></span></div><span class="pill ${cls}">${label}</span></div>
+      const [cls, label, why] = ideaState(x), s = x.stage || { key: 'todo' };
+      return `<section class="panel" aria-label="Idea: ${e(x.post.title || 'Untitled post')}"><div class="r-head"><div><button class="r-open" data-r-open="${e(x.post.id)}">${e(x.post.title || 'Untitled post')}</button><span class="r-tags"><span class="r-tag">${e(PF(x.post))}</span><span class="r-tag">${EVIDENCE[x.post.evidence]}</span></span></div>${s.key === 'todo' ? `<span class="pill ${cls}">${label}</span>` : stageBadge(s)}</div>
         <div><p class="r-kind">Your angle</p>${x.idea.angle ? `<div class="r-angle">${e(x.idea.angle)}</div>` : '<p class="sub">No angle written yet.</p>'}</div>
-        <p class="sub">${e(why)}</p>
-        <div class="row"><button class="btn small" data-r-open="${e(x.post.id)}" aria-label="Open idea and evidence: ${e(x.post.title || 'Untitled post')}">Open idea and evidence</button><button class="btn small" data-r-briefof="${i}">Copy brief</button>${x.exported && x.exported.pipelineId ? `<button class="btn small" data-r-pipeline="${e(x.exported.pipelineId)}" aria-label="Open in Pipeline: ${e(x.post.title || 'Untitled post')}">Open in Pipeline</button>` : ''}</div></section>`;
-    }).join('') + '</div>';
+        <p class="sub">${s.key === 'used' ? (s.manual ? `Marked as used ${when(s.at)}.` : `${s.reel ? `“${e(s.reel.title)}” went` : 'Its reel went'} on Instagram${s.at ? ' ' + when(s.at) : ''}.`) : s.key === 'dropped' ? `Dropped ${when(s.at)}.` : e(why)}</p>
+        <div class="row"><button class="btn small" data-r-open="${e(x.post.id)}" aria-label="Open idea and evidence: ${e(x.post.title || 'Untitled post')}">Open idea and evidence</button><button class="btn small" data-r-briefof="${i}">Copy brief</button>${x.exported && x.exported.pipelineId ? `<button class="btn small" data-r-pipeline="${e(x.exported.pipelineId)}" aria-label="Open in Pipeline: ${e(x.post.title || 'Untitled post')}">Open in Pipeline</button>` : ''}${closeButtons(x)}</div></section>`;
+    };
+    const groups = { todo: [], production: [], used: [], dropped: [] };
+    ideas.forEach((x, i) => groups[x.missing ? 'todo' : (x.stage || { key: 'todo' }).key].push(cardOf(x, i)));
+    const HELP = { todo: 'Saved, not made yet.', production: 'Exported to the script workflow, so the reel is in your Pipeline.', used: 'Its reel is on Instagram, or you marked it used. Kept as a record of what inspired what.', dropped: 'Ideas you decided not to make. Reopen one to bring it back.' };
+    const head = k => `<h3 class="r-group-head">${UiIcon(STAGE[k][1])}${k === 'todo' ? 'To do' : STAGE[k][0]} <span class="count">${groups[k].length}</span></h3>`;
+    const open = k => `<section class="r-stage r-stage-${k}" aria-label="${k === 'todo' ? 'To do' : STAGE[k][0]}">${head(k)}<p class="sub">${HELP[k]}</p>${groups[k].length ? `<div class="r-ideas">${groups[k].join('')}</div>` : '<p class="sub">None right now.</p>'}</section>`;
+    const folded = k => groups[k].length ? `<details class="r-stage r-stage-${k}"><summary>${head(k)}<span class="sub">${HELP[k]}</span></summary><div class="r-ideas">${groups[k].join('')}</div></details>` : '';
+    return `<p class="sub">An idea moves on by itself: exporting it puts it In production, and it counts as Used once its reel is on Instagram. Research imports never change an idea.</p>${open('todo')}${open('production')}${folded('used')}${folded('dropped')}`;
+  }
+  // Close or reopen an idea by hand (made elsewhere, or not making it). Not on the phone.
+  function closeButtons(x) {
+    if (remote || x.missing) return ''; const s = x.stage || { key: 'todo' };
+    if (s.manual) return `<button class="btn small" data-r-close="" data-r-ideaid="${e(x.idea.id)}">Reopen</button>`;
+    if (s.key === 'used') return '';
+    return `<button class="btn small" data-r-close="used" data-r-ideaid="${e(x.idea.id)}">Mark as used</button><button class="btn small" data-r-close="dropped" data-r-ideaid="${e(x.idea.id)}">Drop idea</button>`;
   }
 
   // Mits's own direction for one post: kept visibly apart from the source evidence further down the page.
@@ -147,10 +168,10 @@
       ${x.pipelineId ? `<div class="row">${x.pipelineStatus ? `<span>In Pipeline: <strong>${e(x.pipelineStatus)}</strong></span>` : ''}<button class="btn small" data-r-pipeline="${e(x.pipelineId)}">Open “${e(x.pipelineTitle)}” in Pipeline</button></div>` : '<p class="sub">No Pipeline item is linked to this file yet.</p>'}`;
     else if (h.ok) hand = `<div class="row"><button class="btn primary" data-r-export="1">Export to the script workflow</button><span class="sub">Writes one transcript file into Instagram_transcript, with your angle on its own “Note from Mits” line. Nothing else changes, and an existing file is never replaced.</span></div>`;
     else hand = `<p>Not available for this post:</p><ul class="r-reasons">${h.reasons.map(r => `<li>${e(r)}</li>`).join('')}</ul>`;
-    return `<section class="panel r-idea" aria-label="Your idea"><div class="r-head"><h3>Your idea</h3><span class="pill ok">Saved</span></div>${intro}${field}
+    return `<section class="panel r-idea" aria-label="Your idea"><div class="r-head"><h3>Your idea</h3>${stageBadge(d.stage)}</div>${intro}${field}
       <p class="sub">Saved ${when(i.createdAt)}${i.updatedAt !== i.createdAt ? ' · last changed ' + when(i.updatedAt) : ''}</p>
       <div class="row"><button class="btn" data-r-angle="1">Save angle</button><button class="btn" data-r-copybrief="1">Copy brief</button>
-      ${x ? '' : removeAsk ? '<span class="sub">Remove this idea and its angle?</span><button class="btn small" data-r-removeyes="1">Yes, remove the idea</button><button class="btn small" data-r-removeno="1">Keep it</button>' : '<button class="btn small" data-r-remove="1">Remove idea</button>'}</div>
+      ${closeButtons({ idea: i, stage: d.stage })}${x ? '' : removeAsk ? '<span class="sub">Remove this idea and its angle?</span><button class="btn small" data-r-removeyes="1">Yes, remove the idea</button><button class="btn small" data-r-removeno="1">Keep it</button>' : '<button class="btn small" data-r-remove="1">Remove idea</button>'}</div>
       <div class="r-hand"><h4>Short-form handoff</h4>${hand}</div></section>`;
   }
 
@@ -168,6 +189,19 @@
         <td data-label="Notes from the run">${r.note ? e(r.note) : '<span class="sub">None</span>'}</td></tr>`).join('')}</tbody></table></div></section>`).join('');
   }
 
+  // ---- a transcript pasted by hand (kept on the idea, never in the research store) ----
+  function pasteBox(d, text) {
+    if (d.remote) return '<p class="sub">You can paste a transcript on the PC.</p>';
+    return `<div class="r-field r-angle-field" style="margin-top:8px"><label for="r-trtext">${text ? 'Edit the transcript' : 'Paste the transcript yourself'}</label><textarea id="r-trtext" rows="8" maxlength="60000" placeholder="The spoken words, for example copied from the video's own transcript">${e(text)}</textarea></div>
+      <div class="row" style="margin-top:8px"><button class="btn primary" data-r-trsave="1">Save transcript</button>${text ? '<button class="btn small" data-r-trcancel="1">Cancel</button>' : ''}<span class="sub">${d.idea ? 'Saved with your idea' : 'Saving it also saves this post as an idea'}, marked as pasted by you. Research imports never change it.</span></div>`;
+  }
+  function manualTranscript(d) {
+    const locked = d.exported;
+    if (trEdit && !locked) return pasteBox(d, d.transcriptText);
+    return `<p class="sub">${n(d.transcript.words)} words, pasted by you ${when(d.transcript.capturedAt)}. No transcript was fetched for this post.</p>
+      <div class="row" style="margin:8px 0"><button class="btn small" data-r-copytranscript="1">Copy transcript</button>${d.remote || locked ? '' : '<button class="btn small" data-r-tredit="1">Edit transcript</button><button class="btn small" data-r-trremove="1">Remove transcript</button>'}${locked ? '<span class="sub">Kept as exported.</span>' : ''}</div><div class="r-text" id="r-transcript">${e(d.transcriptText)}</div>`;
+  }
+
   // ---- one post ----
   const segs = a => a.map(x => (x.m ? `<mark>${e(x.t)}</mark>` : e(x.t))).join('');
   function vPost() {
@@ -175,7 +209,7 @@
     if (!detail) return `${back}<p class="sub">Loading the saved post…</p>`;
     const d = detail, q = d.query;
     const facts = `<section class="panel" aria-label="Post"><dl class="kv">
-      <dt>Platform</dt><dd>${PLATFORM[d.platform]} · ${FORMAT[d.format]}</dd><dt>Creator</dt><dd>${e([d.creator.name, d.creator.handle && '@' + String(d.creator.handle).replace(/^@/, '')].filter(Boolean).join(' · ') || 'Unknown')}</dd>
+      <dt>Platform</dt><dd>${BrandIcon(d.platform)}${PLATFORM[d.platform]} · ${FORMAT[d.format]}</dd><dt>Creator</dt><dd>${e([d.creator.name, d.creator.handle && '@' + String(d.creator.handle).replace(/^@/, '')].filter(Boolean).join(' · ') || 'Unknown')}</dd>
       <dt>Published</dt><dd>${d.publishedAt ? `${when(d.publishedAt)} · ${ago(d.publishedAgeDays)}` : '<span class="r-warn">Unknown: the source gave no date</span>'}</dd><dt>Duration</dt><dd>${dur(d.durationSeconds)}</dd>
       <dt>First imported</dt><dd>${when(d.firstRetrievedAt)}</dd><dt>Last seen in a search</dt><dd>${when(d.lastRetrievedAt)}</dd><dt>Source link</dt><dd><a href="${e(d.url)}" target="_blank" rel="noopener noreferrer">${e(d.url)}</a></dd></dl></section>`;
     const found = `<section class="panel" aria-label="Where it was found"><h3>Where it was found</h3>${d.runs.length ? `<div class="r-frame"><table class="r-table"><thead><tr><th scope="col">Search</th><th scope="col">Run</th><th scope="col">Source</th><th scope="col">Position</th><th scope="col">Retrieved</th></tr></thead><tbody>
@@ -196,8 +230,8 @@
       ${d.excerpts.map(x => `<div><p class="r-kind">Search excerpt (${x.kind === 'hook' ? 'opening lines' : 'passage around the match'}) from ${e(SOURCE[x.provider])}, batch ${e(x.batchId)}. ${x.complete === false ? 'Word for word, but only part of what the search returned was copied.' : 'Word for word as the search returned it.'} Not the full transcript.</p><div class="r-text">${segs(x.segments)}</div></div>`).join('')}
       ${d.excerpts.length ? '' : '<p class="sub">No search excerpt was saved for this post.</p>'}
       <div><p class="r-kind">Caption or description (written by the creator, not spoken)</p>${d.caption ? `<div class="r-text">${d.captionSegments ? segs(d.captionSegments) : e(d.caption)}</div>` : '<p class="sub">No caption was saved.</p>'}</div>
-      <div><p class="r-kind">Full transcript (spoken words)</p>${d.transcriptText ? `<p class="sub">${n(d.transcript.words)} words, ${d.transcript.origin === 'subtitles' ? 'YouTube subtitles fetched through' : d.transcript.origin === 'whisper' ? 'speech-to-text through' : 'transcript held by'} ${e(SOURCE[d.transcript.provider])}${d.transcript.capturedAt ? ', captured ' + when(d.transcript.capturedAt) : ', capture time unknown'}.</p>
-        <div class="row" style="margin:8px 0"><button class="btn small" data-r-copytranscript="1">Copy transcript</button></div><div class="r-text" id="r-transcript">${e(d.transcriptText)}</div>` : '<p><strong>No transcript was fetched for this post.</strong> <span class="sub">Excerpts and captions above are not a transcript.</span></p>'}</div></section>`;
+      <div><p class="r-kind">Full transcript (spoken words)${d.manualTranscript ? ', pasted by you' : ''}</p>${d.manualTranscript ? manualTranscript(d) : d.transcriptText ? `<p class="sub">${n(d.transcript.words)} words, ${d.transcript.origin === 'subtitles' ? 'YouTube subtitles fetched through' : d.transcript.origin === 'whisper' ? 'speech-to-text through' : 'transcript held by'} ${e(SOURCE[d.transcript.provider])}${d.transcript.capturedAt ? ', captured ' + when(d.transcript.capturedAt) : ', capture time unknown'}.</p>
+        <div class="row" style="margin:8px 0"><button class="btn small" data-r-copytranscript="1">Copy transcript</button></div><div class="r-text" id="r-transcript">${e(d.transcriptText)}</div>` : `<p><strong>No transcript was fetched for this post.</strong> <span class="sub">Excerpts and captions above are not a transcript.</span></p>${pasteBox(d, '')}`}</div></section>`;
     const inputs = `<section class="panel" aria-label="Builder inputs"><h3>Original records</h3><p class="sub">What the batch was built from, kept so a copied number can be checked against its source.</p>
       ${d.builderInputs.map(b => `<div><p><span class="mono">${e(b.batchId)}</span> · ${e(SOURCE[b.provider])} · ${b.kept ? `kept in <span class="mono">${e(b.folder)}</span>` : '<span class="r-warn">not kept for this batch</span>'}</p>
         ${b.records.length ? b.records.map(r => `<details><summary class="sub">${e(r.what)}</summary><pre class="r-json">${e(JSON.stringify(r.data, null, 2))}</pre></details>`).join('') : b.kept ? '<p class="sub">This post was not found in the kept records.</p>' : ''}</div>`).join('') || '<p class="sub">No batch is recorded for this post.</p>'}</section>`;
@@ -233,15 +267,21 @@
     else if (d.rExport) act({ type: 'export-idea', ideaId: detail.idea.id }, '[data-r-copy]');
     else if (d.rRemove) { removeAsk = true; draw(); root.querySelector('[data-r-removeno]').focus(); }
     else if (d.rRemoveno) { removeAsk = false; draw(); root.querySelector('[data-r-remove]').focus(); }
+    else if (d.rClose !== undefined) act({ type: 'close-idea', ideaId: d.rIdeaid, as: d.rClose });
+    else if (d.rShowused) { F = { ...F, hideUsed: '', limit: DEFAULTS.limit }; loadList(); }
     else if (d.rRemoveyes) act({ type: 'remove-idea', ideaId: detail.idea.id }, '#r-angle');
     else if (d.rCopybrief) copyText(detail.brief).then(() => toast('Brief copied'), () => toast('Copy was blocked'));
     else if (d.rBriefof !== undefined) copyText(ideas[Number(d.rBriefof)].brief).then(() => toast('Brief copied'), () => toast('Copy was blocked'));
     else if (d.rPipeline) load(true).then(() => open(d.rPipeline));
     else if (d.rCopy !== undefined) copyText(d.rCopy).then(() => toast(d.rToast || 'Copied. Paste it into Claude Code and add your topic.'), () => toast('Copy was blocked; select the text instead'));
+    else if (d.rTrsave) act({ type: 'set-transcript', postId: detailId, text: root.querySelector('#r-trtext').value, angle: (root.querySelector('#r-angle') || {}).value || '' }, '#r-transcript');
+    else if (d.rTredit) { trEdit = true; draw(); const t = root.querySelector('#r-trtext'); if (t) t.focus(); }
+    else if (d.rTrcancel) { trEdit = false; draw(); }
+    else if (d.rTrremove) act({ type: 'remove-transcript', ideaId: detail.idea.id }, '#r-trtext');
     else if (d.rCopytranscript) copyText(detail.transcriptText).then(() => toast('Transcript copied'), () => toast('Copy was blocked; select the text instead'));
   });
   document.addEventListener('submit', ev => { if (ev.target.id === 'r-form') { ev.preventDefault(); readForm(); loadList(); } });
-  document.addEventListener('change', ev => { if (root && ev.target.closest && ev.target.closest('#r-form') && ev.target.tagName === 'SELECT') { readForm(); loadList().then(() => { const s = root.querySelector('#' + CSS.escape(ev.target.id)); if (s) s.focus(); }); } });
+  document.addEventListener('change', ev => { if (root && ev.target.closest && ev.target.closest('#r-form') && (ev.target.tagName === 'SELECT' || ev.target.type === 'checkbox')) { readForm(); loadList().then(() => { const s = root.querySelector('#' + CSS.escape(ev.target.id)); if (s) s.focus(); }); } });
 
   window.Research = { mount, open: openPost };
 })();

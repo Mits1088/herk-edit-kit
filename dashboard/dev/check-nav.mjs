@@ -1,5 +1,5 @@
 // Dev check for Command Centre navigation: where you are, the next step, and the way back, across Needs me,
-// Pipeline, Schedule and Research. Throwaway folder only; headless Edge at desktop and phone widths.
+// Pipeline, Schedule, Research and Insights. Throwaway folder only; headless Edge at desktop and phone widths.
 // Run: node dashboard/dev/check-nav.mjs   (screenshots: tmp/command-centre/nav/)
 import { chromium } from 'playwright';
 import { mkdirSync, mkdtempSync, writeFileSync, renameSync } from 'node:fs';
@@ -49,7 +49,7 @@ for (const [name, w, h] of [['desk', 1280, 700], ['phone', 390, 700]]) {
   // ---- Needs me: the pending drafts are named for what they are ----
   let t = await text();
   ok(`${name}: Needs me lists "Drafts awaiting review" with an Open drafts action`, /Drafts awaiting review/.test(t) && /Open drafts/.test(t) && !/abandon|status unknown/i.test(t));
-  if (name === 'phone') ok('phone: the four views sit on one row', await page.evaluate(() => new Set([...document.querySelectorAll('#nav button')].map(b => Math.round(b.getBoundingClientRect().top))).size === 1));
+  if (name === 'phone') ok('phone: the five views sit in one bottom tab bar, none clipped, each 44px or taller', await page.evaluate(() => { const bs = [...document.querySelectorAll('#nav button')]; const r = bs.map(b => b.getBoundingClientRect()); return bs.length === 5 && new Set(r.map(x => Math.round(x.top))).size === 1 && r.every(x => x.bottom <= innerHeight + 1 && x.height >= 44) && bs.every(b => b.scrollWidth <= b.clientWidth); }));
   await tall('Needs me'); await shot('needs-me');
   await page.locator('.task', { hasText: 'Drafts awaiting review' }).click(); await page.waitForSelector('[data-tab-go]'); await settle(); t = await text();
   ok(`${name}: it opens the project on Scripts, shown as drafts awaiting review`, /Draft scripts/.test(t) && /Awaiting review/.test(t) && /Not exported/.test(t) && /Version A \(draft\)/.test(t) && /Draft B words/.test(t) && /Next: You/.test(t));

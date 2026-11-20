@@ -1,6 +1,6 @@
 ---
 name: reel-review
-description: Independent review of a finished Reel batch. Only this review can award READY TO RECORD. Load it when a mission or the reel-reviewer agent asks for the review pass or final pass on a batch.
+description: Independent review of a finished Reel batch. Only this review can award READY TO RECORD. Load it when a mission or the reel-reviewer agent asks for the review pass or final pass on a batch, or for the caption pass on an approved Reel.
 user-invocable: false
 ---
 
@@ -17,8 +17,8 @@ This session has 30 tool rounds for the whole batch. Read everything in one Bash
 Never edit a Reel file in this pass.
 
 1. Read the corrections file, then each Reel with its transcript and record. Run `check_reel.py <reel> --source <transcript> --seconds <real source seconds>` on each, taking the seconds from the transcript's `Duration:` line or the record. If the record says the duration was estimated and the transcript has an Instagram URL, look up the real `durationSeconds` in Signal Room before judging length. A pass only proves the mechanical checks, not that the facts are right.
-2. For each Reel, assess both scripts and the three platform captions (Instagram, TikTok, YouTube Shorts), which are shared by both versions:
-   - **Captions:** Each caption is true whichever version is recorded, and depends on no line only one version has. Each one is written for its platform, uses the Final Comparison's main search phrase where `reel-workflow` section H puts it, uses specific hashtags in that platform's count, and carries the same CTA and keyword as the scripts. The YouTube title says what the viewer gets, without clickbait.
+2. For each Reel, assess both scripts and the caption notes, which are shared by both versions. New batches carry no captions: `/approve-reel` writes them from the approved script and calls the caption pass below. An older Reel file that still has Instagram, TikTok and YouTube Shorts captions gets those checked as in the caption pass.
+   - **Caption notes:** Each note is true whichever version is recorded, has a primary source that supports it at the scope it is worded, and repeats no claim the scripts corrected. The search phrases are built from verified names. Anything unconfirmed belongs in the Factual warnings, not the notes.
    - **Claims:** Pick out the material claims yourself rather than trusting the writer's verdicts. Check that each record entry's scope matches what the copy actually says.
    - **Evidence:** Research only where evidence is missing, contradictory, outdated, or comes from a news article when a primary source should exist. Official docs and original repositories win. Before cutting a useful claim as unconfirmed, check the obvious primary page for it.
    - **Identity:** Each named tool must be the one the source means. A different tool with a similar name or purpose is a failure, not a correction.
@@ -42,7 +42,7 @@ Never edit a Reel file in this pass.
    Verdict: READY TO RECORD or REVIEW REQUIRED
    Open issues: [Exactly what a person must check, with safer wording, or "None"]
    Changes:
-   1. [Script A, Script B, Instagram, TikTok or YouTube] Replace "exact old text" with "exact new text". Reason.
+   1. [Script A, Script B or Caption notes] Replace "exact old text" with "exact new text". Reason.
    ```
 
    Keep changes targeted, and write "Changes: None" when there are none. Every script change must be the same length or shorter than the text it replaces, unless it fixes a factual error, and then pair it with a cut elsewhere. Add a line `Word count after changes: A N, B N (budget N)` to each Reel's entry, so lengthening from many small fixes is visible. Do not rewrite anything that already works. Use REVIEW REQUIRED for anything a text change cannot settle: an unresolved tool identity, or an unsupported material claim.
@@ -63,5 +63,20 @@ Reply with one line giving the number of Reels reviewed and changes requested. D
    - Remove any warning that the changes have now resolved, so it does not contradict the status.
 3. Run `check_reel.py <reel> --source <transcript> --seconds <real source seconds> --final` on each. A Reel that still fails becomes REVIEW REQUIRED, with the failure in its warnings.
 4. Concatenate the Reels in order into `outputs/<batch-id>/combined.md` and delete `.work/`. Keep `records/` and `review.md`.
-5. Run `python -I -X utf8 D:/herk-edit-kit/.claude/skills/reel-workflow/export_reels.py outputs/<batch-id>`. This saves each Reel, with both scripts and the three platform captions, as its own titled plain-text `.txt` file in `D:/herk-edit-kit/instagram_scripts_output/<batch-id>/`, plus `combined.txt`. It never overwrites, so a re-run batch gets `-v2` files. Report the exact line the script printed and the files it created. Never report an export you did not run.
+5. Run `python -I -X utf8 D:/herk-edit-kit/.claude/skills/reel-workflow/export_reels.py outputs/<batch-id>`. This saves each Reel, with both scripts and its caption notes, as its own titled plain-text `.txt` file in `D:/herk-edit-kit/instagram_scripts_output/<batch-id>/`, plus `combined.txt`. It never overwrites, so a re-run batch gets `-v2` files. Report the exact line the script printed and the files it created. Never report an export you did not run.
 6. Hand back the batch report described in your agent instructions. If any Reel file is missing, say which and leave it out.
+
+## Caption pass
+
+`/approve-reel` asks for this after it writes the Instagram, TikTok and YouTube Shorts captions from the approved script. You did not write them. You get the draft approved file (one `SCRIPT`, the three captions and the `CTA`), the batch's Reel file with its caption notes and Final Comparison, and `corrections.md`.
+
+1. Run `python -I -X utf8 D:/herk-edit-kit/.claude/skills/approve-reel/check_captions.py <draft> --search "<the batch's search phrases>"`. A pass proves the mechanical checks only.
+2. Check each caption against the approved script and the caption notes:
+   - Every fact in a caption is in the caption notes or said in the approved script, at the same scope. Anything else is a failure, however plausible.
+   - Nothing repeats a claim the scripts corrected or `corrections.md` rejects.
+   - Each caption complements the script rather than summarising it, and is written for its platform. Read every sentence literally: any count or description must match the commands and details printed beneath it.
+   - The main search phrase sits in the Instagram and TikTok first lines and in the YouTube title. Hashtags are specific, in each platform's count. The YouTube title says what the viewer gets, without clickbait.
+   - Every caption carries the script's CTA and keyword, and promises nothing more than the resource delivers.
+   - Plain British English with no emojis, em dashes or links.
+3. Fix what a text change settles, directly in the draft, keeping each fix as short as or shorter than what it replaces. Re-run the check after editing.
+4. Reply with exactly one line: `Caption review: passed`, or `Caption review: needs manual review: <exactly what a person must check>` for anything a text change cannot settle, such as a fact with no source. Then list the changes you made, one per line.

@@ -103,10 +103,11 @@ function summarise(post, searches, now) {
 function cleanFilters(f = {}, max = LIST_MAX) {
   const pick = (v, list, d) => (list.includes(v) ? v : d);
   const limit = Math.min(max, Math.max(PAGE, Math.ceil((Number(f.limit) || PAGE) / PAGE) * PAGE));
-  return { search: String(f.search || '').trim(), q: String(f.q || '').trim().slice(0, 200), platform: pick(f.platform, ['instagram', 'youtube', 'tiktok'], ''), format: pick(f.format, ['short', 'long', 'unknown'], 'short'), window: pick(f.window, WINDOWS, '30'), sort: pick(f.sort, SORTS, 'speed'), limit };
+  return { search: String(f.search || '').trim(), q: String(f.q || '').trim().slice(0, 200), platform: pick(f.platform, ['instagram', 'youtube', 'tiktok'], ''), format: pick(f.format, ['short', 'long', 'unknown'], 'short'), window: pick(f.window, WINDOWS, '30'), sort: pick(f.sort, SORTS, 'speed'), hideUsed: f.hideUsed === '1' ? '1' : '', limit };
 }
 
-export function researchList(cfg, filters, now = new Date(), { unlimited = false } = {}) {
+// closed: post ids of ideas that are used or dropped, left out when the hideUsed filter is on.
+export function researchList(cfg, filters, now = new Date(), { unlimited = false, closed = null } = {}) {
   const max = cfg.researchListMax || LIST_MAX;
   TZ = cfg.dueTimeZone || TZ; const f = cleanFilters(filters, max); const posts = readPosts(cfg);
   const searches = readSearches(cfg).sort((a, b) => (a.retrievedAt < b.retrievedAt ? 1 : -1));
@@ -117,12 +118,13 @@ export function researchList(cfg, filters, now = new Date(), { unlimited = false
   // The text filter is checked on the saved text. With only a saved search chosen, its query is used to show what matched.
   const matchQuery = f.q || f.search;
   const windowDays = f.window === 'all' ? null : Number(f.window);
-  const rows = []; const formats = { short: 0, long: 0, unknown: 0 };
+  const rows = []; const formats = { short: 0, long: 0, unknown: 0 }; let hiddenUsed = 0;
   for (const post of posts) {
     if (inSearch && !inSearch.has(ref(post))) continue;
     if (f.platform && post.platform !== f.platform) continue;
     const match = matchQuery ? matchPost(post, matchQuery) : null;
     if (f.q && !match.matched) continue;
+    if (f.hideUsed && closed && closed.has(post.id)) { if (post.format === f.format) hiddenUsed++; continue; }
     formats[post.format] = (formats[post.format] || 0) + 1; // so each format tab can say how many it holds
     if (post.format !== f.format) continue;
     const row = summarise(post, searches, now);
@@ -163,7 +165,7 @@ export function researchList(cfg, filters, now = new Date(), { unlimited = false
     undatedRows: f.window === 'all' ? rows.filter(r => r.bucket === 'undated').sort(order) : [],
     failures, partials,
     totals: { posts: posts.length, searches: searches.length, lastRetrievedAt: searches[0] ? searches[0].retrievedAt : null, shown: rows.length, recent: recent.length, historical: rows.filter(r => r.bucket === 'historical').length, undated: rows.filter(r => r.bucket === 'undated').length },
-    staleDays: STALE_DAYS, pageSize: PAGE,
+    staleDays: STALE_DAYS, pageSize: PAGE, hiddenUsed,
   };
 }
 

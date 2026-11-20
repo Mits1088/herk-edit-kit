@@ -1,13 +1,15 @@
 ---
 name: rewrite-reels
-description: Rewrite Instagram Reel transcripts into two scripts each, plus one SEO-friendly caption each for Instagram, TikTok and YouTube Shorts. Use for /rewrite-reels, /rewritereels, or when given reel transcripts to rewrite.
+description: Rewrite Instagram Reel transcripts into two scripts each, plus the checked caption notes /approve-reel writes the Instagram, TikTok and YouTube Shorts captions from. Use for /rewrite-reels, /rewritereels, or when given reel transcripts to rewrite.
 user_invocable: true
 argument-hint: "[transcripts, or a file or folder path]"
 ---
 
 # /rewrite-reels
 
-Input: pasted transcripts, `.md` or `.txt` files, or a folder. On Telegram the same command appears as `/rewritereels`, and files arrive as "Document received" messages.
+Input: pasted transcripts, `.md` or `.txt` files, or a folder.
+
+This writes the scripts only. Captions are written by `/approve-reel` once Mits approves a version, from that script and the batch's caption notes, and reviewed there. On Telegram the same command appears as `/rewritereels`, and files arrive as "Document received" messages.
 
 Ask no setup questions. Mits drops new transcripts in `D:/herk-edit-kit/Instagram_transcript/`. If no transcripts were given, use the files sitting directly in that folder, not in its `processed/` subfolder, plus any sitting directly in `D:/herk-edit-kit/reels-data/inputs/`, not in its batch subfolders. If there are none, ask for transcripts in one line.
 
@@ -40,10 +42,10 @@ Run `pwd` to choose the route.
 
 If a Reel mission fails, queue that Reel again, then queue the three review missions again. Earlier Reels stay on disk and are not redone.
 
-When the handback arrives, pass its report on unchanged. Mission output can't attach files, so if Mits then asks for the batch, reply in the normal turn with `[SEND_FILE:D:/herk-edit-kit/instagram_scripts_output/<batch-id>/combined.txt]` on its own line. Finished Reels are in that folder as plain-text `.txt` files, one titled file per Reel with both versions and the Instagram, TikTok and YouTube Shorts captions.
+When the handback arrives, pass its report on unchanged. Mission output can't attach files, so if Mits then asks for the batch, reply in the normal turn with `[SEND_FILE:D:/herk-edit-kit/instagram_scripts_output/<batch-id>/combined.txt]` on its own line. Finished Reels are in that folder as plain-text `.txt` files, one titled file per Reel with both versions and the caption notes.
 
 ## Route 2: terminal Claude Code
 
 Launch the `reel-rewriter` subagent with the transcripts or file paths, including any picked up from `Instagram_transcript/`. Then run the review in order: the `reel-reviewer` subagent for the review pass, `reel-rewriter` to apply the review changes, and `reel-reviewer` for the final pass.
 
-If those subagents are unavailable (for example in Codex), run the same four stages yourself in order: the `reel-workflow` skill for every transcript, the `reel-review` skill's review pass, the `reel-workflow` skill's Apply review changes section, then the `reel-review` skill's final pass. Treat the review stages as someone else's work. When it finishes, read `combined.md` from the batch folder and show both scripts and the Instagram, TikTok and YouTube Shorts captions in full for every Reel, with each comparison underneath.
+If those subagents are unavailable (for example in Codex), run the same four stages yourself in order: the `reel-workflow` skill for every transcript, the `reel-review` skill's review pass, the `reel-workflow` skill's Apply review changes section, then the `reel-review` skill's final pass. Treat the review stages as someone else's work. When it finishes, read `combined.md` from the batch folder and show both scripts in full for every Reel, with its caption notes and comparison underneath. Say that the captions are written when a version is approved.

@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 const { loadConfig } = await import('../dashboard/lib/config.mjs');
 const { importBatch } = await import('../dashboard/lib/research.mjs');
 const { researchPost } = await import('../dashboard/lib/research-view.mjs');
-const { readIdeas, ideaAction, ideaInfo, ideasView, handoff, exportText, briefText } = await import('../dashboard/lib/ideas.mjs');
+const { readIdeas, ideaAction, ideaInfo, ideasView, handoff, exportText, briefText, ideaStage } = await import('../dashboard/lib/ideas.mjs');
 const { buildState } = await import('../dashboard/lib/state.mjs');
 const { createServer, lanAddresses } = await import('../dashboard/server.mjs');
 
@@ -149,6 +149,26 @@ test('the Pipeline link appears only when a real item holds the exported file', 
   // the file gone altogether: no link is invented
   renameSync(join(cfg.inputsDir, 'batch-2026-11-17-001', name), join(cfg.root, 'elsewhere.md'));
   x = info().exported; assert.deepEqual([x.waiting, x.pipelineId], [false, null]);
+});
+
+test('an idea moves to do -> in production -> used on its own, and can be closed or reopened by hand', () => {
+  const cfg = store(); const id = 'idea-instagram-' + IG;
+  ideaAction(cfg, { type: 'save-idea', postId: 'instagram-' + IG }, NOW);
+  const stage = (items = buildState(cfg).items) => ideaStage(readIdeas(cfg)[0], items);
+  assert.equal(stage().key, 'todo');
+  ideaAction(cfg, { type: 'export-idea', ideaId: id }, NOW);
+  const s = stage(); assert.deepEqual([s.key, s.manual, s.reel.id], ['production', false, 'src-research-instagram-' + IG]);
+  // its reel recorded on Instagram: used, with no action from Mits
+  const posted = buildState(cfg).items.map(i => i.id === s.reel.id ? { ...i, platforms: { ...i.platforms, ig: { state: 'published', at: AT } } } : i);
+  assert.deepEqual([stage(posted).key, stage(posted).at, stage(posted).manual], ['used', AT, false]);
+  // closed by hand wins, is repeat-safe, and reopens to where the files say it is
+  assert.equal(ideaAction(cfg, { type: 'close-idea', ideaId: id, as: 'dropped' }, NOW).message, 'Idea dropped. It stays under Dropped.');
+  assert.equal(ideaAction(cfg, { type: 'close-idea', ideaId: id, as: 'dropped' }, NOW).message, 'No change.');
+  assert.deepEqual([stage(posted).key, stage(posted).manual], ['dropped', true]);
+  assert.throws(() => ideaAction(cfg, { type: 'close-idea', ideaId: id, as: 'deleted' }, NOW), /used or dropped/);
+  assert.equal(ideaAction(cfg, { type: 'close-idea', ideaId: id, as: '' }, NOW).message, 'Idea reopened.');
+  assert.equal(stage().key, 'production');
+  assert.equal(readIdeas(cfg)[0].exports.length, 1); // closing never touches the export record
 });
 
 test('the brief labels every kind of text and keeps the angle apart, for long-form too', () => {

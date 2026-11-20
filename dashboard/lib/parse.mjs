@@ -32,7 +32,7 @@ const titleCase = s => words(s).toLowerCase().replace(/(^|[\s(/])([a-z])/g, (m, 
 export function titleFrom(text, fallback) {
   const first = String(text || '').replace(/\r/g, '').split('\n').find(l => l.trim()) || '';
   let m = first.match(/^REEL\s+\d+\s*:\s*(.+)$/i); if (m) return titleCase(m[1]);
-  m = first.match(/^#+\s*(?:Reel:\s*)?(.+?)(?:\s+-\s+Version\s+[AB].*)?$/i); if (m) return words(m[1]);
+  m = first.match(/^#+\s*(?:Reel:\s*)?(.+?)(?:\s+-\s+Version\s+[ABC].*)?$/i); if (m) return words(m[1]);
   return titleCase(fallback || 'Untitled');
 }
 

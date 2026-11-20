@@ -51,9 +51,14 @@ Hook and reel approvals are described under phase 4 below.
 
 ## Approvals (phase 2)
 
-- **Script choice.** Approve Version A or B on the Scripts tab. The choice is recorded and the work goes to the
+- **Script choice.** Approve Version A, B or C on the Scripts tab. The choice is recorded and the work goes to the
   approve-reel skill: as a ClaudeClaw job when ClaudeClaw is running, otherwise as a command to paste into
   Claude Code. The stage moves only when the approved file exists.
+- **Version C.** An empty box beside A and B for your own script. "Approve Version C" appears as soon as the box
+  has text; it saves the box to `reels-data/content/version-c/<id>.txt`, then approves it. "Save without
+  approving" keeps a draft. approve-reel uses those words exactly as the SCRIPT and
+  takes the captions and CTA from the batch file. While a choice is recorded the box is locked; "Change my choice"
+  unlocks it. The approved file ends in `-version-c.txt`, which ig-insights reads as Version C.
 - **PDF gate.** The Resource tab shows the PDF and its SHA-256. Approval and upload are two separate steps.
   "Approve this file" records the approval in `reels-data/content/pdf-approvals.json` and uploads nothing.
   "Upload to Gumroad" then appears, and runs `gumroad_upload.mjs` for that keyword. That script refuses any PDF
@@ -171,6 +176,12 @@ disables Pointer Lock, blocks external browser requests, and writes desktop/phon
 - **Confirmed by project.** A post confirmed in ig-insights for a video project counts for the script that
   holds that project, even when the ig-insights entry names no approved file.
 - **Schedule.** Overdue, due today and upcoming, by calendar day in the due timezone.
+- **Insights.** Shows the latest ig-insights reading (account totals and every Reel: views, reach, skip rate,
+  average watch, likes, comments, saves, shares, with the views gained since the reading before) and the written
+  weekly reports from `reels-data/insights/reports/`, newest first. **Refresh from Instagram** (PC only) runs
+  ig-insights' `collect.ps1` (GET requests only, so nothing is posted; it appends one reading to the history, as a
+  manual run does) and then `link.py propose`. It never confirms a link and never writes a report: the analysis
+  in sections 8 to 10 still comes from /ig-insights in Claude Code. `DASH_COLLECT_SCRIPT` overrides the collector path.
 - **Withdraw.** Each record you entered has "Withdraw this record". It removes the dashboard's note only.
 
 ### Phone access
@@ -246,7 +257,7 @@ The whole batch is checked first. If anything is wrong it lists every problem, e
 | File | Holds |
 | --- | --- |
 | `research.sqlite` | Every post (one per platform and native id: link, format, duration, creator, caption, transcript), its sources, every measurement, excerpts, and one record per imported search with each run's status, error and ordered results. Written only by the importer, one transaction per batch. Schema: `dashboard/lib/research-db.mjs`; plan: `docs/plans/research-database/PLAN.md`. Post keys are `<platform>-<id>`, with YouTube ids in hex because they are case-sensitive. |
-| `ideas.json` | Saved ideas: the post, your angle, and any export record. Written by the Research page only. The importer never writes to it. |
+| `ideas.json` | Saved ideas: the post, your angle, any transcript you pasted by hand, and any export record. Written by the Research page only. The importer never writes to it. A pasted transcript is offered only when no transcript was fetched, is labelled "pasted by you" everywhere, counts as the full transcript for export, and is locked once exported. |
 | `inbox/` | Where batch files are put. The importer reads the file it is given and leaves it in place. |
 | `sources/<batchId>/` | What `build-batch.mjs` built the batch from: the draft and the last30free output files. Kept so a copied number can be checked. |
 | `archive/` | Earlier stores set aside, including the JSON store from before SQLite (`<date>-before-sqlite/`). Nothing reads it. |
@@ -402,7 +413,7 @@ no actions; `node dashboard/dev/check-ideas.mjs` saves and exports inside a thro
 - Scripts never approved after 14 days, and batches never exported, are shown under All, not Needs me.
 - Working drafts in `reels-data/outputs/<batch>/reel-NN-*.md` are read as drafts, never as exported scripts. While
   their `Publication status` is PENDING REVIEW the item reads "Drafts awaiting review" under Needs me, for 14 days.
-  Drafts cannot be approved; choosing Version A or B starts once the review exports to `instagram_scripts_output/`.
+  Drafts cannot be approved; choosing Version A, B or C starts once the review exports to `instagram_scripts_output/`.
 - A source file moved to `Instagram_transcript/processed/`, or a batch with no export, is never described as
   abandoned. The page says what the files show and that they cannot show why.
 
@@ -422,9 +433,10 @@ Browser checks (headless): `node dashboard/dev/check-nav.mjs` runs the above in 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `DASH_PORT` | `4319` | Port |
-| `DASH_DUE_HOUR` | `9` | Hour when Shorts and TikTok fall due on the second calendar day |
+| `DASH_DUE_DAYS` | `0` | Calendar days after the Instagram post before Shorts and TikTok fall due. `0` (Mits, 2026-11-18) means due as soon as the Instagram post is recorded |
+| `DASH_DUE_HOUR` | `9` | Hour when Shorts and TikTok fall due, used only when `DASH_DUE_DAYS` is above 0 |
 | `DASH_TZ` | `Europe/London` | Timezone for that hour and for every time shown. Not taken from the PC clock |
-| `DASH_DUE_CONFIRMED` | unset | Set to `1` once you have confirmed the hour and timezone. Until then due dates say "provisional" |
+| `DASH_DUE_CONFIRMED` | unset | With `DASH_DUE_DAYS` above 0: set to `1` once you have confirmed the hour and timezone. Until then due dates say "provisional" |
 | `DASH_TRACK_FROM` | `2026-11-16` | Instagram posts before this date read "Not recorded" for Shorts and TikTok |
 | `DASH_LAN` | unset | Set to `1` to allow phone access over home Wi-Fi |
 | `DASH_LINK_SCRIPT` | ig-insights `link.py` | Script used to confirm an Instagram post |

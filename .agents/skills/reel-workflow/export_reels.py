@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Export a finished batch as plain-text files: one titled .txt per Reel, plus combined.txt.
 
-Plain text, so scripts and captions paste straight into a teleprompter, Instagram,
-TikTok or YouTube without Markdown symbols.
+Plain text, so scripts paste straight into a teleprompter without Markdown symbols.
+New batches carry caption notes (the captions are written by /approve-reel); older ones carry the captions.
 Never overwrites a different file: a changed Reel is saved with a -v2 suffix.
 
 Usage: python -I -X utf8 export_reels.py <batch-folder> [--to <output-root>]
@@ -41,10 +41,13 @@ def body(number, title, parts):
         [f"REEL {number}: {title.upper()}", f"Status: {status}", ""]
         + block("VERSION A - FAITHFUL REWRITE", parts["script_a"])
         + block("VERSION B - STRONGER ALTERNATIVE", parts["script_b"])
-        + ["The three captions below work with whichever version you record.", ""]
-        + block("INSTAGRAM CAPTION", parts["instagram"])
-        + block("TIKTOK CAPTION", parts["tiktok"])
-        + block("YOUTUBE SHORTS", parts["youtube"])
+        + (["The three captions below work with whichever version you record.", ""]
+           + block("INSTAGRAM CAPTION", parts["instagram"])
+           + block("TIKTOK CAPTION", parts["tiktok"])
+           + block("YOUTUBE SHORTS", parts["youtube"])
+           if "instagram" in parts else
+           ["The captions are written when you approve a version with /approve-reel, from these checked facts.", ""]
+           + block("CAPTION NOTES", parts["notes"]))
         + block("FINAL COMPARISON", parts["comparison"])
     )
 

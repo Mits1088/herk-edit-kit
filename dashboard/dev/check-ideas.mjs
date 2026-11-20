@@ -77,7 +77,7 @@ for (const [name, w, h] of [['desk', 1280, 900], ['phone', 390, 844]]) {
   const before = readFileSync(join(cfg.researchDir, 'ideas.json'), 'utf8');
   importBatch(cfg, { schema: 1, batchId: 'fx-2-' + name, retrievedAt: iso(now), search: { query: 'n8n', windowDays: 30 }, runs: [{ provider: 'last30free', lane: 'tiktok_hashtag', status: 'ok', results: ['tiktok:7708502162103438612'] }], posts: [{ platform: 'tiktok', id: '7708502162103438612', provider: 'last30free', url: 'https://www.tiktok.com/@someone/video/7708502162103438612', format: 'short', title: T.tt, publishedAt: daysAgo(2), durationSeconds: 66, observation: { measuredAt: iso(now), metrics: { views: 4100 } } }] });
   await page.reload(); await page.waitForSelector('#nav button'); await research();
-  ok(`${name}: the saved post is badged in Signals after a refresh`, await page.locator('.r-saved').count() === 1);
+  ok(`${name}: the saved post is badged in Signals after a refresh`, await page.locator('.r-status').count() === 1);
   await openPost(T.tt);
   ok(`${name}: the note survives a refresh and a research import`, (await page.inputValue('#r-angle')) === 'Show the build live,\nthen the result.' && readFileSync(join(cfg.researchDir, 'ideas.json'), 'utf8') === before && /4,?100/.test(await text()));
 

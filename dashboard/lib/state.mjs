@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { titleFrom, reviewFrom, parseApproved, parseGenerated, parseYoutube, parseResources, parseDraft } from './parse.mjs';
 import { view as zernioView, finalVideo, isOpen as zernioOpen, NAMES as ZNAMES } from './zernio.mjs';
-import { readManifests } from './manifest.mjs';
+import { readManifests, readVersionC } from './manifest.mjs';
 import { createHash } from 'node:crypto';
 import { approvalCommand, approvalPrompt, revisionPrompt, videoRevisionPrompt, classifyUpload } from './jobs.mjs';
 import { hookReport } from './workflow.mjs';
@@ -113,10 +113,12 @@ function partsIn(tz, date) {
   return o;
 }
 const whenIn = (tz, d) => new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
-// Second calendar day after publication, at cfg.dueHour, both reckoned in cfg.dueTimeZone.
+// With cfg.dueDays 0 (the default), due the moment the Instagram post went up. Otherwise that many calendar
+// days after publication, at cfg.dueHour, both reckoned in cfg.dueTimeZone.
 export function dueDate(cfg, publishedAt) {
+  if (!cfg.dueDays) return new Date(publishedAt);
   const tz = cfg.dueTimeZone; const p = partsIn(tz, new Date(publishedAt));
-  const wall = Date.UTC(p.year, p.month - 1, p.day + 2, cfg.dueHour, 0, 0);
+  const wall = Date.UTC(p.year, p.month - 1, p.day + cfg.dueDays, cfg.dueHour, 0, 0);
   let guess = wall;
   for (let i = 0; i < 2; i++) { const q = partsIn(tz, new Date(guess)); guess = wall - (Date.UTC(q.year, q.month - 1, q.day, q.hour, q.minute, q.second) - guess); }
   return new Date(guess);
@@ -170,7 +172,7 @@ export function buildState(cfg, now = new Date()) {
 
   // 4. Approved scripts.
   for (const d of ls(cfg.approvedDir, true)) for (const f of ls(join(cfg.approvedDir, d)).filter(n => /\.(txt|md)$/i.test(n))) {
-    const p = join(cfg.approvedDir, d, f); const text = read(p) || ''; const m = f.match(/^(\d\d)-(.+)-version-([ab])\.(txt|md)$/i);
+    const p = join(cfg.approvedDir, d, f); const text = read(p) || ''; const m = f.match(/^(\d\d)-(.+)-version-([abc])\.(txt|md)$/i);
     let it;
     if (/^batch-/.test(d) && m) {
       const id = `${d.slice(6)}-${m[1]}`;
@@ -311,7 +313,7 @@ export function buildState(cfg, now = new Date()) {
       } else if (it.notExported) { note = 'Working files exist, but no draft was found for this reel'; unknowns.push(note); }
       else note = 'Inputs are batched and no scripts are exported yet. Files cannot show whether a job is running now';
     }
-    else if (!it.files.approved && !p) { stage = 'choose'; who = 'You'; if (man.decision) need('Production', `Finish approving Version ${man.decision.version}`, 'Open', 'scripts', 'Your choice is recorded; the approved file has not been written yet'); else need('Production', 'Choose Version A or B', 'Compare scripts', 'scripts', `Review status: ${it.review || 'Unknown'}`); }
+    else if (!it.files.approved && !p) { stage = 'choose'; who = 'You'; if (man.decision) need('Production', `Finish approving Version ${man.decision.version}`, 'Open', 'scripts', 'Your choice is recorded; the approved file has not been written yet'); else need('Production', 'Choose Version A, B or C', 'Compare scripts', 'scripts', `Review status: ${it.review || 'Unknown'}`); }
     else if (!p) {
       who = 'You';
       if (!manual.voiceover.done) { stage = 'record'; need('Production', 'Record the voiceover', 'Open script', 'recording', 'The approved script is ready to read'); }
@@ -441,7 +443,7 @@ export function buildState(cfg, now = new Date()) {
   out.sort((a, b) => STAGES.indexOf(a.stage) - STAGES.indexOf(b.stage) || String(b.batch || '').localeCompare(String(a.batch || '')) || a.title.localeCompare(b.title));
 
   return {
-    generatedAt: now.toISOString(), dueHour: cfg.dueHour, dueTimeZone: cfg.dueTimeZone, dueProvisional: !cfg.dueConfirmed, stages: STAGES, items: out, warnings,
+    generatedAt: now.toISOString(), dueDays: cfg.dueDays, dueHour: cfg.dueHour, dueTimeZone: cfg.dueTimeZone, dueProvisional: cfg.dueDays > 0 && !cfg.dueConfirmed, stages: STAGES, items: out, warnings,
     projects: projects.map(p => ({ slug: p.slug, linked: used.has(p.slug) })),
     files: { rawMedia: existsSync(cfg.rawMedia) ? listMedia(cfg.rawMedia, 1) : [], uploads, uploadsAllDir: cfg.uploadsAllDir, uploadsFound: existsSync(cfg.uploadsDir) },
     queue: cfg.runtime ? cfg.runtime.queue : { available: false, running: false, reason: 'not checked', missions: [] },
@@ -455,7 +457,8 @@ export function itemDetail(cfg, state, id) {
   if (f.source) out.source = { file: f.source, text: read(join(cfg.root, f.source)) || '', match: it.sourceMatch };
   if (!f.generated && f.draft) out.generated = { file: f.draft, draft: true, ...parseDraft(read(join(cfg.root, f.draft)) || '') };
   if (f.generated) { const g = parseGenerated(read(join(cfg.root, f.generated)) || '', f.generated); out.generated = { file: f.generated, ...g }; }
-  try { const v = finalVideo(cfg, it); if (v) out.video = { file: v.file, size: v.size, sha: v.sha, seconds: v.seconds, matchesApproval: v.matchesApproval, approvedAt: v.approvedAt }; } catch { /* no readable final video */ }
+  if (it.reel && it.batch) out.versionC = readVersionC(cfg, it.id); // Mits's own script, typed on the Scripts tab
+  try { const v = finalVideo(cfg, it); if (v) out.video = { file: v.file, size: v.size, sha: v.sha, seconds: v.seconds, matchesApproval: v.matchesApproval, approvedAt: v.approvedAt, from: v.from, external: v.external }; } catch { /* no readable final video */ }
   if (f.approved) { const a = parseApproved(read(join(cfg.root, f.approved)) || '', f.approved); out.approved = { file: f.approved, ...a, youtubeParts: parseYoutube(a.youtube) }; }
   return out;
 }

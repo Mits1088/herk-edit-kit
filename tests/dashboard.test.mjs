@@ -76,7 +76,7 @@ test('each item lands on the stage its files prove, and nothing is guessed', () 
   const { cfg } = fixture(); const s = buildState(cfg, NOW);
   assert.equal(by(s, 'src-new-idea').stage, 'source');
   assert.equal(by(s, '2026-11-15-001-01').stage, 'rewrite');
-  const undecided = by(s, '2026-11-14-001-03'); assert.equal(undecided.stage, 'choose'); assert.equal(undecided.needs[0].label, 'Choose Version A or B');
+  const undecided = by(s, '2026-11-14-001-03'); assert.equal(undecided.stage, 'choose'); assert.equal(undecided.needs[0].label, 'Choose Version A, B or C');
   // reel 1: finished video, keyword resource still a draft, so Instagram is blocked
   const one = by(s, '2026-11-14-001-01');
   assert.equal(one.stage, 'instagram'); assert.equal(one.version, 'A'); assert.equal(one.project.slug, 'sample-one');
@@ -232,7 +232,8 @@ test('request changes records feedback only; starting the revision is a separate
 
 test('choosing a script records the choice and hands over the exact version; a queued job is tracked', async () => {
   const { cfg } = fixture2(); const id = '2026-11-14-001-03';
-  await assert.rejects(handleAction(cfg, { id, type: 'decide', version: 'C' }), /Choose version A or B/);
+  await assert.rejects(handleAction(cfg, { id, type: 'decide', version: 'D' }), /Choose version A, B or C/);
+  await assert.rejects(handleAction(cfg, { id, type: 'decide', version: 'C' }), /Version C is empty/);
   await assert.rejects(handleAction(cfg, { id: ONE, type: 'decide', version: 'A' }), /not waiting for a script choice/);
   let msg = await handleAction(cfg, { id, type: 'decide', version: 'B' });
   assert.match(msg, /No job was started/); assert.match(msg, /\/approve-reel reel 3 version B, batch batch-2026-11-14-001/);
@@ -243,6 +244,26 @@ test('choosing a script records the choice and hands over the exact version; a q
   await probeQueue(cfg); cfg.runtime.queue.running = true; // pretend ClaudeClaw is up; the fake CLI answers
   msg = await handleAction(cfg, { id, type: 'decide', version: 'A' }); assert.match(msg, /queued in ClaudeClaw/);
   it = by(buildState(cfg, NOW), id); assert.deepEqual(it.jobs.map(j => [j.id, j.kind, j.status]), [['m42', 'approve', 'queued']]);
+});
+
+test('Version C: Mits writes his own script, saves it, approves it, and it is locked while chosen', async () => {
+  const { cfg } = fixture2(); const id = '2026-11-14-001-03'; const file = join(cfg.root, 'reels-data/content/version-c', id + '.txt');
+  assert.equal(itemDetail(cfg, buildState(cfg, NOW), id).versionC, null, 'empty until written');
+  await assert.rejects(handleAction(cfg, { id: ONE, type: 'version-c', text: 'x' }), /not waiting for a script choice/);
+  let msg = await handleAction(cfg, { id, type: 'version-c', text: 'My own hook.\r\nMy own payoff.\n\n' });
+  assert.match(msg, /Version C saved/); assert.equal(readFileSync(file, 'utf8'), 'My own hook.\nMy own payoff.\n');
+  assert.equal(itemDetail(cfg, buildState(cfg, NOW), id).versionC.text, 'My own hook.\nMy own payoff.');
+  msg = await handleAction(cfg, { id, type: 'decide', version: 'C' });
+  assert.match(msg, /approve-reel reel 3 version C, batch batch-2026-11-14-001 \(Mits's own script, in reels-data\/content\/version-c\/2026-11-14-001-03\.txt/);
+  let it = by(buildState(cfg, NOW), id); assert.equal(it.decision.version, 'C'); assert.match(it.decision.sha, /^[a-f0-9]{64}$/); assert.equal(it.needs[0].label, 'Finish approving Version C');
+  await assert.rejects(handleAction(cfg, { id, type: 'version-c', text: 'changed' }), /Change your choice first/);
+  await handleAction(cfg, { id, type: 'decide', version: null });
+  msg = await handleAction(cfg, { id, type: 'version-c', text: '   ' }); assert.match(msg, /Version C cleared/);
+  assert.equal(itemDetail(cfg, buildState(cfg, NOW), id).versionC, null);
+  await assert.rejects(handleAction(cfg, { id, type: 'decide', version: 'C' }), /Version C is empty/);
+  // An approved Version C file is read like A or B.
+  writeFileSync(join(cfg.root, 'instagram_scripts_output/approved/batch-2026-11-14-001/03-sample-reel-3-version-c.txt'), 'Status at approval: READY TO RECORD\n');
+  it = by(buildState(cfg, NOW), id); assert.equal(it.version, 'C'); assert.notEqual(it.stage, 'choose');
 });
 
 test('queue output and upload results are read correctly', () => {

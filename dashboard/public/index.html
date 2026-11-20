@@ -4,123 +4,33 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Content Command Centre</title>
-<style>
-:root{
-  --bg:#f2f4f8; --surface:#ffffff; --sunk:#e9edf3; --ink:#131a2a; --muted:#5a6579; --line:#d9dfe8;
-  --accent:#2f4bd8; --accent-ink:#ffffff;
-  --you:#8a4b00; --you-bg:#ffedc7; --ok:#0b6b45; --ok-bg:#d8f3e5; --bad:#a8271b; --bad-bg:#fde2de;
-  --wait:#4b5870; --wait-bg:#e6eaf1; --run:#2f4bd8; --run-bg:#e2e7ff;
-  --display:"Space Grotesk","Segoe UI",system-ui,sans-serif; --body:"Inter","Segoe UI",system-ui,sans-serif; --mono:"JetBrains Mono",Consolas,ui-monospace,monospace;
-}
-@media (prefers-color-scheme: dark){ :root{
-  --bg:#0e121b; --surface:#171d2a; --sunk:#1f2636; --ink:#e8ecf5; --muted:#98a3b8; --line:#2a3246;
-  --accent:#8fa3ff; --accent-ink:#0e121b;
-  --you:#ffc766; --you-bg:#3a2c0c; --ok:#6fdcaa; --ok-bg:#0f2e22; --bad:#ff9c92; --bad-bg:#3a1512;
-  --wait:#aab5c9; --wait-bg:#232b3c; --run:#aab8ff; --run-bg:#1d2550; color-scheme:dark } }
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
-[hidden]{display:none!important}
-.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 48px}
-h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
-h1{font-size:22px;font-weight:700} h2{font-size:19px;font-weight:600} h3{font-size:15px;font-weight:600}
-p{margin:0}
-.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
-.nav,.tabs{display:flex;flex-wrap:wrap;gap:6px}
-button,select{font:inherit;color:inherit}
-button{cursor:pointer}
-button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.nav button,.tabs button{border:1px solid var(--line);background:var(--surface);padding:7px 13px;border-radius:999px;font-weight:500}
-.nav button[aria-current="true"],.tabs button[aria-current="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.count{display:inline-block;min-width:20px;text-align:center;margin-left:6px;padding:0 6px;border-radius:999px;background:var(--you-bg);color:var(--you);font-size:12px;font-weight:600}
-.note{margin-top:8px;color:var(--muted);font-size:13px}
-main{margin-top:20px;display:grid;gap:20px}
-.sec-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;justify-content:space-between}
-.sub{color:var(--muted);font-size:13px}
-.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
-.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.you{background:var(--you-bg);color:var(--you)} .ok{background:var(--ok-bg);color:var(--ok)} .bad{background:var(--bad-bg);color:var(--bad)}
-.wait{background:var(--wait-bg);color:var(--wait)} .run{background:var(--run-bg);color:var(--run)}
-.unkp{border:1px dashed var(--muted);color:var(--muted)}
-.mono{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
-.group{display:grid;gap:8px;align-content:start}
-.group>h3{color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-size:12px;font-family:var(--body)}
-.task{display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:center;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
-.task:hover,.prow:hover{border-color:var(--accent)}
-.task strong{font-weight:600} .task .go{color:var(--accent);font-weight:600;font-size:13px}
-.task .sub{grid-column:1/-1}
-summary{cursor:pointer;padding:6px 0} .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px;align-items:start}
-.rows{display:grid;gap:8px}
-.prow{display:grid;grid-template-columns:minmax(170px,1fr) minmax(0,3fr);gap:8px 18px;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;align-items:start}
-.prow.dim{opacity:.62}
-.pipeline-item{display:grid;gap:6px}
-.pipeline-item>.row{justify-content:flex-end}
-.prow .pt{display:grid;gap:3px} .prow .pt strong{font-weight:600;line-height:1.3}
-.prow .pr{display:grid;gap:7px;min-width:0}
-.pn{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
-@media (max-width:720px){.prow{grid-template-columns:1fr}}
-.chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
-.track{display:flex;flex-wrap:wrap;gap:3px}
-.track span{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--sunk);color:var(--muted)}
-.track .past{background:var(--ok-bg);color:var(--ok)} .track .now{background:var(--run-bg);color:var(--run);font-weight:600}
-.track .need{background:var(--you-bg);color:var(--you);font-weight:600;outline:1.5px solid var(--you)} .track .fail{background:var(--bad-bg);color:var(--bad);font-weight:600;outline:1.5px solid var(--bad)}
-.track .nr,.track .unk{background:none;border:1px dashed var(--muted)}
-.legend{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;color:var(--muted)}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg button{border:0;background:var(--surface);padding:5px 11px;font-size:13px;font-weight:500} .seg button[aria-current="true"]{background:var(--ink);color:var(--bg)}
-.back{background:none;border:0;padding:0;color:var(--accent);font-weight:600;display:inline-flex;align-items:center}
-.back::before{content:"←";margin-right:6px}
-.from{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
-.tabs .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--you);margin-left:6px;vertical-align:middle}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px;min-width:0}
-.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:start}
-.script{background:var(--sunk);border-radius:8px;padding:12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.btn{border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:8px;font-weight:600}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.btn.small{padding:4px 10px;font-size:13px}
-a.btn{text-decoration:none;display:inline-block}
-.inp{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;max-width:340px}
-.inp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.form{display:grid;gap:6px}
-select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;max-width:100%}
-.kv{display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:5px 14px;font-size:14px;margin:0}
-.kv dt{color:var(--muted)} .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
-.cap{background:var(--sunk);border-radius:8px;padding:10px 12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
-.block{background:var(--bad-bg);color:var(--bad);border-radius:8px;padding:9px 12px;font-size:14px}
-.info{background:var(--run-bg);color:var(--run);border-radius:8px;padding:9px 12px;font-size:14px}
-.unknown{border:1px dashed var(--muted);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--muted)}
-.unknown ul{margin:4px 0 0;padding-left:18px}
-video{width:220px;max-width:100%;aspect-ratio:9/16;background:#000;border-radius:10px}
-.media{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}
-@media (max-width:560px){.media{grid-template-columns:1fr}}
-table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;padding:4px 10px 4px 0;border-bottom:1px dashed var(--line)}
-.scroll{overflow-x:auto}
-.day{display:grid;grid-template-columns:170px 1fr;gap:6px 16px;padding:12px 0;border-top:1px solid var(--line)}
-@media (max-width:560px){.day{grid-template-columns:1fr}}
-.ev{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:none;border:0;padding:3px 0;text-align:left}
-/* phone: every control is a 44px target, and the four views fit one row */
-@media (max-width:760px){
-  .nav{display:grid;grid-template-columns:repeat(4,auto);gap:4px;width:100%} .nav button{padding:7px 6px;font-size:14px;white-space:nowrap}
-  .nav .count{margin-left:4px}
-  .nav button,.tabs button,.btn,.btn.small,.seg button,.back,.ev,select,.inp,summary{min-height:44px}
-  .btn,.btn.small,.seg button{display:inline-flex;align-items:center;justify-content:center}
-  summary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
-  input[type=checkbox]{width:22px;height:22px;flex:none}
-}
-@media (max-width:560px){.ev strong,.ev .sub{flex-basis:100%}.ev{padding:6px 0}} /* status, then title, then date: the same shape on every row */
-@media (max-width:350px){.nav{grid-template-columns:repeat(2,1fr)}}
-#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,520px);z-index:20}
-</style>
+<script>/* Light unless you chose Dark or Auto (follow Windows). Set before the first paint so the page never flashes. */ (function(){ let t='light'; try{ t=localStorage.getItem('cc-theme')||'light'; }catch(_){} if(t!=='auto') document.documentElement.dataset.theme=t==='dark'?'dark':'light'; })();</script>
+<link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/research.css">
 <link rel="stylesheet" href="/publish.css">
 </head>
 <body>
+<div class="shell">
+<aside class="rail">
+  <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M4 8h16M4 16h16M9 3v5M15 3v5M9 16v5M15 16v5"/></svg></span><div><h1>Content Command Centre</h1><small>Reels pipeline</small></div></div>
+  <nav class="nav" id="nav" aria-label="Views"></nav>
+  <div class="rail-foot">
+    <div class="sync" id="status" role="status"><span class="s1"><span class="live off"></span>Loading…</span></div>
+    <div class="theme" role="group" aria-label="Theme">
+      <button type="button" data-theme-set="light" aria-pressed="false" title="Light"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg><span>Light</span></button>
+      <button type="button" data-theme-set="dark" aria-pressed="false" title="Dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg><span>Dark</span></button>
+      <button type="button" data-theme-set="auto" aria-pressed="false" title="Follow Windows"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>Auto</span></button>
+    </div>
+  </div>
+</aside>
 <div class="wrap">
-  <div class="top"><h1>Content Command Centre</h1><nav class="nav" id="nav" aria-label="Views"></nav></div>
-  <p class="note" id="status">Loading…</p>
+  <div class="topbar"><nav class="crumbs" id="crumbs" aria-label="You are here"></nav></div>
   <main id="app"></main>
 </div>
+</div>
 <div id="toast" role="status" hidden></div>
+<script src="/icons.js"></script>
 <script src="/research.js"></script>
 <script src="/publish.js"></script>
 <script>
@@ -147,18 +57,26 @@ async function refreshDetail(){ if(!cur) return; const id=cur.id; try{ const r=a
 async function load(quiet){ try{ const r=await fetch('/api/state'); S=await r.json(); if(cur){ cur=S.items.find(i=>i.id===cur.id)||null; if(!cur) view='attention'; }
     // The Publish tab shows the approved file from the item detail; fetch it again when the approval moved on.
     if(cur&&detail&&detail.video&&cur.project&&cur.project.approval&&cur.project.approval.sha!==detail.video.sha) refreshDetail();
-    const q=S.queue; $('#status').textContent=`Read from your files at ${new Date(S.generatedAt).toLocaleTimeString('en-GB')}. ${q.available&&q.running?'Job queue: '+q.missions.length+' jobs':'Job status unavailable ('+q.reason+')'}. It reads your workflow files and changes one only when a button says so.${S.remote?' Phone view: copy captions, download the video and record what you published. Everything else stays on the PC.':''}${S.warnings.length?' Warnings: '+S.warnings.join('; '):''}`;
-    render(); }catch(e){ if(!quiet) $('#status').textContent='Could not read state: '+e.message; } }
+    const q=S.queue, on=q.available&&q.running;
+    $('#status').innerHTML=`<span class="s1"><span class="live${on?'':' off'}"></span>Read from your files at ${new Date(S.generatedAt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span><span class="m">${on?'Job queue: '+q.missions.length+' jobs':'Job status unavailable ('+esc(q.reason)+')'}</span><span class="m why">It reads your workflow files and changes one only when a button says so.</span>${S.remote?'<span class="m">Phone view: copy captions, download the video and record what you published. Everything else stays on the PC.</span>':''}${S.warnings.length?'<span class="warn">Warnings: '+esc(S.warnings.join('; '))+'</span>':''}`;
+    render(); }catch(e){ if(!quiet) $('#status').innerHTML='<span class="warn">Could not read state: '+esc(e.message)+'</span>'; } }
 async function act(a,msg){ const r=await fetch('/api/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(a)}); const j=await r.json(); if(!r.ok){ toast(j.error||'That did not work'); return; } toast(j.message&&j.message!=='Saved'?j.message:(msg||'Saved')); await load(); if(/^approve-|^restore-/.test(a.type||'')) await refreshDetail(); }
 async function open(id,t){ cur=S.items.find(i=>i.id===id); if(!cur) return; extSel=''; extTick=false; extSrc=''; tab=t||(cur.needs[0]||{}).tab||'scripts'; detail=null; pubOpen=null; liveOpen=false; fbOpen=false; studio={}; render(); window.scrollTo(0,0);
   try{ const r=await fetch('/api/item?id='+encodeURIComponent(id)); detail=await r.json(); if(cur&&cur.id===id) render(); }catch(_){} }
 
-function track(it){ const i=idx(it); const need=it.needs.some(n=>n.group==='Production'||n.group==='Publishing');
-  return `<span class="track">${TR.map(([k,l])=>{ let c='';
+// The reel strip: the 13 stages drawn as one strip in four phases. Each stage keeps its text (✓ Source …) for
+// screen readers, tooltips and the full strip on the project page; the compact strip shows coloured frames only.
+const PHASES = [['Write','--p-write',3],['Make','--p-make',5],['Check','--p-check',2],['Ship','--p-ship',3]];
+const STATE_WORD = {past:'done',need:'waiting on you',now:'running',fail:'failed or blocked',unk:'not recorded'};
+function track(it,full){ const frames=stageFrames(it); let at=0;
+  return `<span class="track strip${full?' full':''}">${PHASES.map(([name,c,n])=>{ const f=frames.slice(at,at+=n);
+    return `<span class="ph" style="--c:var(${c})"><small>${name}</small><span class="frs">${f.join('')}</span></span>`; }).join('')}</span>`; }
+function stageFrames(it){ const i=idx(it); const need=it.needs.some(n=>n.group==='Production'||n.group==='Publishing');
+  return TR.map(([k,l])=>{ let c='';
     if(k==='yt'||k==='tt'){ const st=it.platforms[k].state; c=st==='published'?'past':st==='due'?'need':st==='not-recorded'?'unk':''; }
     else if(k==='instagram'){ const st=it.platforms.ig.state; c=st==='published'?'past':st==='blocked'?'fail':st==='ready'?'need':(st==='unconfirmed'||st==='unknown')?'unk':''; }
     else { const j=S.stages.indexOf(k); c=j<i?(it.videoOnly&&j<=2?'unk':'past'):j===i?(it.fail?'fail':need?'need':it.dormant?'unk':'now'):''; }
-    return `<span class="${c}">${MARK[c]||''}${l}</span>`; }).join('')}</span>`; }
+    return `<span class="${c}" title="${l}${STATE_WORD[c]?': '+STATE_WORD[c]:''}">${MARK[c]||''}${l}</span>`; }); }
 function nextAct(it){ const n=it.needs.filter(x=>x.group==='Production'||x.group==='Publishing');
   if(it.setAside) return ['Idle','Set aside: not currently working on this'];
   if(it.fail) return ['You','Recover: '+it.fail];
@@ -174,22 +92,43 @@ function resPill(it){ const g=it.resource.gate; if(it.resource.state!=='live'&&(
   if(it.resource.state!=='live'&&g==='approved') return `<span class="pill run">PDF approved, not live · ${esc(it.resource.keyword)}</span>`;
   const r=RES[it.resource.state]||['unkp','PDF unknown']; return r[0]?`<span class="pill ${r[0]}">${r[1]}${it.resource.keyword?' · '+esc(it.resource.keyword):''}</span>`:`<span class="track"><span class="nr">${r[1]}</span></span>`; }
 
+const ICON = { attention:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', pipeline:'<path d="M4 6h16M4 12h16M4 18h10"/>', schedule:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', research:'<circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/>', insights:'<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>' };
+const VIEW = { attention:'Needs me', pipeline:'Pipeline', schedule:'Schedule', research:'Research', insights:'Insights' };
 function renderNav(){ const n=S.items.filter(i=>i.active).reduce((a,i)=>a+i.needs.filter(x=>x.group!=='Unlinked video').length,0);
-  $('#nav').innerHTML=[['attention',`Needs me <span class="count">${n}</span>`],['pipeline','Pipeline'],['schedule','Schedule'],['research','Research']].map(([k,l])=>`<button data-view="${k}" aria-current="${view===k}">${l}</button>`).join(''); }
+  const live=S.items.filter(i=>i.active).length, sched=S.items.filter(i=>!i.hidden&&!i.videoOnly&&(i.platforms.ig.state==='ready'||(i.active&&['yt','tt'].some(k=>i.platforms[k].state==='due')))).length;
+  const extra={attention:`<span class="count">${n}</span>`,pipeline:`<span class="q">${live}</span>`,schedule:sched?`<span class="q">${sched} to post</span>`:''};
+  document.title=(n?`(${n}) `:'')+'Content Command Centre';
+  $('#nav').innerHTML=Object.keys(VIEW).map(k=>`<button data-view="${k}" aria-current="${view===k}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>${VIEW[k]} ${extra[k]||''}</button>`).join(''); }
+// A reel's little cover takes the colours of the phase it is in and the one after it.
+function thumbHue(it){ const p=['--p-write','--p-make','--p-check','--p-ship']; const s=Math.max(0,idx(it)); const ph=s<3?0:s<8?1:s<10?2:3; return `--c1:var(${p[ph]});--c2:var(${p[(ph+1)%4]})`; }
+function renderCrumbs(){ const c=$('#crumbs'); if(!c) return; const sep='<span class="sep" aria-hidden="true">/</span>';
+  c.innerHTML=cur?`<span>${VIEW[view]}</span>${sep}<b>${esc(cur.title)}</b>${sep}<span>${esc({scripts:'Scripts',resource:'Resource',recording:'Recording',video:'Video',publish:'Publish'}[tab]||'')}</span>`:`<b>${VIEW[view]}</b>`; }
+function themeButtons(){ let t='light'; try{ t=localStorage.getItem('cc-theme')||'light'; }catch(_){} document.querySelectorAll('[data-theme-set]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.themeSet===t))); }
+function setTheme(t){ try{ localStorage.setItem('cc-theme',t); }catch(_){} if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; themeButtons(); }
+themeButtons();
 
 function vAttention(){ const all=S.items.filter(i=>i.active).flatMap(i=>i.needs.map(n=>({...n,it:i})));
-  const list=g=>{ const a=all.filter(x=>x.group===g); return a.length?a.map(x=>`<button class="task" data-open="${x.it.id}" data-tab="${x.tab}"><strong>${esc(x.label)}</strong><span class="go">${esc(x.go)}</span><span class="sub">${esc(x.it.title)} · ${esc(x.why)}</span></button>`).join(''):'<p class="sub">Nothing waiting here.</p>'; };
+  const taskBtn=x=>`<button class="task" data-open="${x.it.id}" data-tab="${x.tab}"><strong>${esc(x.label)}</strong><span class="go">${esc(x.go)}</span><span class="sub">${esc(x.why)}</span></button>`;
+  // One card per reel, its tasks listed underneath, in the order the first task appeared.
+  const list=g=>{ const a=all.filter(x=>x.group===g); if(!a.length) return '<p class="empty">Nothing waiting here.</p>';
+    const by=new Map(); a.forEach(x=>{ if(!by.has(x.it.id)) by.set(x.it.id,[]); by.get(x.it.id).push(x); });
+    return [...by.values()].map(ts=>{ const it=ts[0].it; const meta=it.batch?it.batch.replace(/^batch-/,'')+(it.reel?' · reel '+it.reel:'')+(it.version?' · version '+it.version:''):it.videoOnly?'video project':'';
+      const pill=g==='Unlinked video'?'':it.fail?'<span class="pill bad">Blocked</span>':`<span class="pill you">${ts.length>1?ts.length+' on you':'On you'}</span>`;
+      return `<article class="reel" aria-label="${esc(it.title)}"><div class="reel-h"><span class="thumb" aria-hidden="true" style="${thumbHue(it)}"></span><strong>${esc(it.title)}</strong>${pill}<span class="mono">${esc(meta)}</span>${it.videoOnly?'':track(it)}</div>${ts.map(taskBtn).join('')}</article>`; }).join(''); };
   const running=S.items.filter(i=>i.active&&!i.needs.length&&idx(i)<S.stages.indexOf('instagram'));
-  return `<div class="sec-head"><h2>Needs me</h2><span class="sub">${all.filter(x=>x.group!=='Unlinked video').length} items. Each opens the project at the step you need.</span></div>
-  <div class="two"><section class="group"><h3>Production</h3>${list('Production')}</section>
-  <section class="group"><h3>Publishing</h3>${list('Publishing')}<h3 style="margin-top:10px">Needs linking</h3>${list('Needs linking')}</section></div>
+  const cnt=g=>all.filter(x=>x.group===g).length, nT=all.filter(x=>x.group!=='Unlinked video'), nR=new Set(nT.map(x=>x.it.id)).size;
+  return `<div class="sec-head"><div><h2>Needs me</h2><p class="sub">${nT.length} items across ${nR} ${nR===1?'reel':'reels'}. Each opens the project at the step you need.</p></div></div>
+  ${(()=>{ const prod=`<section class="group"><h3>Production <em class="lane-n">${cnt('Production')}</em></h3>${list('Production')}</section>`,
+    pub=`<section class="group"><h3>Publishing <em class="lane-n">${cnt('Publishing')}</em></h3>${list('Publishing')}<h3 style="margin-top:12px">Needs linking <em class="lane-n">${cnt('Needs linking')}</em></h3>${list('Needs linking')}</section>`;
+    // the busier lane takes the wide column
+    return `<div class="two">${cnt('Production')>=cnt('Publishing')+cnt('Needs linking')?prod+pub:pub+prod}</div>`; })()}
   ${all.some(x=>x.group==='Unlinked video')?`<details class="group"><summary><strong>${all.filter(x=>x.group==='Unlinked video').length} video projects have no linked script</strong> <span class="sub">Older experiments and test renders. Link each to its script, or remove it from the dashboard. Not counted above.</span></summary><div class="group" style="margin-top:8px">${list('Unlinked video')}</div></details>`:''}
-  <section class="group"><h3>Running without you</h3>${running.map(i=>`<button class="task" data-open="${i.id}"><strong>${esc(i.title)}</strong><span class="pill run">${NAME[i.stage]}</span><span class="sub">${esc(i.note||'')}</span></button>`).join('')||'<p class="sub">Nothing is shown as in progress.</p>'}${S.queue.running?'':'<p class="sub">Job status is unavailable, so this list comes from files only. Files show outputs, not whether an agent is running right now.</p>'}</section>`; }
+  <section class="group"><h3>Running without you <em class="lane-n">${running.length}</em></h3>${running.map(i=>`<button class="task" data-open="${i.id}"><strong>${esc(i.title)}</strong><span class="pill run">${NAME[i.stage]}</span><span class="sub">${esc(i.note||'')}</span></button>`).join('')||'<p class="empty">Nothing is shown as in progress.</p>'}${S.queue.running?'':'<p class="sub">Job status is unavailable, so this list comes from files only. Files show outputs, not whether an agent is running right now.</p>'}</section>`; }
 
 function vPipeline(){ const items=visible(); const gone=S.items.filter(i=>i.hidden).length, shown=S.items.length-gone, more=shown-S.items.filter(i=>i.active).length;
   return `<div class="sec-head"><h2>Pipeline</h2><span class="seg"><button data-all="0" aria-current="${!showAll}">Active</button><button data-all="1" aria-current="${showAll===true}">All (${shown})</button><button data-all="2" aria-current="${showAll==='hidden'}">Removed (${gone})</button></span></div>
   <p class="sub">${items.length} projects shown. ${showAll==='hidden'?'These are removed from every list. Open one to put it back. No file was deleted.':showAll?'All includes projects you are not interested in or not currently working on. Use Move to Active to pick one up again.':more+' more are set aside, finished or older; choose All to see them. Use Move to All to set a project aside.'}</p>
-  <div class="legend"><span>Key:</span><span class="track"><span class="past">✓ Done</span><span class="need">● Waiting on you</span><span class="now">… Running</span><span class="fail">✕ Failed or blocked</span><span class="unk">? Not recorded</span><span>Not started</span><span class="nr">Not required</span></span></div>
+  <div class="legend"><span>Key:</span><span class="phase-key"><span style="color:var(--p-write)">Write</span><span style="color:var(--p-make)">Make</span><span style="color:var(--p-check)">Check</span><span style="color:var(--p-ship)">Ship</span></span><span class="strip-key"><i class="past"></i>Done</span><span class="strip-key"><i class="need"></i>Waiting on you</span><span class="strip-key"><i class="now"></i>Running</span><span class="strip-key"><i class="fail"></i>Failed or blocked</span><span class="strip-key"><i class="unk"></i>Not recorded or not required</span><span class="strip-key"><i></i>Not started</span><span class="sub">Hover a frame for its stage.</span></div>
   <div class="rows">${items.map(it=>{ const [who,txt]=nextAct(it); const w=WHO[who];
     return `<div class="pipeline-item"><button class="prow ${it.active?'':'dim'}" data-open="${it.id}"><span class="pt"><strong>${esc(it.title)}</strong><span class="mono">${esc(it.batch?it.batch.replace(/^batch-/,''):it.videoOnly?'video project':'not batched')}${it.reel?' · reel '+it.reel:''}${it.version?' · version '+it.version:''}</span></span>
     <span class="pr">${track(it)}<span class="pn"><span class="pill ${w[0]}">${w[1]}</span><span>${esc(txt)}</span></span>
@@ -207,7 +146,7 @@ function vSchedule(){ const act=S.items.filter(i=>!i.hidden&&!i.videoOnly);
   const chips=i=>['yt','tt'].map(k=>{ const st=i.platforms[k].state; return `<span class="pill ${st==='published'?'ok':st==='due'?'you':st==='not-recorded'?'unkp':'wait'}">${k==='yt'?'Shorts':'TikTok'} ${st==='published'?'posted':st==='due'?'due':st==='not-recorded'?'not recorded':'waiting'}</span>`; }).join('');
   const drow=i=>`<button class="ev" data-open="${i.id}" data-tab="publish">${chips(i)}<strong>${esc(i.title)}</strong><span class="sub">${!i.due?'file still in the Uploads root':tracked(i)?`due ${dueTxt(i.due)} · ${left(i.due)}`:'Instagram '+fmt(i.platforms.ig.at)}</span></button>`;
   return `<div class="sec-head"><h2>Publishing schedule</h2><span class="sub">All times shown in ${S.dueTimeZone}.</span></div>
-  ${S.dueProvisional?`<div class="unknown"><strong>Due dates are provisional.</strong> They assume the second calendar day after the confirmed Instagram post, at ${tzNote()}. You have not confirmed that time or timezone yet. Set DASH_DUE_HOUR and DASH_TZ, then DASH_DUE_CONFIRMED=1.</div>`:`<p class="sub">Shorts and TikTok fall due at ${tzNote()} on the second calendar day after the confirmed Instagram post.</p>`}
+  ${!S.dueDays?'<p class="sub">Shorts and TikTok fall due as soon as the Instagram post is recorded.</p>':S.dueProvisional?`<div class="unknown"><strong>Due dates are provisional.</strong> They assume calendar day ${S.dueDays} after the confirmed Instagram post, at ${tzNote()}. You have not confirmed that time or timezone yet. Set DASH_DUE_HOUR and DASH_TZ, then DASH_DUE_CONFIRMED=1.</div>`:`<p class="sub">Shorts and TikTok fall due at ${tzNote()} on calendar day ${S.dueDays} after the confirmed Instagram post.</p>`}
   <div class="panel">${sec('Ready for Instagram',ready,i=>row(i,'<span class="pill you">Ready to post</span>'))}
   ${sec('Blocked',blocked,i=>row(i,'<span class="pill bad">Resource not live</span>','keyword '+esc(i.resource.keyword)))}
   ${sec('Possible posts to confirm',unc,i=>row(i,'<span class="pill unkp">Unconfirmed</span>',fmt(i.platforms.ig.at)))}</div>
@@ -225,14 +164,27 @@ function tScripts(it){ const d=detail;
   const src=d.source?`<div><h3>Source transcript</h3><p class="mono">${esc(d.source.file)}${d.source.match?' · matched '+esc(d.source.match):''}</p><div class="script">${esc(d.source.text)}</div></div>`:'';
   const g=d.generated; const canApprove=it.stage==='choose'&&it.batch&&it.reel;
   const col=(v,t)=>t?`<div><div class="row"><h3>Version ${v}${g.draft?' (draft)':''}</h3>${it.version===v?'<span class="pill ok">Approved</span>':''}${canApprove&&!it.decision?`<button class="btn small primary" data-decide="${v}">Approve Version ${v}</button>`:''}${it.decision&&it.decision.version===v?'<span class="pill you">Your choice</span>':''}</div><div class="script">${esc(t)}</div></div>`:'';
-  return `<div class="panel"><div class="row"><h3>${g&&g.draft?'Draft scripts':'Scripts'}</h3><span class="pill ${it.review==='READY TO RECORD'?'ok':it.review==='REVIEW REQUIRED'||it.review==='PENDING REVIEW'?'you':'unkp'}">${esc(it.review==='PENDING REVIEW'?'Awaiting review':it.review||'Status unknown')}</span>${g&&g.draft?'<span class="pill wait">Not exported</span>':''}</div>
+  return `<div class="panel"><div class="row"><h3>${g&&g.draft?'Draft scripts':'Scripts'}</h3>${d.approved&&it.review==='REVIEW REQUIRED'?`<span class="pill ok" title="The batch was marked REVIEW REQUIRED; you approved this version anyway">Approved anyway (batch: REVIEW REQUIRED)</span>`:`<span class="pill ${it.review==='READY TO RECORD'?'ok':it.review==='REVIEW REQUIRED'||it.review==='PENDING REVIEW'?'you':'unkp'}">${esc(it.review==='PENDING REVIEW'?'Awaiting review':it.review||'Status unknown')}</span>`}${g&&g.draft?'<span class="pill wait">Not exported</span>':''}</div>
   ${g&&g.draft?draftNote(it):''}
   ${g?`<p class="mono">${esc(g.file)}</p>`:'<p class="sub">No scripts have been written for this item yet.</p>'}
-  <div class="grid3">${src}${g?col('A',g.versionA)+col('B',g.versionB):''}</div>
+  <div class="grid3">${src}${g?col('A',g.versionA)+col('B',g.versionB)+colC(it,d,g,canApprove):''}</div>
   ${d.approved?`<dl class="kv"><dt>Approved file</dt><dd class="mono">${esc(d.approved.file)}</dd></dl>`:canApprove?(it.decision?decisionBox(it):`<p class="sub">Approving records your choice and hands the work to the approve-reel skill, which saves the approved file and builds any PDF guide. Nothing is uploaded.${it.review==='REVIEW REQUIRED'?' This reel is marked REVIEW REQUIRED, so the skill will show what needs checking and stop unless you tell it to approve anyway.':''}</p>`):''}
   ${it.stage==='source'?`<p class="sub">Start the rewrite in Claude Code:</p>${cmd('/rewrite-reels')}`:''}</div>`; }
+/* Version C: Mits's own script, written here (from scratch or by combining A and B). Saved to
+   reels-data/content/version-c/<id>.txt and approved like A or B. Typing is kept in vc across re-renders. */
+let vc = { id: null, text: '' };
+const vcSaved = d => (d && d.versionC && d.versionC.text) || '';
+function colC(it,d,g,canApprove){ const saved=vcSaved(d); const edit=canApprove&&!it.decision&&!g.draft&&!S.remote;
+  if(!edit&&!saved&&it.version!=='C') return '';
+  if(vc.id!==it.id) vc={ id: it.id, text: saved };
+  const dirty=vc.text!==saved;
+  const head=`<div class="row"><h3>Version C (yours)</h3>${it.version==='C'?'<span class="pill ok">Approved</span>':''}${it.decision&&it.decision.version==='C'?'<span class="pill you">Your choice</span>':''}${edit?`<span class="pill wait" id="vcdirty" ${dirty?'':'hidden'}>Not saved</span>`:''}</div>`;
+  if(!edit) return `<div>${head}${saved?`<div class="script">${esc(saved)}</div>`:'<p class="sub">Approved from a Version C that is no longer on file. The approved file holds its words.</p>'}</div>`;
+  return `<div>${head}<textarea id="vctext" class="inp script" rows="14" style="width:100%;box-sizing:border-box;margin-top:6px" placeholder="Write your own version here.">${esc(vc.text)}</textarea>
+  <div class="row"><button class="btn small primary" data-vcapprove="1" ${vc.text.trim()?'':'hidden'}>Approve Version C</button><button class="btn small" data-vcsave="1">Save without approving</button><button class="btn small" data-vcclear="1" ${vc.text?'':'hidden'}>Clear</button></div>
+  <p class="sub">Approve saves what is in the box, then approves it. The captions and CTA come from the batch file, as for A and B.</p></div>`; }
 // Working drafts: written by the rewriter, not yet through the independent review that exports the final scripts.
-function draftNote(it){ if(it.review==='PENDING REVIEW') return `<div class="info">These are working drafts. The independent review has not run, so there is nothing to approve yet. The review marks each reel READY TO RECORD or REVIEW REQUIRED and exports the final scripts; choosing Version A or B comes after that.</div>
+function draftNote(it){ if(it.review==='PENDING REVIEW') return `<div class="info">These are working drafts. The independent review has not run, so there is nothing to approve yet. The review marks each reel READY TO RECORD or REVIEW REQUIRED and exports the final scripts; choosing Version A, B or your own Version C comes after that.</div>
   <p class="sub">To run the review, paste this into Claude Code:</p>${cmd(`Run the review for ${it.batch}: the reel-reviewer review pass, reel-rewriter to apply the review changes, then the reel-reviewer final pass.`)}`;
   return `<div class="unknown">These drafts ${it.review==='READY TO RECORD'||it.review==='REVIEW REQUIRED'?'were reviewed ('+esc(it.review)+'), but':'exist, but'} no final scripts were exported to instagram_scripts_output, so a version cannot be chosen here.</div>`; }
 function tResource(it){ const r=it.resource; const p=RES[r.state]||['unkp','Unknown'];
@@ -333,7 +285,7 @@ const withdraw = k => `<div class="row"><button class="btn small" data-unpub="${
 function tPublish(it){ const d=detail, a=d&&d.approved, pl=it.platforms, p=it.project; const IG={published:['ok',pl.ig.at?'Published '+fmt(pl.ig.at):'Posted, per the Uploads folder'],ready:['you','Ready to post'],blocked:['bad','Blocked'],unconfirmed:['unkp','Possible post, unconfirmed'],unknown:['unkp','Not recorded'],'not-yet':['wait','Not ready']}[pl.ig.state];
   const sg=it.suggestions.filter(s=>s.publishedAt);
   const dl=p&&p.finalExists?`<div class="row"><a class="btn small" href="/file?p=${encodeURIComponent(p.finalFile)}&dl=1">Download the final video</a><span class="mono">${esc(p.finalFile)}</span></div>`:'';
-  const ig=`<div class="panel"><div class="row"><h3>Instagram</h3><span class="pill ${IG[0]}">${IG[1]}</span></div>
+  const ig=`<div class="panel"><div class="row"><h3>${BrandIcon('ig')}Instagram</h3><span class="pill ${IG[0]}">${IG[1]}</span></div>
     ${pl.ig.state==='blocked'?`<div class="block">Keyword ${esc(it.resource.keyword)} is not live, so this reel cannot be recorded as posted. See the Resource tab.</div>`:''}
     ${sg.map(s=>`<div class="unknown">ig-insights found a possible post from ${fmt(s.publishedAt)}: <span class="mono">${esc(s.url||'')}</span>. It counts as published only after you confirm it.</div>${s.key?`<div class="row"><button class="btn primary" data-confirmpost="${esc(s.key)}">Yes, this is the post</button><span class="sub">Confirms it in ig-insights${(p?p.slug:s.slug)?', as video project '+esc(p?p.slug:s.slug):''}.</span></div>`:''}`).join('')}
     ${dl||'<p class="sub">Final video: not ready</p>'}
@@ -344,12 +296,12 @@ function tPublish(it){ const d=detail, a=d&&d.approved, pl=it.platforms, p=it.pr
     ${pl.ig.state==='published'&&pl.ig.manual?`<p class="sub">Entered by you. ig-insights has not matched this post yet; when it does, you confirm it here and its time takes over.</p>${withdraw('ig')}`:''}
     ${a?copyBox('Instagram caption',a.instagram):'<p class="sub">Captions appear once a script is approved and linked.</p>'}</div>`;
   const ST={published:k=>['ok',pl[k].at?'Published '+fmt(pl[k].at):'Posted, per the Uploads folder'],due:()=>['you','Due: no post recorded'],'not-recorded':()=>['unkp','Not recorded'],waiting:()=>['wait','Waiting for the date'],'not-yet':()=>['wait','After Instagram']};
-  const later=(k,n,body)=>{ const st=pl[k].state, s=ST[st](k); return `<div class="panel"><div class="row"><h3>${n}</h3><span class="pill ${s[0]}">${s[1]}</span></div>
+  const later=(k,n,body)=>{ const st=pl[k].state, s=ST[st](k); return `<div class="panel"><div class="row"><h3>${BrandIcon(k)}${n}</h3><span class="pill ${s[0]}">${s[1]}</span></div>
     ${it.due?`<dl class="kv"><dt>Due</dt><dd>${dueTxt(it.due)}${st==='due'||st==='waiting'?' · '+left(it.due):''} · ${S.dueTimeZone}</dd>${st==='published'?postLink(pl[k].url):''}</dl>`:st==='not-yet'?'<p class="sub">The date is set when Instagram is confirmed.</p>':''}
     ${st==='not-recorded'?'<p class="sub">This reel went on Instagram before the dashboard recorded this platform. If you posted it here too, record it.</p>':''}${st!=='published'&&st!=='not-yet'?dl+pubForm(k):''}${st==='published'?(pl[k].source==='folder'?`<p class="sub">Read from the Uploads folder: the linked file is in "${esc(S.files.uploadsAllDir)}". No time or link is recorded.</p>`:withdraw(k)):''}${a?body:''}</div>`; };
   const y=a?a.youtubeParts:null;
   const fb=pl.fb.state==='published'?`<span class="pill ok">Published ${fmt(pl.fb.at)}</span><dl class="kv">${postLink(pl.fb.url)}</dl>${withdraw('fb')}`:pl.ig.state==='published'?pubForm('fb'):'<p class="sub">No Facebook publication recorded.</p>';
-  return `${Publishing.render(it,d,S.remote)}<details class="group"><summary><strong>Manual publication records and caption copies</strong></summary><div class="grid3">${ig}${later('yt','YouTube Shorts',y?(y.title||y.description?copyBox('Title',y.title)+copyBox('Description',y.description)+copyBox('Tags',y.tags):copyBox('YouTube Shorts text',a.youtube)):'')}${later('tt','TikTok',a?copyBox('TikTok caption',a.tiktok):'')}<div class="panel"><h3>Facebook</h3>${fb}<p class="sub">Historical “all platforms” records do not include Facebook.</p></div></div></details>`; }
+  return `${Publishing.render(it,d,S.remote)}<details class="group"><summary><strong>Manual publication records and caption copies</strong></summary><div class="grid3">${ig}${later('yt','YouTube Shorts',y?(y.title||y.description?copyBox('Title',y.title)+copyBox('Description',y.description)+copyBox('Tags',y.tags):copyBox('YouTube Shorts text',a.youtube)):'')}${later('tt','TikTok',a?copyBox('TikTok caption',a.tiktok):'')}<div class="panel"><h3>${BrandIcon('fb')}Facebook</h3>${fb}<p class="sub">Historical “all platforms” records do not include Facebook.</p></div></div></details>`; }
 
 /* ---- approvals (phase 2) ---- */
 let fbOpen = false, studio = {}, ret = null; // ret: the row a project was opened from, and how far the list was scrolled
@@ -380,17 +332,54 @@ function vProject(){ const it=cur; const i=idx(it); const dots=new Set(it.needs.
   const tabs=[['scripts','Scripts'],['resource','Resource'],['recording','Recording'],['video','Video'],['publish','Publish']];
   const body={scripts:tScripts,resource:tResource,recording:tRecording,video:tVideo,publish:tPublish}[tab](it); const [who,txt]=nextAct(it); const w=WHO[who];
   const rp=(it.files.source||'').match(/(?:^|\/)research-(instagram|tiktok|youtube)-([^\/]+)\.md$/); const rid=rp?rp[1]+'-'+(rp[1]==='youtube'?[...new TextEncoder().encode(rp[2])].map(b=>b.toString(16).padStart(2,'0')).join(''):rp[2]):null;
-  return `<div class="row" style="justify-content:space-between"><button class="back" data-back="1">Back to ${view==='attention'?'Needs me':view==='pipeline'?'Pipeline':view==='research'?'Research':'Schedule'}</button><button class="btn small" data-hide="${it.hidden?0:1}" title="Only the dashboard's own note changes. No file is deleted.">${it.hidden?'Put back in the dashboard':'Remove from the dashboard'}</button></div>
-  <div class="sec-head"><div><h2>${esc(it.title)}</h2><div class="mono">${esc(it.id)}${it.batch?' · '+esc(it.batch):''}${it.version?' · version '+it.version:''}${it.project?' · video-projects/'+esc(it.project.slug):''}</div>${rid?`<div class="from" style="margin-top:6px"><span>Started from a saved research idea.</span><button class="btn small" data-research="${esc(rid)}">Open the idea in Research</button></div>`:''}</div></div>
-  ${track(it)}<div class="pn"><span class="pill ${w[0]}">${w[1]}</span><span>${esc(txt)}</span></div>
+  return `<div class="row" style="justify-content:space-between"><button class="back" data-back="1">Back to ${view==='attention'?'Needs me':view==='pipeline'?'Pipeline':view==='research'?'Research':view==='insights'?'Insights':'Schedule'}</button><button class="btn small" data-hide="${it.hidden?0:1}" title="Only the dashboard's own note changes. No file is deleted.">${it.hidden?'Put back in the dashboard':'Remove from the dashboard'}</button></div>
+  <section class="proj-hero" aria-label="Project"><div><h2>${esc(it.title)}</h2><div class="mono" style="margin-top:4px">${esc(it.id)}${it.batch?' · '+esc(it.batch):''}${it.version?' · version '+it.version:''}${it.project?' · video-projects/'+esc(it.project.slug):''}</div>${rid?`<div class="from" style="margin-top:10px"><span>Started from a saved research idea.</span><button class="btn small" data-research="${esc(rid)}">Open the idea in Research</button></div>`:''}</div>
+  ${track(it,true)}<div class="pn${w[0]==='you'?' mine':''}"><span class="pill ${w[0]}">${w[1]}</span><span>${esc(txt)}</span></div></section>
   ${it.unknowns.length?`<div class="unknown"><strong>Not recorded</strong><ul>${it.unknowns.map(u=>`<li>${esc(u)}</li>`).join('')}</ul></div>`:''}
   <div class="tabs">${tabs.map(([k,l])=>`<button data-tab-go="${k}" aria-current="${tab===k}">${l}${dots.has(k)?'<span class="dot" title="Needs you"></span>':''}</button>`).join('')}</div>${body}`; }
 
-function render(){ if(!S) return; renderNav(); if(view==='research'&&!cur){ if(!document.getElementById('research-root')) Research.mount($('#app')); return; } const tick=document.getElementById('hooktick'), was=tick&&tick.checked; $('#app').innerHTML = cur ? vProject() : view==='pipeline' ? vPipeline() : view==='schedule' ? vSchedule() : vAttention();
+/* ---- Insights: ig-insights numbers, its written reports, and a Refresh that reads Instagram again ---- */
+let IN = null, insReport = '', insPoll = null;
+async function loadInsights(){ try{ const r=await fetch('/api/insights'); IN=await r.json(); }catch(e){ IN={error:e.message}; }
+  if(view==='insights'&&!cur) drawInsights();
+  clearTimeout(insPoll); if(IN&&IN.refresh&&IN.refresh.running) insPoll=setTimeout(loadInsights,3000); else if(IN&&IN.refresh&&IN.refresh.finishedAt&&!IN.seen){ IN.seen=1; load(true); } }
+async function refreshInsights(){ const r=await fetch('/api/insights/refresh',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}); const j=await r.json().catch(()=>({})); toast(j.message||j.error||'That did not work'); loadInsights(); }
+const num = v => v==null?'–':Number(v).toLocaleString('en-GB');
+const ago = d => { const h=(Date.now()-new Date(d))/3600e3; return h<1?Math.max(1,Math.round(h*60))+' min ago':h<48?Math.round(h)+' h ago':Math.round(h/24)+' days ago'; };
+function drawInsights(){ const app=$('#app');
+  if(!IN){ app.innerHTML='<p class="sub">Loading Instagram numbers…</p>'; return; }
+  if(IN.error){ app.innerHTML='<div class="block">Could not read insights: '+esc(IN.error)+'</div>'; return; }
+  const rf=IN.refresh, busy=rf&&rf.running, a=IN.account;
+  const byUrl=new Map(S.items.filter(i=>i.platforms.ig.url).map(i=>[i.platforms.ig.url,i]));
+  const tile=(v,l)=>'<div class="tile"><b>'+v+'</b><span>'+l+'</span></div>';
+  const head='<div class="sec-head"><h2>Instagram</h2><div class="row"><span class="sub">'+(IN.takenAt?'Numbers read from Instagram '+fmt(IN.takenAt)+' ('+ago(IN.takenAt)+')':'No numbers collected yet')+'</span>'
+    +(S.remote?'':'<button class="btn small primary" data-insrefresh="1" '+(busy?'disabled':'')+'>'+(busy?'Refreshing…':'Refresh from Instagram')+'</button>')+'</div></div>'
+    +(rf?'<div class="'+(busy||rf.ok?'info':'block')+'">'+esc(rf.message)+(rf.finishedAt&&!busy?' '+fmt(rf.finishedAt)+'.':'')+(rf.log&&!busy?'<details><summary class="sub">Refresh log</summary><div class="script">'+esc(rf.log)+'</div></details>':'')+'</div>':'')
+    +'<p class="sub">Refresh reads your account and every Reel from Instagram (read only; nothing is posted), adds that reading to the ig-insights history, then proposes links for new posts. The written weekly report below still comes from /ig-insights in Claude Code.</p>';
+  const tiles=a?'<div class="tiles">'+tile(num(a.followers),'Followers')+(a.d7?tile(num(a.d7.views),'Views, last 7 days')+tile(num(a.d7.reach),'Reach, last 7 days')+tile(num(a.d7.accounts_engaged),'Accounts engaged, 7 days')+tile(num(a.d7.profile_views),'Profile views, 7 days'):'')+(a.d28?tile(num(a.d28.views),'Views, last 28 days'):'')+'</div>':'';
+  const rows=IN.reels.map(r=>{ const it=byUrl.get(r.url); const d=r.viewsBefore!=null&&r.views!=null&&r.views>r.viewsBefore?'<span class="up">+'+num(r.views-r.viewsBefore)+' since '+fmt(IN.previousAt)+'</span>':'';
+    return '<tr><td><a href="'+esc(r.url)+'" target="_blank" rel="noopener">'+esc(r.title)+'</a>'+(it?' <button class="btn small" data-insopen="'+esc(it.id)+'">Project</button>':r.project?' <span class="mono">'+esc(r.project)+'</span>':'')+'</td><td class="n">'+fmt(r.publishedAt)+'</td><td class="n">'+num(r.views)+d+'</td><td class="n">'+num(r.reach)+'</td><td class="n">'+(r.skipRate==null?'–':r.skipRate+'%')+'</td><td class="n">'+(r.avgWatch==null?'–':r.avgWatch.toFixed(1)+' s')+'</td><td class="n">'+num(r.likes)+'</td><td class="n">'+num(r.comments)+'</td><td class="n">'+num(r.saves)+'</td><td class="n">'+num(r.shares)+'</td></tr>'; }).join('');
+  const table='<div class="panel"><h3>Reels ('+IN.reels.length+')</h3><p class="sub">Views and reach grow with age, so compare those only between Reels of a similar age. Skip rate is the share of viewers who swiped away in the first few seconds; lower is better.</p><div class="scroll"><table class="ins"><tr><th>Reel</th><th class="n">Posted</th><th class="n">Views</th><th class="n">Reach</th><th class="n">Skip rate</th><th class="n">Avg watch</th><th class="n">Likes</th><th class="n">Comments</th><th class="n">Saves</th><th class="n">Shares</th></tr>'+(rows||'<tr><td colspan="10" class="sub">No Reels in the latest reading.</td></tr>')+'</table></div></div>';
+  const reps=IN.reports; if(!insReport||!reps.some(x=>x.name===insReport)) insReport=reps[0]?reps[0].name:'';
+  const src='/insights/reports/'+encodeURIComponent(insReport);
+  const report=reps.length?'<div class="panel"><div class="row" style="justify-content:space-between"><h3>Weekly report</h3><div class="row"><select id="insreport" aria-label="Choose a report">'+reps.map(x=>'<option value="'+esc(x.name)+'" '+(x.name===insReport?'selected':'')+'>'+esc(x.name.replace(/\.html$/,''))+' · '+fmt(x.at)+'</option>').join('')+'</select><a class="btn small" href="'+src+'" target="_blank" rel="noopener">Open in a new tab</a></div></div><p class="sub">Written by /ig-insights on the date shown. Its numbers are from that day, not from the latest refresh.</p><iframe class="report-frame" id="insframe" title="Weekly Instagram report" src="'+src+'"></iframe></div>':'<div class="unknown">No written report yet. Run /ig-insights in Claude Code for the weekly report.</div>';
+  // Redraw only the numbers when the same report is showing, so the 30-second reload does not reload the report or lose its scroll.
+  const top=document.getElementById('ins-top'), rp=document.getElementById('ins-report');
+  if(top&&rp&&rp.dataset.src===src){ top.innerHTML=head+tiles+table; return; }
+  app.innerHTML='<div id="ins-top" style="display:grid;gap:16px">'+head+tiles+table+'</div><div id="ins-report" data-src="'+esc(src)+'">'+report+'</div>'; }
+
+// A short fade when you move to another view, project or tab; the 30-second reloads redraw without it.
+let shown='';
+function fadeIn(){ const k=cur?cur.id+'|'+tab:view; if(k===shown) return; const first=!shown; shown=k; if(first||!$('#app').animate||matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  $('#app').animate([{opacity:.001,transform:'translateY(6px)'},{opacity:1,transform:'none'}],{duration:200,easing:'cubic-bezier(.2,.7,.2,1)'}); }
+function render(){ if(!S) return; renderNav(); renderCrumbs(); fadeIn(); if(view==='research'&&!cur){ if(!document.getElementById('research-root')) Research.mount($('#app')); return; } if(view==='insights'&&!cur){ drawInsights(); return; } const tick=document.getElementById('hooktick'), was=tick&&tick.checked; $('#app').innerHTML = cur ? vProject() : view==='pipeline' ? vPipeline() : view==='schedule' ? vSchedule() : vAttention();
   const t2=document.getElementById('hooktick'); if(t2&&was) t2.checked=true; probeStudio(); }
 
 document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const d=b.dataset;
-  if(d.view){ view=d.view; cur=null; ret=null; pubOpen=null; liveOpen=false; render(); }
+  if(d.themeSet){ setTheme(d.themeSet); }
+  else if(d.view){ view=d.view; cur=null; ret=null; pubOpen=null; liveOpen=false; render(); if(view==='insights') loadInsights(); }
+  else if(d.insrefresh){ refreshInsights(); }
+  else if(d.insopen){ ret={id:d.insopen,tab:'publish',y:window.scrollY}; open(d.insopen,'publish'); }
   else if(d.back){ const r=ret; cur=null; ret=null; pubOpen=null; liveOpen=false; render(); if(r&&view!=='research'){ const row=[...document.querySelectorAll('[data-open]')].find(x=>x.dataset.open===r.id&&(x.dataset.tab||'')===r.tab)||document.querySelector(`[data-open="${CSS.escape(r.id)}"]`); if(row){ const h=row.closest('details'); if(h) h.open=true; row.focus({preventScroll:true}); } window.scrollTo(0,r.y); } }
   else if(d.research){ view='research'; cur=null; ret=null; render(); Research.open(d.research); }
   else if(d.open){ ret={id:d.open,tab:d.tab||'',y:window.scrollY}; open(d.open,d.tab); }
@@ -400,7 +389,12 @@ document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b
   else if(d.copy!==undefined){ copyText(d.copy).then(()=>toast('Copied'),()=>toast('Copy was blocked; select the text instead')); }
   else if(d.task){ act({id:cur.id,type:'task',task:d.task,done:d.done==='1'},d.done==='1'?'Marked as done':'Marked as not done'); }
   else if(d.linkval){ act({id:cur.id,type:'link',kind:d.linkval,value:d.val},'Linked'); }
-  else if(d.decide!==undefined){ act({id:cur.id,type:'decide',version:d.decide||null}); }
+  else if(d.decide!==undefined){ act({id:cur.id,type:'decide',version:d.decide||null}).then(refreshDetail); }
+  else if(d.vcsave){ const id=cur.id; act({id,type:'version-c',text:vc.text}).then(refreshDetail); }
+  else if(d.vcapprove){ const id=cur.id; (async()=>{ if(vc.text!==vcSaved(detail)){ const r=await fetch('/api/action',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,type:'version-c',text:vc.text})}); if(!r.ok){ const j=await r.json().catch(()=>({})); toast(j.error||'Version C could not be saved, so nothing was approved'); return; } }
+      await act({id,type:'decide',version:'C'}); await refreshDetail(); })(); }
+  else if(d.vcclear){ if(vc.text.trim()&&!confirm('Clear Version C? It stays saved on file until you press Save.')) return; const t='';
+    vc.text=t; render(); }
   else if(d.approvepdf){ act({id:cur.id,type:'approve-pdf',sha:d.approvepdf}); }
   else if(d.checkupload){ act({id:cur.id,type:'check-upload',sha:d.checkupload}); }
   else if(d.fbopen!==undefined){ fbOpen=d.fbopen||false; render(); const t=document.getElementById('fbtext'); if(t) t.focus(); }
@@ -420,8 +414,9 @@ document.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b
   else if(d.liveopen!==undefined){ liveOpen=d.liveopen==='1'; render(); }
   else if(d.resstatus){ const t=document.getElementById('livetick'); if(d.resstatus==='live'&&!(t&&t.checked)){ toast('Tick the box first'); return; } liveOpen=false; act({id:cur.id,type:'resource-status',keyword:cur.resource.keyword,to:d.resstatus,confirmed:d.resstatus==='live'}); }
   else if(d.hide!==undefined){ act({id:cur.id,type:'hide',hidden:d.hide==='1'},d.hide==='1'?'Removed from every list. No file was deleted. Find it under Pipeline, Removed.':'Back in the dashboard'); } });
-document.addEventListener('input',e=>{ if(e.target.id==='extsrc') extSrc=e.target.value; });
-document.addEventListener('change',e=>{ if(e.target.id==='extsel'){ extSel=e.target.value; extTick=false; render(); return; } if(e.target.id==='exttick'){ extTick=e.target.checked; const b=document.querySelector('[data-approveext]'); if(b) b.disabled=!extTick||extBusy; return; } const s=e.target.closest('select[data-link]'); if(s&&cur) act({id:cur.id,type:'link',kind:s.dataset.link,value:s.value||null},s.value?'Linked':'Link removed'); });
+document.addEventListener('input',e=>{ if(e.target.id==='extsrc') extSrc=e.target.value;
+  if(e.target.id==='vctext'){ vc.text=e.target.value; const s=vcSaved(detail)!==vc.text; const b=document.querySelector('[data-vcapprove]'); if(b) b.hidden=!vc.text.trim(); const c=document.querySelector('[data-vcclear]'); if(c) c.hidden=!vc.text; const p=document.getElementById('vcdirty'); if(p) p.hidden=!s; } });
+document.addEventListener('change',e=>{ if(e.target.id==='insreport'){ insReport=e.target.value; drawInsights(); return; } if(e.target.id==='extsel'){ extSel=e.target.value; extTick=false; render(); return; } if(e.target.id==='exttick'){ extTick=e.target.checked; const b=document.querySelector('[data-approveext]'); if(b) b.disabled=!extTick||extBusy; return; } const s=e.target.closest('select[data-link]'); if(s&&cur) act({id:cur.id,type:'link',kind:s.dataset.link,value:s.value||null},s.value?'Linked':'Link removed'); });
 setInterval(()=>{ if(cur&&cur.resource.upload&&cur.resource.upload.state==='uploading') load(true); },3000);
 load(); setInterval(()=>{ const v=[...document.querySelectorAll('video,audio')].find(x=>!x.paused)||(fbOpen||pubOpen||liveOpen?1:null)||(cur&&tab==='resource'&&cur.resource.pdf&&!(cur.resource.upload&&cur.resource.upload.state==='uploading')?1:null); if(!document.hidden&&!document.querySelector('select:focus,input:focus,textarea:focus')&&!(v&&!v.paused)) load(true); },30000);
 </script>

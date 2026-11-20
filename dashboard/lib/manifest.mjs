@@ -2,7 +2,9 @@
 // It writes only inside cfg.contentDir. The two changes to workflow records (a resources.md line, an ig-insights
 // link) are checked here and carried out by workflow.mjs.
 import { readdirSync, readFileSync, writeFileSync, renameSync, mkdirSync, appendFileSync, existsSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { join, resolve, sep, dirname } from 'node:path';
+import { createHash } from 'node:crypto';
+import { versionCFile } from './jobs.mjs';
 import { setResourceStatus, confirmLink, approveHook, approveCandidate, approveExternal, restoreExternal } from './workflow.mjs';
 import { prepare as zernioPrepare, prepareRetry as zernioRetry } from './zernio.mjs';
 
@@ -34,6 +36,11 @@ function writeManifest(cfg, m) {
   renameSync(tmp, target);
 }
 
+const sha = t => createHash('sha256').update(t).digest('hex');
+// Version C: the script Mits writes himself on the Scripts tab. Empty or missing reads as no Version C.
+export function readVersionC(cfg, id) {
+  try { const text = readFileSync(resolve(cfg.root, versionCFile(id)), 'utf8').replace(/\s+$/, ''); return text ? { file: versionCFile(id), text, sha: sha(text) } : null; } catch { return null; }
+}
 const atomic = (target, text) => { const tmp = target + '.tmp'; writeFileSync(tmp, text); renameSync(tmp, target); };
 
 // For results that arrive later (an upload finishing, a job being queued).
@@ -91,7 +98,20 @@ export function applyAction(cfg, state, action, now = new Date()) {
   } else if (a.type === 'decide') {
     if (item.stage !== 'choose') throw new Error('This reel is not waiting for a script choice');
     if (a.version == null) delete m.decision;
-    else { if (!['A', 'B'].includes(a.version)) throw new Error('Choose version A or B'); m.decision = { version: a.version, at }; }
+    else {
+      if (!['A', 'B', 'C'].includes(a.version)) throw new Error('Choose version A, B or C');
+      m.decision = { version: a.version, at };
+      if (a.version === 'C') { const c = readVersionC(cfg, item.id); if (!c) throw new Error('Version C is empty. Write it and save it first.'); m.decision.sha = c.sha; }
+    }
+  } else if (a.type === 'version-c') {
+    if (item.stage !== 'choose') throw new Error('This reel is not waiting for a script choice');
+    if (m.decision) throw new Error('A choice is already recorded. Change your choice first, then edit Version C.');
+    const text = String(a.text == null ? '' : a.text).replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+    if (text.length > 20000) throw new Error('Keep Version C under 20,000 characters');
+    const target = resolve(cfg.root, versionCFile(item.id));
+    if (!target.startsWith(resolve(cfg.contentDir) + sep)) throw new Error('Refusing to write outside the content folder');
+    mkdirSync(dirname(target), { recursive: true }); atomic(target, text ? text + '\n' : '');
+    m.versionC = text ? { at, sha: sha(text) } : null; if (!text) delete m.versionC;
   } else if (a.type === 'approve-pdf') {
     const r = item.resource || {};
     if (!r.keyword || !r.pdf || !r.sha) throw new Error('There is no PDF to approve');

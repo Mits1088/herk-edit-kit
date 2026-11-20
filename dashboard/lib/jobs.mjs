@@ -8,8 +8,11 @@ import { createHash } from 'node:crypto';
 const clawDir = cfg => dirname(dirname(cfg.missionCli)); // the CLI reads its own settings from its install folder
 
 // The wording an agent (queued or pasted into Claude Code) receives. Kept here so both routes say the same thing.
-export const approvalCommand = (it, v) => `/approve-reel reel ${it.reel} version ${v}, batch ${it.batch}`;
-export const approvalPrompt = (it, v) => `Run the approve-reel skill: approve reel ${it.reel} version ${v}, batch ${it.batch}. Build the resource PDF if the call to action needs one. Do not upload to Gumroad: Mits approves the PDF in the content dashboard.`;
+// Version C is Mits's own script, typed in the dashboard. Its words live in this file, not in the batch.
+export const versionCFile = id => `reels-data/content/version-c/${id}.txt`;
+const cNote = (it, v) => v === 'C' ? ` (Mits's own script, in ${versionCFile(it.id)}; use its words exactly as the SCRIPT, and take the captions and CTA from the batch file)` : '';
+export const approvalCommand = (it, v) => `/approve-reel reel ${it.reel} version ${v}, batch ${it.batch}${cNote(it, v)}`;
+export const approvalPrompt = (it, v) => `Run the approve-reel skill: approve reel ${it.reel} version ${v}, batch ${it.batch}${cNote(it, v)}. Write the Instagram, TikTok and YouTube Shorts captions from the approved script if the batch has none, and have them reviewed. Build the resource PDF if the call to action needs one. Do not upload to Gumroad: Mits approves the PDF in the content dashboard.`;
 export const revisionPrompt = (kw, text) => `Revise the resource guide for keyword ${kw} (reels-data/resource-sources/${kw.toLowerCase()}.md) to address this feedback from Mits: "${text.replace(/"/g, "'")}". Confirm any changed step at its official source, rebuild with the approve-reel skill's guide_to_pdf.mjs (${kw.toLowerCase()} --preview) and fix every CHECK. Do not upload to Gumroad: the rebuilt PDF needs Mits's approval in the content dashboard.`;
 
 // Video work runs in Claude Code, never as a queued job, so this is always a command to paste.

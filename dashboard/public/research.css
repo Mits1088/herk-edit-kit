@@ -58,7 +58,6 @@
 .r-hand h4{margin:0;font-family:var(--display);font-size:14px;font-weight:600}
 .r-reasons{margin:0;padding-left:18px;font-size:14px;color:var(--muted)}
 .r-divide{margin-top:8px;font-size:16px}
-.r-saved{border-color:var(--accent);color:var(--accent)}
 .r-ideas{display:grid;gap:12px}
 @media (max-width:900px){
   .r-field{grid-column:span 4}.r-field.wide{grid-column:span 8}.r-actions{grid-column:1/-1}
@@ -66,7 +65,7 @@
 }
 @media (max-width:760px){
   .r-field,.r-field.wide{grid-column:span 6}.r-field.full{grid-column:1/-1}
-  .r-field select,.r-field input,.r-actions .btn{height:44px}
+  .r-field select,.r-field input,.r-actions .btn,.r-actions .r-check{height:44px}
   .r-note .btn,.r-detail .btn,.r-ideas .btn,.seg.r-seg button,#research-root .back,#research-root .r-link{min-height:44px}
   .r-open{display:inline-block;padding:10px 0;min-height:44px}
   .r-hist>summary{padding:12px 0}
@@ -81,3 +80,32 @@
   .r-table td.post{padding-left:0}.r-table td.post::before{content:none}
 }
 @media (max-width:760px){.r-metrics{min-width:0}.r-metrics th.num,.r-metrics td.num{text-align:left}.r-metrics td.num .sub{text-align:left}}
+/* Signals table: on wider screens the heading row stays on screen while the posts scroll beneath it */
+@media (min-width:761px){
+  .r-frame:has(> .r-metrics){overflow:auto;max-height:calc(100vh - 120px)}
+  .r-metrics thead th{position:sticky;top:0;z-index:1;box-shadow:inset 0 -1px 0 var(--line)}
+}
+/* Idea stages: one strong mark per saved post (Signals rows, Ideas, the post page) */
+.r-status{display:inline-flex;align-items:center;gap:2px;font-size:12.5px;font-weight:600;line-height:1.3;padding:3px 10px 3px 7px;border-radius:999px;margin:0 0 6px;max-width:100%;overflow-wrap:anywhere}
+.r-status .ti{width:14px;height:14px;margin-right:4px}
+.r-st-todo{background:var(--accent-soft);color:var(--accent)}
+.r-st-production{background:var(--run-bg);color:var(--run)}
+.r-st-used{background:var(--ok-bg);color:var(--ok)}
+.r-st-dropped{background:var(--wait-bg);color:var(--wait)}
+.r-metrics tr[class^="r-row-"] td.post{box-shadow:inset 4px 0 0 var(--strip)}
+.r-metrics tr[class^="r-row-"] td{background:color-mix(in srgb,var(--strip) 5%,transparent)}
+.r-row-todo{--strip:var(--accent)}.r-row-production{--strip:var(--run)}.r-row-used{--strip:var(--ok)}.r-row-dropped{--strip:var(--wait)}
+.r-check{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border:1px solid var(--line);border-radius:9px;font-size:14px;font-weight:500;white-space:nowrap;cursor:pointer;background:var(--surface)}
+.r-check:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.r-check input{width:16px;height:16px;accent-color:var(--accent)}
+.r-stage{display:grid;gap:10px}
+.r-stage+.r-stage{margin-top:14px}
+.r-group-head{display:flex;align-items:center;gap:2px;margin:0;font-size:17px}
+.r-group-head .count{margin-left:6px;font-size:13px;font-weight:600;color:var(--muted)}
+details.r-stage>summary{cursor:pointer;display:grid;gap:4px;padding:12px 44px 12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);position:relative}
+details.r-stage>summary::after{content:'';position:absolute;right:20px;top:20px;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .15s var(--ease)}
+details.r-stage[open]>summary::after{transform:rotate(-135deg);top:24px}
+details.r-stage>summary:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+details.r-stage>summary::marker{content:''}
+details.r-stage[open]>summary{margin-bottom:6px}
+.r-stage-used .r-group-head{color:var(--ok)}.r-stage-dropped .r-group-head{color:var(--wait)}

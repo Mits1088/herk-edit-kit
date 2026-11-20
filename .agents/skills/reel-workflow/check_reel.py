@@ -3,6 +3,10 @@
 
 A pass proves the mechanical checks only, never that the facts are right.
 
+Two layouts are accepted. New batches carry CAPTION NOTES (verified facts for the captions), because the
+captions are written by /approve-reel from the approved script. Older batches carry the three platform
+captions instead, and are still checked as before.
+
 Usage: python -I -X utf8 check_reel.py reel-01-topic.md [--source transcript.md] [--seconds 45] [--wpm 165] [--final]
 
 Script length is judged by time, not by word count: the source's real duration (from --seconds, or a
@@ -20,6 +24,12 @@ import unicodedata
 HEADINGS = [
     ("script_a", "**VERSION A — Faithful Rewrite**"),
     ("script_b", "**VERSION B — Stronger Alternative**"),
+    ("notes", "**CAPTION NOTES**"),
+    ("comparison", "**FINAL COMPARISON**"),
+]
+LEGACY_HEADINGS = [
+    ("script_a", "**VERSION A — Faithful Rewrite**"),
+    ("script_b", "**VERSION B — Stronger Alternative**"),
     ("instagram", "**INSTAGRAM CAPTION**"),
     ("tiktok", "**TIKTOK CAPTION**"),
     ("youtube", "**YOUTUBE SHORTS**"),
@@ -27,7 +37,7 @@ HEADINGS = [
 ]
 SCRIPTS = ("script_a", "script_b")
 CAPTIONS = ("instagram", "tiktok", "youtube")
-COPY = SCRIPTS + CAPTIONS
+NOTE_RE = re.compile(r"^- .+\|\s*(https?://\S+|corrections\.md)(\s*,\s*https?://\S+)*\s*$", re.I)
 COMPARISON_FIELDS = ("Recommended version", "Estimated spoken duration", "Key creative differences", "Search phrases",
                      "CTA", "Publication status", "Factual warnings", "Source links")
 STATUSES = ("READY TO RECORD", "REVIEW REQUIRED")
@@ -83,8 +93,19 @@ def is_decorative(ch):
             or 0x2190 <= cp <= 0x21FF or cp in (0x200D, 0x20E3, 0xFE0F))
 
 
+def is_legacy(raw):
+    """True for an older Reel file that still carries the three platform captions."""
+    return "**CAPTION NOTES**" not in raw and "**INSTAGRAM CAPTION**" in raw
+
+
+def copy_keys(parts):
+    """The sections a viewer will hear or read, or that feed the captions."""
+    return SCRIPTS + (CAPTIONS if "instagram" in parts else ("notes",))
+
+
 def sections(raw):
-    positions = [(raw.find(h), key, h) for key, h in HEADINGS]
+    headings = LEGACY_HEADINGS if is_legacy(raw) else HEADINGS
+    positions = [(raw.find(h), key, h) for key, h in headings]
     if any(p < 0 for p, _, _ in positions):
         missing = [h for p, _, h in positions if p < 0]
         return None, f"missing headings: {', '.join(missing)}"
@@ -132,7 +153,7 @@ def load_corrections(path):
 
 
 def check_corrections(parts, add, path):
-    copy = {k: parts[k] for k in COPY}
+    copy = {k: parts[k] for k in copy_keys(parts)}
     everything = "\n".join(copy.values())
     hits = 0
     for section, match, pattern, reason in load_corrections(path):
@@ -209,8 +230,21 @@ def check_search(parts, add):
         "; ".join(missing) if missing else f"main phrase \"{phrases[0]}\" on every platform")
 
 
+def check_notes(parts, add):
+    """Caption notes: one verified fact per line, each with its source, so /approve-reel can write captions from them."""
+    lines = [ln.strip() for ln in parts["notes"].splitlines() if ln.strip()]
+    bad = [ln for ln in lines if not NOTE_RE.match(ln)]
+    if not lines:
+        add("FAIL", "CAPTION NOTES", "empty: list the verified facts the captions may use")
+    elif bad:
+        add("FAIL", "CAPTION NOTES", f"{len(bad)} line(s) not '- fact | source URL': {bad[0][:60]}")
+    else:
+        add("PASS", "CAPTION NOTES", f"{len(lines)} facts, each with a source")
+
+
 def check_cta(parts, add):
-    found = {k: {m.upper() for m in KEYWORD_RE.findall(parts[k]) if m.isupper()} for k in COPY}
+    keys = [k for k in copy_keys(parts) if k != "notes"]
+    found = {k: {m.upper() for m in KEYWORD_RE.findall(parts[k]) if m.isupper()} for k in keys}
     keywords = set().union(*found.values())
     if not keywords:
         add("PASS", "CTA KEYWORD", "no comment keyword")
@@ -218,7 +252,7 @@ def check_cta(parts, add):
     if len(keywords) > 1:
         add("FAIL", "CTA KEYWORD", f"different keywords: {', '.join(sorted(keywords))}")
         return
-    lacking = [k for k in COPY if not found[k]]
+    lacking = [k for k in keys if not found[k]]
     add("WARN" if lacking else "PASS", "CTA KEYWORD",
         f"{next(iter(keywords))}" + (f", missing from {', '.join(lacking)}" if lacking else " everywhere"))
 
@@ -304,16 +338,20 @@ def main():
     if err:
         print(f"FAIL  STRUCTURE  {err}")
         sys.exit(1)
-    add("PASS", "STRUCTURE", "all six sections, in order")
+    legacy = "instagram" in parts
+    add("PASS", "STRUCTURE", f"all {len(parts)} sections, in order" + (" (older layout with captions)" if legacy else ""))
 
-    for key in COPY:
+    for key in copy_keys(parts):
         if not parts[key] or "{{" in parts[key] or re.search(r"\[[^\]]*\]", parts[key]):
             add("FAIL", "PLACEHOLDER", f"{key} is empty or still has a placeholder")
         if re.search(r"\*\*|^#+ ", parts[key], re.M):
             add("FAIL", "FORMATTING", f"{key} contains markdown")
 
-    check_captions(parts, add)
-    check_search(parts, add)
+    if legacy:
+        check_captions(parts, add)
+        check_search(parts, add)
+    else:
+        check_notes(parts, add)
     check_cta(parts, add)
     check_comparison(parts["comparison"], add, args.final)
     check_corrections(parts, add, args.corrections)

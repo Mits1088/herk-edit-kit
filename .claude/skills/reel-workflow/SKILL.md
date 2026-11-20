@@ -1,14 +1,16 @@
 ---
 name: reel-workflow
-description: Internal workflow behind /rewrite-reels. Turns each Instagram Reel transcript into two ready-to-record scripts and one SEO-friendly caption each for Instagram, TikTok and YouTube Shorts. Load it when running as reel-rewriter or instagram-script-writer.
+description: Internal workflow behind /rewrite-reels. Turns each Instagram Reel transcript into two ready-to-record scripts plus the checked caption notes /approve-reel writes the platform captions from. Load it when running as reel-rewriter or instagram-script-writer.
 user-invocable: false
 ---
 
 # Reel rewriting workflow
 
-Rewrite transcripts of Reels Mits has already selected. Study why each one works, keep its content strategy, and produce two original scripts plus one caption per platform (Instagram, TikTok, YouTube Shorts) that fits either script. Do not generate generic viral scripts from scratch.
+Rewrite transcripts of Reels Mits has already selected. Study why each one works, keep its content strategy, and produce two original scripts plus caption notes: the search phrases, the CTA and the verified facts the captions may use. Do not generate generic viral scripts from scratch.
 
-Run the whole workflow without setup questions. Captions are always included. Never post, message or publish anything.
+Do not write the Instagram, TikTok or YouTube Shorts captions. `/approve-reel` writes them from the script Mits approves (Version A, B or his own Version C), so they always match what he records, and has them independently reviewed then.
+
+Run the whole workflow without setup questions. Never post, message or publish anything.
 
 These standards apply automatically to every batch. Mits never has to request the verification or the audit.
 
@@ -22,37 +24,32 @@ These standards apply automatically to every batch. Mits never has to request th
 - Tools, always run as `python -I -X utf8 <script>`:
   - `D:/herk-edit-kit/.claude/skills/ig-reel/hookscore.py`, `D:/herk-edit-kit/.claude/skills/ig-reel/beats.py`
   - `D:/herk-edit-kit/.claude/skills/ig-human/humanize.py`, `D:/herk-edit-kit/.claude/skills/ig-human/detect.py`
-  - `D:/herk-edit-kit/.claude/skills/ig-caption/caption.py`
   - `D:/herk-edit-kit/.claude/skills/reel-workflow/check_reel.py`
 
 ## Load the skills first
 
-Before reading any transcript, load `ig-reel`, `ig-human` and `ig-caption` with the Skill tool, together in one message. Running their scripts is not a substitute for following their instructions.
+Before reading any transcript, load `ig-reel` and `ig-human` with the Skill tool, together in one message. Running their scripts is not a substitute for following their instructions.
 
 Then read the corrections file. Claims rejected there must not reappear unless new reliable evidence supports them. If you have that evidence, say so in the Factual warnings with its source.
 
 ## Where this overrides the ig-* skills
 
-These rules win when they conflict with `ig-reel`, `ig-human` or `ig-caption`:
+These rules win when they conflict with `ig-reel` or `ig-human`:
 
 - Never ask for three reels or any other input. A thin source gets flagged, not questioned.
 - Ignore `{{your number}}` placeholders in finished scripts. Drop or flag the point instead.
 - No on-screen text list, `REEL READY` block, `CAPTION READY` block, or `log.md` entry.
-- Captions never contain emojis, despite what `ig-caption` allows. Hashtags follow the per-platform counts in section H.
-- `ig-caption` writes for Instagram only. Section H adds the TikTok and YouTube Shorts captions.
-- Verified install commands and prompts are allowed in captions, despite the `ig-caption` link rule. Bare URLs still stay out.
 - Never apply `humanize.py` output blindly. It can delete a valid CTA such as "follow for more practical AI content", so review the diff by hand.
 - Scores are heuristic checks, not predictions of reach. Never replace a good source-style hook because a tool prefers another formula, and never let a score decide the recommendation.
 - Keep hooks under 50 only if you can say why they work. Note it in the comparison.
 - Favour neither version by default. Judge both fairly on how well they would work for this Reel.
 - Do not use generic hook patterns (listed in section E) unless the source used them effectively.
-- Captions must not end with generic "follow for more" lines. Tie any follow CTA to the specific topic.
 
 ## Set up the batch
 
 1. Create the batch ID `batch-YYYY-MM-DD-NNN` using the next unused number, unless one was supplied. Create `outputs/<batch-id>/` with plain `mkdir` so an existing batch fails rather than being reused. Never overwrite an earlier batch.
 2. Store sources under `inputs/<batch-id>/`. Move files that sit directly in `inputs/`, so they aren't processed twice. Files from Mits's drop folder, `D:/herk-edit-kit/Instagram_transcript/`, are copied in, then each original moves to `Instagram_transcript/processed/<batch-id>/` for the same reason. Copy anything else there straight away, because Telegram uploads in `workspace/uploads/` are deleted after 24 hours. Save pasted text as `pasted-01.md`, `pasted-02.md` and so on. A single file with several `## Reel: <name>` headings or `.mp4` filename lines is split into one file per transcript, ignoring any intro line above the first.
-3. Treat every transcript as separate. Never merge them. N transcripts produce exactly 2N scripts and 3N captions: one Instagram, one TikTok and one YouTube Shorts caption per Reel, shared by both versions.
+3. Treat every transcript as separate. Never merge them. N transcripts produce exactly 2N scripts and N sets of caption notes, one per Reel, shared by both versions. No captions.
 
 ### One-Reel missions
 
@@ -143,9 +140,9 @@ Never call something safe, unlimited, guaranteed or automatic without sufficient
 
 - Never place awkward verification disclaimers or caveats mid-script. Resolve the issue, qualify it in natural spoken language, or remove the detail and flag it in the comparison notes. The script is for Instagram viewers, not for an AI evaluating the output.
 - An accuracy fix must be no harder to follow than the line it replaces. When you correct an overclaim, find plain wording for the true version. Do not reach for a technical term from elsewhere in the source. Example: the source hook "reverse engineer any software" became "point an AI coding agent at a compiled app", which is accurate but loses most viewers. "Ask AI how an app does one of its features, without its code" keeps the plainness.
-- Requirements, version numbers, costs, account setup and safety notes go in the caption by default. Speak one only when a viewer would be misled without it, and then in one short plain sentence.
+- Requirements, version numbers, costs, account setup and safety notes go in the caption notes by default, for the captions to carry. Speak one only when a viewer would be misled without it, and then in one short plain sentence.
 - Give source links for important facts in the Final Comparison.
-- Before finalising, cross-check every finished script and caption against your own verification notes. Never leave a claim in the published copy that your research identifies as unsupported.
+- Before finalising, cross-check every finished script and caption note against your own verification notes. Never leave a claim in the copy or the notes that your research identifies as unsupported.
 
 ### C. Version A: Faithful adaptation
 
@@ -170,7 +167,7 @@ Version B must explore a genuinely different creative opening or narrative appro
 - It keeps the source's important information too. Do not drop facts just to differ from A, and stay within 20% of the word budget from step A.8.
 - Both versions must be complete standalone scripts, strong enough to publish independently, and two viable ways to say the same thing.
 - Do not turn it into a different video.
-- It ends on the same CTA as Version A, with the same keyword if there is one, because the three platform captions are shared by both versions. Change how the CTA is said, not what it asks for.
+- It ends on the same CTA as Version A, with the same keyword if there is one, because both versions share one resource and one set of caption notes. Change how the CTA is said, not what it asks for.
 
 ### E. Hooks
 
@@ -206,7 +203,7 @@ The viewer is curious and uses ChatGPT or Claude, but is not a developer. Every 
 
 **Accuracy without padding.** A correction replaces the overclaim with true wording of the same length or shorter. It never adds a clause beside it. If the true version needs more words, cut a weaker detail elsewhere to stay within the budget. Number qualifiers such as "up to" and "more than" are fine; stacked hedges are not.
 
-Never put these in a spoken script: version numbers, commands, file names, URLs, hyphenated or code-style names (say "a skill called Find Skills", not "find-skills"), or lists of more than three brands or product names. They go in the caption.
+Never put these in a spoken script: version numbers, commands, file names, URLs, hyphenated or code-style names (say "a skill called Find Skills", not "find-skills"), or lists of more than three brands or product names. They go in the caption notes.
 
 - Sound like a knowledgeable creator talking to an Instagram audience. Avoid overly neat, corporate or mechanical phrasing. Never sound like technical documentation or a research report.
 - Avoid unnecessary jargon, repetitive transitions, generic introductions, manufactured curiosity gaps, unsupported superlatives and overly complicated sentences.
@@ -227,60 +224,30 @@ Never put these in a spoken script: version numbers, commands, file names, URLs,
 
 Use scratch files for the tools, inside the batch's `.work/` folder. Delete `.work/` when the batch is finished.
 
-### H. Captions
+### H. Caption notes and CTA
 
-Mits posts the same video to Instagram, TikTok and YouTube Shorts, and records only one of the two versions. So each Reel gets three captions, one per platform, and all three are shared by Version A and Version B. Never write a caption per version.
+The captions are written at approval, so your job here is to hand `/approve-reel` everything it needs and nothing it would have to check again.
 
-Write them with `ig-caption` and `ig-human`, then lint the Instagram caption with `caption.py --keywords "<search phrases>"`. `check_reel.py` lints all three.
+**1. Search phrases.** Choose two or three phrases someone would actually type to find this video, such as "claude code plugin" or "claude md file". Build them from the topic and the verified names, never from a claim that was corrected. List them, most important first, in the Final Comparison's `Search phrases` line. Keep names in their normal spelling: write "CLAUDE.md file", not "claude md file".
 
-**1. Pick the search phrases first.** Choose two or three phrases someone would actually type to find this video, such as "claude code plugin" or "claude md file". Build them from the topic and the verified names, never from a claim that was corrected. List them, most important first, in the Final Comparison's `Search phrases` line. Every platform's search reads the caption text, so put the main phrase in the Instagram and TikTok first lines and in the YouTube title, and work the others naturally into the body. Write sentences a person would read, never stuffed keyword lists. Search ignores case and punctuation, so keep names in their normal spelling: write "CLAUDE.md file", not "claude md file".
+**2. Caption notes.** List the verified facts a caption may add for someone who has already watched: the exact tool or repository name, the install command or prompt, requirements and versions, costs and accounts, the caveat kept out of the script, and a quick way to check it worked. One fact per line, in exactly this form, because `check_reel.py` parses it:
 
-**2. Fit both versions.** Each caption must be true whichever version is recorded. Never quote, summarise or depend on a line, example or order that only one version has. Both versions end on the same CTA and the same keyword, so the captions can carry it.
+`- [fact, worded as it may appear in a caption] | [primary source URL]`
 
-**3. Rules for all three captions**
+Use `corrections.md` as the source when the fact is a correction recorded there. Separate several URLs with commas. Every fact must be true whichever version is recorded, and none may repeat a claim the scripts corrected or removed. Leave out anything unconfirmed and list it in the Factual warnings instead. Five to ten lines is usually enough. Nothing in the notes is spoken, so commands and version numbers belong here, not in the script.
 
-1. Absolutely no emojis, decorative symbols, em dashes, excessive punctuation or unnecessary formatting.
-2. No links or bare URLs, because none of the three platforms makes them clickable. Verified install commands and prompts are allowed.
-3. Complement the video rather than summarising it. Add what helps someone who has already watched: the exact name, the command, the setup cost, a quick test, or the caveat that was kept out of the script.
-4. Natural, conversational English in short paragraphs. No marketing language, clickbait, exaggerated claims, forced urgency or generic motivation.
-5. One ask, matching the spoken CTA, with the same keyword on every platform. Only promise a resource that fits the CTA rules below.
-6. Never fabricate experiences, statistics, results or claims. No caption repeats a claim the scripts corrected or removed.
-7. Hashtags are topic labels, not reach levers. Use specific tags on their own last line, never `#fyp`, `#foryou`, `#viral`, `#explorepage`, `#trending` or `#reels`.
-8. Write each caption for its platform. Do not paste the Instagram caption three times.
-9. Avoid generic endings like "Follow for more practical AI content". Tie any follow CTA to the video's topic.
-
-**4. Instagram caption** (`ig-caption` Job A: the video carries the hook)
-
-- First line under 125 characters, the part shown before "more". State the payoff using the main search phrase.
-- Body of 50 to 100 words, not counting hashtags, unless useful commands need more.
-- The ask, then 3 to 5 hashtags. Instagram allows at most five.
-
-**5. TikTok caption**
-
-- First line under 100 characters, because TikTok cuts the caption early. Make it a hook-style line built on the main search phrase.
-- One or two short paragraphs of specifics, such as the repo name, the command or the requirement. 25 to 80 words, not counting hashtags.
-- The ask, then 3 to 5 hashtags.
-
-**6. YouTube Shorts**
-
-- `Title:` under 70 characters, with the main search phrase near the start. Say what the viewer gets, with no clickbait the video doesn't pay off and no hashtags.
-- `Description:` starts with one sentence that restates the payoff using the main search phrase, because it shows in search. Add two or three short lines of specifics, then the ask. The last line holds 3 hashtags, the most specific first. `#Shorts` may be the third tag if it fits. 30 to 100 words, not counting hashtags.
-- `Tags:` 8 to 12 comma-separated search phrases, the most specific first, under 400 characters in total.
-
-CTA options: comment a keyword for a resource, save, share, or follow. One CTA only, the same on every platform.
+**3. CTA.** CTA options: comment a keyword for a resource, save, share, or follow. One CTA only, the same in both versions.
 
 For educational and developer-tool Reels, prefer Comment KEYWORD when a useful resource exists or can honestly be built, such as a step-by-step guide to an existing plugin, skill or app, or a roadmap. An empty `resources.md` is no reason to avoid it, because `/approve-reel` builds the resource after Mits approves a script, before recording.
 
 - Use a matching `resources.md` keyword if one exists. Otherwise propose a new one-word keyword and mark the resource `planned`.
 - Promise only what that resource can really deliver from verified sources, and name what it is, such as "the step-by-step guide".
-- Use save, share or follow when no useful resource fits. Do not force a comment CTA.
+- Use save, share or follow when no useful resource fits. Do not force a comment CTA. Tie any follow CTA to the video's topic, never a generic "follow for more".
 - Comment-keyword delivery tools often cover Instagram only. In the Final Comparison's CTA line, add `TikTok and YouTube delivery: to confirm` unless `resources.md` gives the delivery for those platforms.
-
-Style: a knowledgeable AI and technology creator, not an agency. Concise, useful, confident, easy to read.
 
 ### I. Final spoken-delivery review
 
-Read every script and caption aloud (mentally). Remove or rewrite any sentence that:
+Read every script aloud (mentally). Remove or rewrite any sentence that:
 
 - Sounds robotic, stiff or unnecessarily formal.
 - Would make someone stumble if they read it off a teleprompter.
@@ -292,20 +259,20 @@ This review is mandatory. Do not skip it to save turns.
 
 ### J. Publication-readiness audit
 
-This is the final gate before output. Do not present scripts or captions as finished without completing it. Check both versions and all three captions:
+This is the final gate before output. Do not present scripts as finished without completing it. Check both versions and the caption notes:
 
 1. **Hook:** Each hook is compelling, relevant, and the script delivers what it promises.
 2. **Creative approach:** The source's effective approach is preserved where appropriate, and no important source information was lost without reason.
-3. **Different versions:** A and B are a real creative choice that is obvious when read aloud. Each platform caption is written for its platform, not copied from another.
+3. **Different versions:** A and B are a real creative choice that is obvious when read aloud.
 4. **Spoken delivery:** The scripts sound natural aloud, with no filler, hype or research-note language. No idea is said twice in different words, and no run of sentences starts the same way.
 5. **Technical claims:** Re-read each important claim against your verification notes and the sources. Nothing was added that is unsupported.
 6. **Names and commands:** Product names, repositories and commands are exact, and confirmed at their source.
 7. **Misleading claims:** Nothing unsupported or overstated remains. Replace absolute promises like "you'll never have to X again" with accurate but engaging alternatives. Never describe a tool as low-risk, safe or sandboxed unless official documentation confirms it.
-8. **Setup:** Any necessary configuration, API keys, accounts or subscriptions are clear, usually in the caption. Nothing implies it works out of the box when it needs work.
-9. **Consistency:** Nothing contradicts the research notes or the Final Comparison, and the warnings and source links agree with each other. No caption repeats a claim the scripts corrected or removed.
-10. **Caption match:** Every caption is true for both versions and complements them rather than summarising them. Read every caption sentence literally: any count or description must match the commands and details printed beneath it.
-11. **Caption rules:** Every caption has zero emojis, the right hashtag count for its platform with no generic tags, and the main search phrase where section H puts it.
-12. **CTAs:** Each script has one natural, appropriate CTA, and both scripts and all three captions use the same one. Any promised resource is listed in `resources.md`, or planned and possible to build from verified sources.
+8. **Setup:** Any necessary configuration, API keys, accounts or subscriptions are in the caption notes. Nothing implies it works out of the box when it needs work.
+9. **Consistency:** Nothing contradicts the research notes or the Final Comparison, and the warnings and source links agree with each other. No caption note repeats a claim the scripts corrected or removed.
+10. **Caption notes:** Every note is true for both versions, has its primary source, and is worded no more broadly than that source supports.
+11. **Search phrases:** Two or three, built from verified names, most important first.
+12. **CTAs:** Each script has one natural, appropriate CTA, and both scripts use the same one. Any promised resource is listed in `resources.md`, or planned and possible to build from verified sources.
 13. **Pacing:** Each script is within 20% of the word budget (real source seconds at Mits's pace), or the difference is justified by essential information. Count the words; do not judge by eye.
 14. **Plain spoken language:** Each hook makes sense to a non-developer on first hearing and is no more technical than the source's. Every technical term in the body earns its place and has a plain gloss. No version numbers, commands, file names or code-style names are spoken, and at most one setup or safety caveat is spoken.
 
@@ -361,22 +328,9 @@ Write each Reel to `outputs/<batch-id>/reel-NN-short-topic.md` as soon as it is 
 
 [Full ready-to-record script]
 
-**INSTAGRAM CAPTION**
+**CAPTION NOTES**
 
-[Complete emoji-free caption, hashtags on the last line]
-
-**TIKTOK CAPTION**
-
-[Complete emoji-free caption, hashtags on the last line]
-
-**YOUTUBE SHORTS**
-
-Title: [title]
-
-Description:
-[description, hashtags on the last line]
-
-Tags: [comma-separated search phrases]
+- [Verified fact for the captions] | [primary source URL]
 
 **FINAL COMPARISON**
 
@@ -391,7 +345,7 @@ Tags: [comma-separated search phrases]
 - Duration change: [Only if a script is over 20% from the source: what was removed or added, and why]
 ```
 
-Scripts and captions contain no timestamps, editing notes or analysis, so they can be pasted straight into a teleprompter or each platform. Keep the comparison short: no research logs or long explanations.
+Scripts contain no timestamps, editing notes or analysis, so they can be pasted straight into a teleprompter. Keep the comparison short: no research logs or long explanations.
 
 The final review builds `combined.md`.
 

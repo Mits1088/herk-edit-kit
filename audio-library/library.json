@@ -213,6 +213,63 @@
    "verified_at": "2026-11-16",
    "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
    "approved_in": null
+  },
+  {
+   "id": "camera-shutter-slr",
+   "role": "hero",
+   "tags": [
+    "camera",
+    "shutter",
+    "photo",
+    "snap",
+    "selfie"
+   ],
+   "about": "Analogue SLR shutter, one take",
+   "file": "sounds/hero/camera-shutter-slr.wav",
+   "sha256": "57659904bff13f292f3a2d2e8cdf5ba751f9ec7fb23724f0701ef73863e8c9b9",
+   "duration_s": 0.672,
+   "integrated_lufs": -20.8,
+   "true_peak_dbfs": -0.4,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Camera shutter analogue film SLR 1/4 01",
+   "creator": "cabled_mess",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/cabled_mess/sounds/338220",
+   "file_url": "https://cdn.freesound.org/previews/338/338220_5450487-hq.mp3",
+   "original_sha256": "6591ed959f00fb5ad58bd93eeebacaacb2b9bb5e10bb88c363d6dbb0b5f930df",
+   "trim": null,
+   "verified_at": "2026-11-18",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": null
+  },
+  {
+   "id": "map-unfold",
+   "role": "hero",
+   "tags": [
+    "paper",
+    "map",
+    "unfold",
+    "open"
+   ],
+   "about": "Unfolding a paper map, one take",
+   "file": "sounds/hero/map-unfold.wav",
+   "sha256": "02631906cada8f3cd1a2c34ff38aa4f0765e08d073703799dbc5edfe500992c1",
+   "duration_s": 1.423,
+   "integrated_lufs": -18.9,
+   "true_peak_dbfs": 0.8,
+   "licence": "CC0-1.0",
+   "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "title": "Unfold a map",
+   "creator": "Breviceps",
+   "source": "freesound",
+   "source_url": "https://freesound.org/people/Breviceps/sounds/447931",
+   "file_url": "https://cdn.freesound.org/previews/447/447931_9159316-hq.mp3",
+   "original_sha256": "18c427aa9581e87a5e2579e1b7aeb8b5bc37cd56d83ce6acd252f578e328e848",
+   "trim": null,
+   "verified_at": "2026-11-18",
+   "verified_how": "licence link read on the source page by scripts/audio/library.mjs",
+   "approved_in": null
   }
  ]
 }

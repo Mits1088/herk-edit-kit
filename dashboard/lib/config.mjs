@@ -10,7 +10,10 @@ export function loadConfig(overrides = {}) {
     lan: process.env.DASH_LAN === '1', // phone access over home Wi-Fi; off unless asked for
     host: process.env.DASH_LAN === '1' ? '0.0.0.0' : '127.0.0.1',
     linkCommand: ['python', '-I', '-X', 'utf8', process.env.DASH_LINK_SCRIPT || 'C:/Users/no_1_/.claude/skills/ig-insights/scripts/link.py'],
-    dueHour: Number(process.env.DASH_DUE_HOUR || 9), // in dueTimeZone, not this PC's clock
+    // Mits, 2026-11-18: Shorts and TikTok fall due as soon as the Instagram post goes up. A number of days here
+    // (for example 2) brings back the older rule: that calendar day after the post, at dueHour.
+    dueDays: Number(process.env.DASH_DUE_DAYS || 0),
+    dueHour: Number(process.env.DASH_DUE_HOUR || 9), // in dueTimeZone, not this PC's clock; used only when dueDays > 0
     dueTimeZone: process.env.DASH_TZ || 'Europe/London',
     dueConfirmed: process.env.DASH_DUE_CONFIRMED === '1', // until set, every due date is shown as provisional
     recentDays: 14,
@@ -24,6 +27,9 @@ export function loadConfig(overrides = {}) {
     resourcesMd: join(root, 'reels-data', 'resources.md'),
     resourceSources: join(root, 'reels-data', 'resource-sources'),
     linksJson: join(root, 'reels-data', 'insights', 'links.json'),
+    insightsDir: join(root, 'reels-data', 'insights'), // ig-insights history and reports; the dashboard only reads it
+    // The Refresh button on Insights runs these two, read-only towards Instagram (GET requests only).
+    collectCommand: ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', process.env.DASH_COLLECT_SCRIPT || 'C:/Users/no_1_/.claude/skills/ig-insights/scripts/collect.ps1', '-Max', '1000'], // collect.ps1 defaults to the newest 100 posts, which drops older Reels once the account passes 100
     projectsDir: join(root, 'video-projects'),
     rawMedia: join(root, 'raw-media'),
     contentDir: join(root, 'reels-data', 'content'), // the only folder the dashboard writes to

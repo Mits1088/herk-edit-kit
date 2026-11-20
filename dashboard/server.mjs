@@ -5,15 +5,18 @@ import { createReadStream, statSync, readFileSync, writeFileSync, mkdirSync, exi
 import { join, resolve, sep, extname, basename, dirname } from 'node:path';
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
+import { pipeline } from 'node:stream';
 import { loadConfig } from './lib/config.mjs';
 import { buildState, itemDetail } from './lib/state.mjs';
 import { applyAction, readManifests, updateManifest, liveAfterUpload } from './lib/manifest.mjs';
 import { probeQueue, queueMission, runUpload, checkUpload, classifyUpload, approvalPrompt, approvalCommand, revisionPrompt } from './lib/jobs.mjs';
 import { loadPreflight } from './lib/workflow.mjs';
 import { researchList, researchSearches, researchPost, researchCsv } from './lib/research-view.mjs';
-import { readIdeas, ideaInfo, ideasView, ideaAction } from './lib/ideas.mjs';
+import { readIdeas, ideaInfo, ideasView, ideaAction, withManualTranscript, ideaStages } from './lib/ideas.mjs';
 import * as zernio from './lib/zernio.mjs';
-const STATIC = { '/research.js': 'text/javascript; charset=utf-8', '/research.css': 'text/css; charset=utf-8', '/publish.js': 'text/javascript; charset=utf-8', '/publish.css': 'text/css; charset=utf-8' };
+import { insightsView, insightsAsset, refreshInsights } from './lib/insights.mjs';
+const STATIC = { '/icons.js': 'text/javascript; charset=utf-8', '/research.js': 'text/javascript; charset=utf-8', '/research.css': 'text/css; charset=utf-8', '/publish.js': 'text/javascript; charset=utf-8', '/publish.css': 'text/css; charset=utf-8', '/app.css': 'text/css; charset=utf-8',
+  '/fonts/geist.woff2': 'font/woff2', '/fonts/geist-mono.woff2': 'font/woff2', '/fonts/bricolage.woff2': 'font/woff2' }; // fonts ship locally so the phone view and offline use work
 await loadPreflight(loadConfig()); // the Gate B report comes from the Reel Studio script itself
 
 // One action from the page. Records it, then hands on any follow-up work: an upload for an approved PDF,
@@ -51,6 +54,7 @@ export async function handleAction(cfg, body, { wait = false } = {}) {
   if (body.type === 'upload-pdf' || body.type === 'retry-upload') { await upload(); return 'Uploading this exact approved PDF to Gumroad now.'; }
   if (body.type === 'decide' && body.version) return job('approve', `Approve reel ${item.reel} version ${body.version} (${item.batch})`, approvalPrompt(item, body.version), approvalCommand(item, body.version));
   if (body.type === 'decide') return 'Choice cleared.';
+  if (body.type === 'version-c') return (body.text || '').trim() ? 'Version C saved. Nothing is approved until you press Approve Version C.' : 'Version C cleared.';
   if (body.type === 'feedback') return 'Feedback recorded against this version. Nothing has started.';
   if (body.type === 'approve-external') { const f = buildState(cfg).items.find(i => i.id === item.id)?.project?.finalFile || ''; return `Approved the outside edit. That exact file is now ${f.replace(`video-projects/${item.project.slug}/`, '')}; a kept copy is in renders/approved/.`; }
   if (body.type === 'restore-external') return 'Restored the approved outside edit from its kept copy. The approval is unchanged.';
@@ -129,7 +133,10 @@ export function createServer(cfg) {
       // Research: these GET routes only read reels-data/research/. New research runs in Claude Code. Saved ideas
       // and the short-form export go through POST /api/research/action below, on the PC only.
       if (req.method === 'GET' && STATIC[u.pathname]) return send(res, 200, readFileSync(join(import.meta.dirname, 'public', u.pathname.slice(1))), STATIC[u.pathname]);
-      if (req.method === 'GET' && u.pathname === '/api/research') return send(res, 200, { ...researchList(cfg, Object.fromEntries(u.searchParams)), ideaPosts: readIdeas(cfg).map(i => i.postId), remote });
+      if (req.method === 'GET' && u.pathname === '/api/research') {
+        const ideaStage = ideaStages(cfg, buildState(cfg).items), closed = new Set(Object.keys(ideaStage).filter(k => ['used', 'dropped'].includes(ideaStage[k].key)));
+        return send(res, 200, { ...researchList(cfg, Object.fromEntries(u.searchParams), new Date(), { closed }), ideaPosts: Object.keys(ideaStage), ideaStage, remote });
+      }
       // The current Research table as a CSV download (read-only; opens in Excel).
       if (req.method === 'GET' && u.pathname === '/api/research/export.csv') {
         const f = Object.fromEntries(u.searchParams); const name = `research-${['short', 'long', 'unknown'].includes(f.format) ? f.format : 'short'}-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -137,9 +144,12 @@ export function createServer(cfg) {
         return res.end(researchCsv(cfg, f));
       }
       if (req.method === 'GET' && u.pathname === '/api/research/searches') return send(res, 200, { searches: researchSearches(cfg) });
-      if (req.method === 'GET' && u.pathname === '/api/research/post') { const d = researchPost(cfg, u.searchParams.get('id'), u.searchParams.get('q')); return d ? send(res, 200, { ...d, ...ideaInfo(cfg, d, readIdeas(cfg).find(i => i.postId === d.id), buildState(cfg).items), remote }) : send(res, 404, { error: 'Unknown post' }); }
+      if (req.method === 'GET' && u.pathname === '/api/research/post') { const p = researchPost(cfg, u.searchParams.get('id'), u.searchParams.get('q')); const idea = p && readIdeas(cfg).find(i => i.postId === p.id); const d = withManualTranscript(p, idea); return d ? send(res, 200, { ...d, ...ideaInfo(cfg, d, idea, buildState(cfg).items), remote }) : send(res, 404, { error: 'Unknown post' }); }
       // Zernio: connected accounts and their health, read-only. Keys stay on the server.
       if (req.method === 'GET' && u.pathname === '/api/zernio/accounts') { zernio.accounts(cfg, { fresh: u.searchParams.get('fresh') === '1' && !remote }).then(d => send(res, 200, d), e => send(res, 502, { error: zernio.scrub(e.message) })); return; }
+      // Instagram insights: read-only view of reels-data/insights/, plus its report pages and their frame images.
+      if (req.method === 'GET' && u.pathname === '/api/insights') return send(res, 200, { ...insightsView(cfg), remote });
+      if (req.method === 'GET' && u.pathname.startsWith('/insights/')) { const a = insightsAsset(cfg, u.pathname); return a ? send(res, 200, readFileSync(a.full), a.type) : send(res, 404, { error: 'Not available' }); }
       if (req.method === 'GET' && u.pathname === '/api/research/ideas') return send(res, 200, { ideas: ideasView(cfg, buildState(cfg).items), remote });
       if (req.method === 'GET' && u.pathname === '/file') {
         const f = safeFile(cfg, u.searchParams.get('p')) || (remote ? null : linkedMedia(cfg, u.searchParams.get('p'))); if (!f) return send(res, 404, { error: 'Not available' });
@@ -149,9 +159,16 @@ export function createServer(cfg) {
           let start = m[1] ? Number(m[1]) : Math.max(0, f.size - Number(m[2])); let end = m[1] && m[2] ? Math.min(Number(m[2]), f.size - 1) : f.size - 1;
           if (start > end || start >= f.size) { res.writeHead(416, { 'content-range': `bytes */${f.size}` }); return res.end(); }
           res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${f.size}`, 'content-length': end - start + 1 });
-          return createReadStream(f.full, { start, end }).pipe(res);
+          return void pipeline(createReadStream(f.full, { start, end }), res, () => {});
         }
-        res.writeHead(200, { ...head, 'content-length': f.size }); return createReadStream(f.full).pipe(res);
+        res.writeHead(200, { ...head, 'content-length': f.size }); return void pipeline(createReadStream(f.full), res, () => {});
+      }
+      if (req.method === 'POST' && u.pathname === '/api/insights/refresh') {
+        const origin = req.headers.origin;
+        if (origin && origin !== 'http://' + req.headers.host) return send(res, 403, { error: 'Cross-site request refused' });
+        if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'JSON only' });
+        if (remote) return send(res, 403, { error: 'Refresh Instagram from the PC.' });
+        const r = refreshInsights(cfg); r.work?.catch(() => {}); return send(res, r.started ? 200 : 409, { ok: r.started, message: r.message });
       }
       if (req.method === 'POST' && (u.pathname === '/api/action' || u.pathname === '/api/research/action')) {
         const research = u.pathname === '/api/research/action';
