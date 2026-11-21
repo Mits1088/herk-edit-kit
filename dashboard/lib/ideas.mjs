@@ -72,7 +72,7 @@ export function fetchView(cfg, d, idea) {
   if ((d.transcriptText && !d.fetchedOnSave) || (idea && idea.transcript && !(f && f.status === 'ok'))) return null;
   if (!f) return canFetch(cfg, d, idea) ? { state: 'none', canFetch: true } : null;
   if (f.status === 'ok') return { state: 'ok', fetchedAt: f.fetchedAt, words: f.text.trim().split(/\s+/).filter(Boolean).length };
-  if (f.status === 'pending' && fetcherOf(cfg).has(idea.id)) return { state: 'fetching', requestedAt: f.requestedAt };
+  if (f.status === 'pending' && fetcherOf(cfg).has(idea.id)) return { state: 'fetching', requestedAt: f.requestedAt, retryAt: fetcherOf(cfg).retryAt(idea.id), pausedUntil: fetcherOf(cfg).pausedUntil() };
   const error = f.status === 'pending' ? "Couldn't fetch subtitles: the dashboard was restarted before the fetch finished." : f.error;
   return { state: 'failed', error, fetchedAt: f.fetchedAt || null, canFetch: canFetch(cfg, d, idea) };
 }

@@ -158,6 +158,30 @@ test('the gap between fetches holds when the queue empties and a save arrives ju
   q2.enqueue('idea-e', VID); await q2.idle(); assert.deepEqual(seen, [['idea-e', { ok: false, error: `${FAILED}: boom` }]]);
 });
 
+test('a 429 pauses the queue and retries the same video on a backoff, and only the last refusal is reported', async () => {
+  const LIM = { ok: false, rateLimited: true, error: "Couldn't fetch subtitles: YouTube refused the request (too many requests)." };
+  // refused twice, then fetched: one final result, and the second idea waited behind it
+  let answers = [LIM, LIM, { ok: true, text: 'a' }, { ok: true, text: 'b' }]; const calls = [], seen = [];
+  const q = createFetcher({ subtitleRunner: (c, id) => { calls.push([id, Date.now()]); return Promise.resolve(answers.shift()); }, subtitleGapMs: 0, subtitleBackoffMs: [120, 200, 300] }, (id, r) => seen.push([id, r.ok]));
+  q.enqueue('idea-a', VID); q.enqueue('idea-b', HAS);
+  await new Promise(r => setTimeout(r, 30));
+  assert.ok(q.retryAt('idea-a') && q.pausedUntil(), 'a waiting video says when it is tried again'); assert.equal(q.retryAt('idea-b'), null);
+  assert.equal(q.enqueue('idea-a', VID), false); // still busy while it waits: no second copy
+  await q.idle();
+  assert.deepEqual(calls.map(c => c[0]), [VID, VID, VID, HAS]); assert.deepEqual(seen, [['idea-a', true], ['idea-b', true]]);
+  assert.ok(calls[1][1] - calls[0][1] >= 110 && calls[2][1] - calls[1][1] >= 190, 'each retry waits its backoff');
+  // refused every time: reported once, after the last backoff, with a clear message
+  answers = [LIM, LIM, LIM, LIM]; const final = [];
+  const q2 = createFetcher({ subtitleRunner: () => Promise.resolve(answers.shift()), subtitleGapMs: 0, subtitleBackoffMs: [20, 20, 20] }, (id, r) => final.push(r));
+  q2.enqueue('idea-c', VID); await q2.idle();
+  assert.equal(final.length, 1); assert.match(final[0].error, /^Couldn't fetch subtitles: YouTube kept refusing \(too many requests\), 4 tries over about 0 minutes\. Try again later, or paste the transcript\.$/);
+  // removed while it waits out the limit: never tried again, never reported
+  answers = [LIM]; const none = [], tries = [];
+  const q3 = createFetcher({ subtitleRunner: () => { tries.push(1); return Promise.resolve(answers.shift()); }, subtitleGapMs: 0, subtitleBackoffMs: [100] }, (id, r) => none.push(r));
+  q3.enqueue('idea-d', VID); await new Promise(r => setTimeout(r, 20)); q3.drop('idea-d'); await q3.idle(); await new Promise(r => setTimeout(r, 150));
+  assert.deepEqual([tries.length, none.length], [1, 0]);
+});
+
 test('a helper that cannot start reports why, instead of hiding it', async () => {
   const cfg = loadConfig({ root: mkdtempSync(join(tmpdir(), 'subs-')), last30freeDir: tmpdir(), subtitlesCommand: ['bad\0command'] }); // spawn throws synchronously
   const r = await runSubtitles(cfg, VID);
@@ -179,5 +203,10 @@ test('the real runner stops a stalled helper at its timeout and refuses a bad id
   assert.match((await runSubtitles(none, VID)).error, /^Couldn't fetch subtitles\. The video may have no captions, or YouTube refused the request\.$/);
   // the same result, but the log names YouTube's rate limit: say so
   const limited = loadConfig({ root: cfg.root, last30freeDir: tmpdir(), subtitlesCommand: [process.execPath, '-e', 'console.error("ERROR: Unable to download video subtitles for \'en\': HTTP Error 429: Too Many Requests"); require("fs").writeFileSync(process.argv[1], JSON.stringify({ transcripts: {}, failed: { [process.argv[2]]: "x" } }))'] });
-  assert.match((await runSubtitles(limited, VID)).error, /^Couldn't fetch subtitles: YouTube refused the request \(too many requests\)\. Wait a few minutes, then Retry\.$/);
+  const lr = await runSubtitles(limited, VID); assert.equal(lr.rateLimited, true); assert.match(lr.error, /^Couldn't fetch subtitles: YouTube refused the request \(too many requests\)\.$/);
+  // the current helper reports the 429 itself, under rateLimited
+  const told = loadConfig({ root: cfg.root, last30freeDir: tmpdir(), subtitlesCommand: [process.execPath, '-e', 'require("fs").writeFileSync(process.argv[1], JSON.stringify({ transcripts: {}, failed: {}, rateLimited: { [process.argv[2]]: "429" } }))'] });
+  assert.equal((await runSubtitles(told, VID)).rateLimited, true);
+  const nocap = loadConfig({ root: cfg.root, last30freeDir: tmpdir(), subtitlesCommand: [process.execPath, '-e', 'require("fs").writeFileSync(process.argv[1], JSON.stringify({ transcripts: {}, failed: { [process.argv[2]]: "the video has no English subtitles or automatic captions" }, rateLimited: {} }))'] });
+  const nc = await runSubtitles(nocap, VID); assert.equal(nc.rateLimited, undefined); assert.match(nc.error, /has no English subtitles or automatic captions/);
 });

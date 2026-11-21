@@ -167,6 +167,9 @@
   function fetchLine(f, ideaId, where, isRemote) {
     if (!f) return '';
     const btn = label => (!isRemote && ideaId && f.canFetch ? ` <button class="btn small" data-r-fetch="${e(ideaId)}">${label}</button>` : '');
+    const at = iso => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz() });
+    if (f.state === 'fetching' && f.retryAt) return `<p class="r-fetch" role="status"><strong>YouTube asked us to slow down.</strong> <span class="sub">This video is tried again automatically at ${at(f.retryAt)}. Nothing to press; this page updates by itself.</span></p>`;
+    if (f.state === 'fetching' && f.pausedUntil) return `<p class="r-fetch" role="status"><strong>Waiting to fetch the YouTube transcript.</strong> <span class="sub">Fetches are paused until ${at(f.pausedUntil)} because YouTube asked us to slow down.</span></p>`;
     if (f.state === 'fetching') return `<p class="r-fetch" role="status"><strong>Fetching the YouTube transcript…</strong> <span class="sub">One video at a time. This page updates by itself.</span></p>`;
     if (f.state === 'ok') return where === 'card' ? `<p class="sub">Transcript fetched: ${n(f.words)} words of YouTube subtitles.</p>` : '';
     if (f.state === 'failed') return `<p class="r-fetch"><span class="r-warn">${e(f.error)}</span>${btn('Retry')}</p>`;

@@ -384,8 +384,12 @@ short-form export go through `POST /api/research/action`, on this PC only.
   "Source evidence" heading. An idea can be removed until it has been exported.
 - **YouTube transcripts are fetched on save.** Saving a YouTube idea whose post has no transcript queues a
   background fetch of its subtitles (`lib/transcripts.mjs` runs research-signals' `yt-subtitles.py` with
-  last30free's Python, `-I`, with the video id as YouTube spells it). One video at a time, a few seconds apart, and
-  90 seconds at most each (then the helper and what it started are stopped). The text is kept on the idea as
+  last30free's Python, `-I`, with the video id as YouTube spells it). The helper makes one subtitle request per
+  video and solves YouTube's JavaScript challenge with Node, which needs `yt-dlp-ejs` in last30free's venv
+  (`.venv\Scripts\python.exe -m pip install yt-dlp-ejs`); without it YouTube refuses the subtitle download with 429.
+  One video at a time, 15 seconds apart, and 90 seconds at most each (then the helper and what it started are
+  stopped). When YouTube answers 429, the queue pauses and tries the same video again after 5, 15 and 30 minutes,
+  and the page shows the time of the next try; only after the fourth refusal does it read as failed. The text is kept on the idea as
   `fetched` in `ideas.json`, never in the research store, and labelled "YouTube subtitles fetched when you saved
   this idea". A failure reads "Couldn't fetch subtitles" with **Retry** (the helper reports a video without captions
   and a refused request the same way; a 429 in its log is named). **Fetch missing transcripts** on the Ideas tab
